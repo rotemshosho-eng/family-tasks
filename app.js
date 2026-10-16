@@ -2,7 +2,7 @@ import * as cfg from './firebase-config.js';
 const firebaseConfig = cfg.firebaseConfig;
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
@@ -173,6 +173,39 @@ async function loginGo(){
     $('login-code').value = ''; render();
   }finally{ btn.disabled = false; }
 }
+/* ---------- admin mode by code ---------- */
+let agFails = 0, agLockUntil = 0;
+function openAdminGate(){ $('adminGate').hidden = false; $('ag-err').hidden = true; $('ag-code').value = ''; setTimeout(() => $('ag-code').focus(), 30); }
+function closeAdminGate(){ $('adminGate').hidden = true; $('ag-code').value = ''; }
+async function adminCodeGo(){
+  const code = $('ag-code').value.trim(); const err = $('ag-err');
+  const show = m => { err.textContent = m; err.hidden = false; };
+  if (Date.now() < agLockUntil){ show(`יותר מדי ניסיונות. נסו שוב בעוד ${Math.ceil((agLockUntil - Date.now()) / 1000)} שניות.`); return; }
+  if (!/^\d{6,12}$/.test(code)){ show('הקוד הוא 6 עד 12 ספרות'); return; }
+  if (!S.user){ show('אין חיבור. נסו שוב בעוד רגע.'); return; }
+  const btn = $('ag-go'); btn.disabled = true;
+  try{
+    await setDoc(doc(db,'adminSessions',S.user.uid), { code });
+    agFails = 0; closeAdminGate(); toast('נכנסת למצב מנהל');
+  }catch(e){
+    console.error(e); agFails++; if (agFails >= 5){ agLockUntil = Date.now() + 5 * 60000; agFails = 0; }
+    show(e.code === 'permission-denied' ? 'הקוד לא נכון' : 'הכניסה לא הצליחה. בדקו את החיבור לאינטרנט.');
+    $('ag-code').value = '';
+  }finally{ btn.disabled = false; }
+}
+async function saveAdminCode(){
+  const code = $('ac-code').value.trim();
+  if (!/^\d{6,12}$/.test(code)){ toast('הקוד הוא 6 עד 12 ספרות'); return; }
+  const btn = $('ac-save'); btn.disabled = true;
+  try{
+    const b = writeBatch(db);
+    b.set(doc(db,'private','admin'), { code });
+    b.set(doc(db,'adminSessions',S.user.uid), { code }); // keep this device in admin mode
+    await b.commit();
+    $('ac-code').value = ''; toast('קוד המנהל נשמר');
+  }catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
+
 async function switchUser(){
   if (!S.user) return;
   S.chatOpen = null; S.openPick = null;
@@ -641,6 +674,11 @@ function buildStatic(){
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
   $('chatBack').addEventListener('click', closeChat);
+  $('ag-go').addEventListener('click', adminCodeGo);
+  $('ag-code').addEventListener('keydown', e => { if (e.key === 'Enter') adminCodeGo(); });
+  $('ag-cancel').addEventListener('click', closeAdminGate);
+  $('adminGate').addEventListener('click', e => { if (e.target === $('adminGate')) closeAdminGate(); });
+  $('ac-save').addEventListener('click', saveAdminCode);
   $('profileBack').addEventListener('click', closeProfile);
   $('meBarOpen').addEventListener('click', () => { if (S.binding) openProfile(S.binding.memberId); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.profileOpen) closeProfile(); });
@@ -684,17 +722,25 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   let taps = [];
   $('appTitle').addEventListener('click', () => {
     const now = Date.now(); taps = taps.filter(t => now - t < 4000); taps.push(now);
-    if (taps.length >= 5){ taps = []; const u = auth.currentUser; if (!u || u.isAnonymous) adminSignIn(); }
+    if (taps.length >= 5){ taps = []; if (!S.isAdmin) openAdminGate(); }
   });
+  $('ag-google').addEventListener('click', () => { closeAdminGate(); adminSignIn(); });
   $('login-go').addEventListener('click', loginGo);
   $('login-code').addEventListener('keydown', e => { if (e.key === 'Enter') loginGo(); });
   $('login-back').addEventListener('click', () => { S.loginPick = null; S.loginErr = ''; render(); });
   $('switchUser').addEventListener('click', switchUser);
-  $('logoutBtn').addEventListener('click', async () => { S.tab = 'today'; await signOut(auth); toast('יצאת'); });
+  // Leaving admin mode: drop the code session; a Google sign-in is signed out (the device returns to its family member).
+  $('logoutBtn').addEventListener('click', async () => {
+    S.tab = 'today';
+    try{ if (S.user) await deleteDoc(doc(db,'adminSessions',S.user.uid)); }catch(e){}
+    S.codeAdmin = false;
+    if (S.user && !S.user.isAnonymous) await signOut(auth);
+    toast('יצאת ממצב מנהל'); render();
+  });
 
   onAuthStateChanged(auth, user => {
     unsubs.forEach(u => u()); unsubs = [];
-    S.user = user; S.isAdmin = !!user && !user.isAnonymous;
+    S.user = user; S.googleAdmin = !!user && !user.isAnonymous; S.codeAdmin = false; S.isAdmin = S.googleAdmin;
     if (!user){ signInAnonymously(auth).catch(e => { console.error(e); status('לא הצלחנו להתחבר. בדקו שכניסה אנונימית מופעלת ב-Firebase.'); }); render(); return; }
     status('');
     const sub = (name, fn) => unsubs.push(onSnapshot(collection(db, name),
@@ -710,8 +756,20 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     unsubs.push(onSnapshot(doc(db,'bindings',user.uid), s => {
       S.binding = s.exists() ? s.data() : null; S.bindLoaded = true; render();
     }, e => { console.error(e); S.bindLoaded = true; render(); }));
-    S.pins = {};
-    if (S.isAdmin) sub('pins', a => { S.pins = Object.fromEntries(a.map(p => [p.id, p.pin])); });
+    S.pins = {}; let pinsUnsub = null;
+    const startAdminSubs = () => { if (pinsUnsub) return;
+      pinsUnsub = onSnapshot(collection(db,'pins'), s => { S.pins = Object.fromEntries(s.docs.map(p => [p.id, p.data().pin])); render(); }, e => console.error(e));
+      unsubs.push(() => { pinsUnsub && pinsUnsub(); pinsUnsub = null; }); };
+    if (S.googleAdmin) startAdminSubs();
+    // Admin by code: this device holds adminSessions/<uid> with the admin code. It counts only if the code is
+    // still current, which we learn by being allowed to read private/admin.
+    unsubs.push(onSnapshot(doc(db,'adminSessions',user.uid), async s => {
+      let ok = false;
+      if (s.exists()){ try{ await getDoc(doc(db,'private','admin')); ok = true; }catch(e){ ok = false; } }
+      S.codeAdmin = ok; S.isAdmin = S.googleAdmin || ok;
+      if (S.isAdmin) startAdminSubs(); else { S.pins = {}; }
+      render();
+    }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
       const m = s.exists() ? s.data() : { points:100, shekels:0 };
       S.money = { points:Number(m.points) || 100, shekels:Number(m.shekels) || 0 };

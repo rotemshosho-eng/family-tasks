@@ -186,6 +186,15 @@
     </section>
 
     <section class="panel">
+      <h2>קוד מנהל</h2>
+      <p class="sub" id="ac-status">עם הקוד הזה נכנסים לניהול מכל טלפון: 5 לחיצות על הכותרת ואז הקוד. שינוי הקוד מוציא מהניהול כל טלפון שנכנס עם הקוד הקודם.</p>
+      <div class="row">
+        <div class="field"><label for="ac-code">קוד חדש (6 עד 12 ספרות)</label><input type="password" id="ac-code" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="new-password"></div>
+      </div>
+      <div><button type="button" class="btn" id="ac-save">שמירת הקוד</button></div>
+    </section>
+
+    <section class="panel">
       <div class="section-head"><h2>יציאה מהניהול</h2></div>
       <p class="sub">אחרי היציאה הלשונית הזו נעלמת, והמכשיר נראה כמו של כל אחד אחר במשפחה. כדי לחזור: לחיצה 5 פעמים מהר על הכותרת למעלה.</p>
       <div><button type="button" class="btn ghost" id="logoutBtn">יציאה</button></div>
@@ -208,6 +217,17 @@
     <div class="sheet-titles"><strong>פרופיל</strong></div>
   </div>
   <div class="sheet-body scroll" id="profileBody"></div>
+</div>
+<!-- admin mode: enter the admin code (or Google) -->
+<div class="gate-wrap" id="adminGate" hidden>
+  <div class="panel gate" role="dialog" aria-modal="true" aria-labelledby="ag-title">
+    <h2 id="ag-title">קוד מנהל</h2>
+    <div class="field"><label for="ag-code">הקוד</label>
+      <input type="password" id="ag-code" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="off" class="code-input"></div>
+    <p class="sub err" id="ag-err" hidden></p>
+    <div class="row"><button type="button" class="btn" id="ag-go">כניסה</button><button type="button" class="btn ghost" id="ag-cancel">ביטול</button></div>
+    <button type="button" class="linkbtn" id="ag-google">כניסה עם גוגל במקום</button>
+  </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script type="module" src="app.js"></script>

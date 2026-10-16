@@ -6,10 +6,18 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
+    // מנהל = מי שנכנס עם גוגל עם המייל של המנהל, או מכשיר שנכנס עם קוד המנהל הנוכחי.
     function isAdmin() {
-      return signedIn()
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in ['ADMIN_EMAIL'];
+      return (signedIn()
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '') in ['ADMIN_EMAIL'])
+        || adminByCode();
+    }
+    function adminByCode() {
+      let sPath = /databases/$(database)/documents/adminSessions/$(request.auth.uid);
+      let cPath = /databases/$(database)/documents/private/admin;
+      return signedIn() && exists(sPath) && exists(cPath)
+        && get(sPath).data.code == get(cPath).data.code;
     }
 
     function taskDoc(id) { return get(/databases/$(database)/documents/tasks/$(id)); }
@@ -68,6 +76,21 @@ service cloud.firestore {
     }
 
     // קודי כניסה: רק המנהל רואה ומשנה.
+    // קוד המנהל עצמו: רק מנהל רואה ומשנה. ההגדרה הראשונה נעשית כשנכנסים עם גוגל.
+    match /private/{docId} {
+      allow read, write: if isAdmin();
+    }
+    // כניסה של מכשיר למצב מנהל: מותרת רק עם הקוד הנוכחי. שינוי הקוד מוציא את כל המכשירים.
+    match /adminSessions/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['code'])
+        && request.resource.data.code is string
+        && exists(/databases/$(database)/documents/private/admin)
+        && request.resource.data.code == get(/databases/$(database)/documents/private/admin).data.code;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
     match /pins/{memberId} {
       allow read, write: if isAdmin();
     }
