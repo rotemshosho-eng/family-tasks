@@ -1,6 +1,6 @@
 rules_version = '2';
 // חוקי האבטחה של לוח המשימות.
-// לפני ההדבקה ב-Firebase: ודאו שהמייל בשורת isAdmin הוא המייל של ההורה (אפשר כמה, מופרדים בפסיק).
+// לפני ההדבקה ב-Firebase: החליפו את ADMIN_EMAIL במייל של המנהל.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -16,7 +16,15 @@ service cloud.firestore {
     function memberExists(id) { return exists(/databases/$(database)/documents/members/$(id)); }
     function freshTime(d) { return d.at is int && math.abs(d.at - request.time.toMillis()) < 600000; }
 
-    // משימה רגילה: הניקוד חייב להיות בדיוק מה שההורה קבע.
+    // המכשיר הזה נכנס בתור בן המשפחה m עם הקוד הנכון שלו. שינוי קוד מנתק את כל המכשירים שנכנסו עם הקוד הישן.
+    function boundTo(m) {
+      let bPath = /databases/$(database)/documents/bindings/$(request.auth.uid);
+      let pPath = /databases/$(database)/documents/pins/$(m);
+      return signedIn() && exists(bPath) && exists(pPath)
+        && get(bPath).data.memberId == m
+        && get(bPath).data.pin == get(pPath).data.pin;
+    }
+
     function validFixed(d) {
       return d.keys().hasOnly(['kind','taskId','title','memberId','points','day','at'])
         && d.kind == 'task'
@@ -28,8 +36,6 @@ service cloud.firestore {
         && freshTime(d);
     }
 
-    // משימה לפי זמן: הדקות נבדקות מול שעת ההתחלה שהשרת רשם, עד התקרה,
-    // והטיימר נמחק באותה פעולה (אי אפשר לקבל נקודות פעמיים על אותו טיימר).
     function validTimed(d) {
       let timerPath = /databases/$(database)/documents/timers/$(d.timerId);
       let timer = get(timerPath).data;
@@ -47,13 +53,6 @@ service cloud.firestore {
         && freshTime(d);
     }
 
-    // בני משפחה, משימות והגדרות: כולם רואים, רק הורה משנה.
-    match /members/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-    // כל אחד יכול להוסיף משימה עם נקודות או לפי זמן, והיא פעילה מיד (מסומנת "חדשה" אצל המנהל).
-    // רק המנהל עורך, משנה ניקוד או מוחק.
     function validNewTask(d) {
       return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','reviewed','suggestedBy','createdAt'])
         && d.reviewed == false
@@ -62,9 +61,31 @@ service cloud.firestore {
         && d.type in ['once', 'repeat']
         && d.days is list && d.days.size() <= 7
         && d.createdAt is int
+        && d.suggestedBy is string && boundTo(d.suggestedBy)
         && ((d.timed == true && d.ratePerMin is int && d.ratePerMin >= 1 && d.ratePerMin <= 100
               && d.maxMinutes is int && d.maxMinutes >= 1 && d.maxMinutes <= 240)
          || (d.timed == false && d.points is int && d.points >= 0 && d.points <= 1000));
+    }
+
+    // קודי כניסה: רק המנהל רואה ומשנה.
+    match /pins/{memberId} {
+      allow read, write: if isAdmin();
+    }
+
+    // כניסה של מכשיר בתור בן משפחה: מותרת רק עם הקוד הנכון.
+    match /bindings/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['memberId','pin'])
+        && request.resource.data.memberId is string
+        && exists(/databases/$(database)/documents/pins/$(request.resource.data.memberId))
+        && request.resource.data.pin == get(/databases/$(database)/documents/pins/$(request.resource.data.memberId)).data.pin;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    match /members/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
     match /tasks/{id} {
       allow read: if signedIn();
@@ -73,8 +94,6 @@ service cloud.firestore {
       // משימה נעוצה: אף אחד, גם לא המנהל, לא יכול למחוק אותה עד שמבטלים נעיצה.
       allow delete: if isAdmin() && resource.data.get('pinned', false) == false;
     }
-
-    // צ'אט של כל משימה: כולם קוראים וכותבים בשם בן משפחה, רק המנהל מוחק.
     match /messages/{id} {
       allow read: if signedIn();
       allow create: if signedIn()
@@ -83,15 +102,14 @@ service cloud.firestore {
         && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300
         && request.resource.data.at == request.time
         && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
-        && memberExists(request.resource.data.memberId);
+        && memberExists(request.resource.data.memberId)
+        && (isAdmin() || boundTo(request.resource.data.memberId));
       allow delete: if isAdmin();
     }
     match /settings/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
-
-    // טיימרים פעילים. שעת ההתחלה נקבעת בשרת, לא בטלפון.
     match /timers/{id} {
       allow read: if signedIn();
       allow create: if signedIn()
@@ -100,21 +118,19 @@ service cloud.firestore {
         && request.resource.data.startedAt == request.time
         && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
         && taskDoc(request.resource.data.taskId).data.get('timed', false) == true
-        && memberExists(request.resource.data.memberId);
-      allow delete: if signedIn();
+        && memberExists(request.resource.data.memberId)
+        && (isAdmin() || boundTo(request.resource.data.memberId));
+      allow delete: if isAdmin() || boundTo(resource.data.memberId);
     }
-
-    // יומן ביצועים ונקודות.
     match /logs/{id} {
       allow read: if signedIn();
       allow create: if isAdmin()
-        || (signedIn() && request.resource.data.kind == 'task' && validFixed(request.resource.data))
-        || (signedIn() && request.resource.data.kind == 'timed' && validTimed(request.resource.data));
-      // ילד יכול לבטל ביצוע שלו עד 12 שעות אחרי. בונוסים והיסטוריה ישנה: רק הורה.
+        || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && boundTo(request.resource.data.memberId))
+        || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && boundTo(request.resource.data.memberId));
       allow delete: if isAdmin() || (
-        signedIn()
-        && resource.data.kind in ['task', 'timed']
+        resource.data.kind in ['task', 'timed']
         && request.time.toMillis() - resource.data.at < 43200000
+        && boundTo(resource.data.memberId)
       );
       allow update: if isAdmin();
     }

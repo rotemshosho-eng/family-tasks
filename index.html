@@ -35,6 +35,25 @@
   </div>
   <div id="status" class="notice" hidden></div>
 
+  <!-- LOGIN: each device signs in as one family member with that member's code -->
+  <section id="login" class="panel login" hidden>
+    <h2 id="login-title">מי אתה?</h2>
+    <div class="who" id="login-members"></div>
+    <div id="login-pin" class="stack-sm" hidden>
+      <div class="field"><label for="login-code" id="login-label">הקוד שלך</label>
+        <input type="password" id="login-code" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" class="code-input"></div>
+      <p class="sub err" id="login-err" hidden></p>
+      <div class="row"><button type="button" class="btn" id="login-go">כניסה</button><button type="button" class="btn ghost" id="login-back">חזרה</button></div>
+    </div>
+    <p class="sub" id="login-empty" hidden>עוד לא הוגדרו בני משפחה. מי שמנהל את הלוח צריך להוסיף אותם.</p>
+  </section>
+
+  <div class="mebar" id="meBar" hidden>
+    <span class="ava sm" id="meAva"></span><strong id="meName"></strong>
+    <span class="grow"></span>
+    <button type="button" class="btn ghost small" id="switchUser">החלפת משתמש</button>
+  </div>
+
   <!-- TODAY -->
   <main id="view-today" class="section stack">
     <div class="who" id="who"></div>
@@ -149,7 +168,11 @@
     <section class="panel">
       <h2>בני המשפחה</h2>
       <div id="amList"></div>
-      <div class="field"><label for="mf-name">שם</label><input type="text" id="mf-name" maxlength="20" placeholder="שם"></div>
+      <div class="row">
+        <div class="field"><label for="mf-name">שם</label><input type="text" id="mf-name" maxlength="20" placeholder="שם"></div>
+        <div class="field"><label for="mf-pin">קוד כניסה (4 ספרות)</label><input type="text" id="mf-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="למשל 4821"></div>
+      </div>
+      <p class="sub" id="mf-pin-hint">עם הקוד הזה בן המשפחה נכנס מהטלפון שלו. בלי קוד הוא לא יכול להיכנס.</p>
       <div class="field"><span class="lab">צבע</span><div class="swatches" id="mf-colors"></div></div>
       <div class="row">
         <button type="button" class="btn" id="mf-save">הוספה</button>

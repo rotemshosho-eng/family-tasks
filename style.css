@@ -171,6 +171,14 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 .chat-send{display:flex;gap:8px}
 .chat-send input{flex:1;min-width:0}
 
+/* login + current user bar */
+.login{gap:16px}
+.stack-sm{display:flex;flex-direction:column;gap:12px}
+.code-input{font:700 1.8rem var(--display)!important;letter-spacing:.5em;text-align:center;direction:ltr;max-width:220px}
+.err{color:var(--danger)}
+.mebar{display:flex;align-items:center;gap:10px}
+.mebar strong{font:600 1.15rem var(--display)}
+.mebar .grow{flex:1}
 .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);
   padding:11px 20px;border-radius:999px;font:600 .95rem var(--display);max-width:calc(100% - 32px);z-index:20;box-shadow:0 4px 0 rgb(0 0 0 / .2);
   animation:pop .22s ease-out}

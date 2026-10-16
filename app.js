@@ -7,7 +7,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [];
 
@@ -110,10 +110,22 @@ function render(){
   $('tabs').hidden = !S.isAdmin;
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
   $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
+  // A family member's device is locked to whoever signed in with their code. Only the admin can view as anyone.
+  const bound = !S.isAdmin && S.binding && member(S.binding.memberId) ? S.binding.memberId : null;
+  const needLogin = !!S.user && !S.isAdmin && S.bindLoaded && !bound;
+  if (bound) S.me = bound;
+  else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
+  $('login').hidden = !needLogin;
+  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; renderLogin(); }
+  if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
+  $('who').hidden = !S.isAdmin;
+  $('meBar').hidden = !bound;
+  if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = m.name.charAt(0); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  $('sgSec').hidden = !S.user || S.isAdmin || !S.members.length;
+  $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
+  if (needLogin) return;
   const typing = document.activeElement && document.activeElement.id === 'chat-input';
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); }
@@ -122,6 +134,43 @@ function render(){
 }
 // Nothing on screen says who manages the board: the admin entry is a hidden gesture (5 quick taps on the title).
 function renderAuth(){}
+
+/* ---------- sign in as a family member, with that member's code ---------- */
+function renderLogin(){
+  const box = $('login-members'); box.replaceChildren();
+  $('login-empty').hidden = S.members.length > 0;
+  const pick = S.loginPick && member(S.loginPick) ? member(S.loginPick) : null;
+  $('login-title').textContent = pick ? `שלום ${pick.name}` : 'מי אתה?';
+  box.hidden = !!pick; $('login-pin').hidden = !pick;
+  if (pick){ $('login-label').textContent = `הקוד של ${pick.name}`; }
+  S.members.forEach(m => box.append(h('button', { type:'button', class:'chip', onclick:() => {
+    S.loginPick = m.id; S.loginErr = ''; $('login-code').value = ''; render(); setTimeout(() => $('login-code').focus(), 0); } },
+    h('span', { class:'dot', style:`background:${m.color}` }), m.name)));
+  $('login-err').hidden = !S.loginErr; $('login-err').textContent = S.loginErr || '';
+}
+let loginFails = 0, loginLockUntil = 0;
+async function loginGo(){
+  const code = $('login-code').value.trim();
+  if (!S.loginPick || !S.user) return;
+  if (Date.now() < loginLockUntil){ S.loginErr = `יותר מדי ניסיונות. נסו שוב בעוד ${Math.ceil((loginLockUntil - Date.now()) / 1000)} שניות.`; render(); return; }
+  if (!/^\d{4}$/.test(code)){ S.loginErr = 'הקוד הוא 4 ספרות'; render(); return; }
+  const btn = $('login-go'); btn.disabled = true;
+  try{
+    await setDoc(doc(db,'bindings',S.user.uid), { memberId:S.loginPick, pin:code });
+    loginFails = 0; S.loginErr = ''; S.loginPick = null; $('login-code').value = '';
+    // The live snapshot of bindings/<uid> picks up the new sign-in and re-renders.
+  }catch(e){
+    console.error(e); loginFails++;
+    if (loginFails >= 5){ loginLockUntil = Date.now() + 60000; loginFails = 0; }
+    S.loginErr = e.code === 'permission-denied' ? 'הקוד לא נכון' : 'הכניסה לא הצליחה. בדקו את החיבור לאינטרנט.';
+    $('login-code').value = ''; render();
+  }finally{ btn.disabled = false; }
+}
+async function switchUser(){
+  if (!S.user) return;
+  S.chatOpen = null; S.openPick = null;
+  try{ await deleteDoc(doc(db,'bindings',S.user.uid)); }catch(e){ fail(e); }
+}
 function renderPending(){
   const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all' || t.suggestedBy === S.me;
   const list = S.tasks.filter(t => t.pending && mine(t)).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
@@ -352,11 +401,15 @@ function renderAdminLists(){
 
   const M = $('amList'); M.replaceChildren();
   if (!S.members.length) M.append(h('p', { class:'sub' }, 'הוסיפו את בני המשפחה, אחד אחד.'));
-  S.members.forEach(m => M.append(h('div', { class:'arow' },
-    h('div', { class:'ava sm', style:`background:${m.color}` }, m.name.charAt(0)),
-    h('div', { class:'t' }, h('strong', null, m.name)),
-    h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
-    armedBtn('m'+m.id, 'הסרה', async () => { try{ await deleteDoc(doc(db,'members',m.id)); toast(`${m.name} הוסר/ה`); }catch(e){ fail(e); } }))));
+  S.members.forEach(m => { const pin = S.pins[m.id];
+    M.append(h('div', { class:'arow' },
+      h('div', { class:'ava sm', style:`background:${m.color}` }, m.name.charAt(0)),
+      h('div', { class:'t' }, h('strong', null, m.name),
+        h('small', { class: pin ? '' : 'err' }, pin ? `קוד כניסה: ${pin}` : 'אין קוד: לא יכול/ה להיכנס')),
+      h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
+      armedBtn('m'+m.id, 'הסרה', async () => { try{
+        const b = writeBatch(db); b.delete(doc(db,'members',m.id)); b.delete(doc(db,'pins',m.id)); await b.commit(); toast(`${m.name} הוסר/ה`);
+      }catch(e){ fail(e); } }))); });
 
   const H = $('histList'); H.replaceChildren();
   const hist = S.logs.slice().sort((a,b) => b.at - a.at).slice(0, 40);
@@ -414,20 +467,26 @@ async function saveTask(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 function editMember(m){
-  S.editMember = m.id; $('mf-name').value = m.name; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
+  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
 function resetMemberForm(){
-  S.editMember = null; $('mf-name').value = ''; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
+  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
   const used = new Set(S.members.map(m => m.color)); const i = Math.max(0, COLORS.findIndex(c => !used.has(c))); $('mf-color-'+i).checked = true;
 }
 async function saveMember(){
   const name = $('mf-name').value.trim(); const color = (document.querySelector('input[name=mf-color]:checked') || {}).value || COLORS[0];
+  const pin = $('mf-pin').value.trim();
   if (!name){ toast('כתבו שם'); $('mf-name').focus(); return; }
+  if (pin && !/^\d{4}$/.test(pin)){ toast('הקוד הוא בדיוק 4 ספרות'); $('mf-pin').focus(); return; }
   const btn = $('mf-save'); btn.disabled = true;
   try{
-    if (S.editMember){ await updateDoc(doc(db,'members',S.editMember), { name, color }); toast('נשמר'); }
-    else { await addDoc(collection(db,'members'), { name, color, order: Date.now() }); toast(`${name} נוסף/ה`); }
+    const b = writeBatch(db);
+    const ref = S.editMember ? doc(db,'members',S.editMember) : doc(collection(db,'members'));
+    if (S.editMember) b.update(ref, { name, color }); else b.set(ref, { name, color, order: Date.now() });
+    if (pin) b.set(doc(db,'pins',ref.id), { pin });
+    await b.commit();
+    toast(S.editMember ? 'נשמר' : `${name} נוסף/ה` + (pin ? '' : '. בלי קוד אי אפשר להיכנס בשמו/ה.'));
     resetMemberForm();
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
@@ -512,6 +571,10 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     const now = Date.now(); taps = taps.filter(t => now - t < 4000); taps.push(now);
     if (taps.length >= 5){ taps = []; const u = auth.currentUser; if (!u || u.isAnonymous) adminSignIn(); }
   });
+  $('login-go').addEventListener('click', loginGo);
+  $('login-code').addEventListener('keydown', e => { if (e.key === 'Enter') loginGo(); });
+  $('login-back').addEventListener('click', () => { S.loginPick = null; S.loginErr = ''; render(); });
+  $('switchUser').addEventListener('click', switchUser);
   $('logoutBtn').addEventListener('click', async () => { S.tab = 'today'; await signOut(auth); toast('יצאת'); });
 
   onAuthStateChanged(auth, user => {
@@ -527,6 +590,12 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('logs', a => { S.logs = a; });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });
+    S.binding = null; S.bindLoaded = false;
+    unsubs.push(onSnapshot(doc(db,'bindings',user.uid), s => {
+      S.binding = s.exists() ? s.data() : null; S.bindLoaded = true; render();
+    }, e => { console.error(e); S.bindLoaded = true; render(); }));
+    S.pins = {};
+    if (S.isAdmin) sub('pins', a => { S.pins = Object.fromEntries(a.map(p => [p.id, p.pin])); });
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
       const m = s.exists() ? s.data() : { points:100, shekels:0 };
       S.money = { points:Number(m.points) || 100, shekels:Number(m.shekels) || 0 };
