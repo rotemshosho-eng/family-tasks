@@ -20,7 +20,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>לוח המשימות של הבית</h1>
+      <h1 id="appTitle">לוח המשימות של הבית</h1>
       <p class="sub" id="dateline"></p>
     </div>
     <nav class="tabs" id="tabs" hidden>
@@ -125,12 +125,14 @@
       <div class="section-head"><h2>היסטוריה</h2><span class="count">40 האחרונים</span></div>
       <div id="histList"></div>
     </section>
+
+    <section class="panel">
+      <div class="section-head"><h2>יציאה מהניהול</h2></div>
+      <p class="sub">אחרי היציאה הלשונית הזו נעלמת, והמכשיר נראה כמו של כל אחד אחר במשפחה. כדי לחזור: לחיצה 5 פעמים מהר על הכותרת למעלה.</p>
+      <div><button type="button" class="btn ghost" id="logoutBtn">יציאה</button></div>
+    </section>
   </main>
 
-  <footer class="foot">
-    <span id="authLine" class="sub"></span>
-    <button type="button" class="btn ghost small" id="authBtn" hidden>כניסת הורה</button>
-  </footer>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script type="module" src="app.js"></script>

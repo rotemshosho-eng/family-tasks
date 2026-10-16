@@ -32,7 +32,7 @@ S.me = store.get('ft-me') || 'all';
 let toastT;
 function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
 function fail(e){ console.error(e); const c = e && e.code;
-  toast(c === 'permission-denied' ? (S.isAdmin ? 'אין הרשאה. בדקו שהמייל בחוקי האבטחה נכון.' : 'רק הורה מחובר יכול לעשות את זה.')
+  toast(c === 'permission-denied' ? (S.isAdmin ? 'אין הרשאה. בדקו שהמייל בחוקי האבטחה נכון.' : 'אין הרשאה לפעולה הזו.')
       : c === 'unavailable' ? 'אין חיבור. זה יישמר כשהאינטרנט יחזור.' : 'השמירה לא הצליחה. נסו שוב.'); }
 function status(msg){ const s = $('status'); s.textContent = msg || ''; s.hidden = !msg; }
 
@@ -113,13 +113,8 @@ function render(){
   renderWho(); renderBoard(); renderToday(); renderAuth();
   if (S.isAdmin){ renderAdminLists(); syncSelects(); }
 }
-function renderAuth(){
-  const u = S.user;
-  $('authBtn').hidden = !u;
-  if (!u) { $('authLine').textContent = ''; return; }
-  if (u.isAnonymous){ $('authLine').textContent = ''; $('authBtn').textContent = 'כניסת הורה'; }
-  else { $('authLine').textContent = `מחובר/ת כהורה: ${u.displayName || u.email || ''}`; $('authBtn').textContent = 'יציאה'; }
-}
+// Nothing on screen says who manages the board: the admin entry is a hidden gesture (5 quick taps on the title).
+function renderAuth(){}
 function renderWho(){
   const w = $('who'); w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
   const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === id),
@@ -132,7 +127,7 @@ function renderBoard(){
   const b = $('board'); b.replaceChildren();
   if (!S.members.length){
     b.append(h('div', { class:'empty', style:'grid-column:1/-1' }, h('strong', null, 'עדיין אין בני משפחה'),
-      S.isAdmin ? 'הוסיפו אותם בלשונית ניהול, ואז כל אחד יקבל כאן את הנקודות שלו.' : 'הורה צריך להתחבר (למטה) ולהוסיף את בני המשפחה.'));
+      S.isAdmin ? 'הוסיפו אותם בלשונית ניהול, ואז כל אחד יקבל כאן את הנקודות שלו.' : 'עוד לא נוספו בני משפחה ללוח.'));
     return;
   }
   const ws = weekStart();
@@ -158,7 +153,7 @@ function renderToday(){
   $('todoCount').textContent = due.length ? `${due.length} משימות` : '';
   const L = $('todo'); L.replaceChildren();
   if (!S.tasks.length) L.append(h('div', { class:'empty' }, h('strong', null, 'אין עדיין משימות'),
-    S.isAdmin ? 'הוסיפו משימה בלשונית ניהול: שם, כמה נקודות, של מי, ובאילו ימים.' : 'הורה יוסיף משימות בקרוב.'));
+    S.isAdmin ? 'הוסיפו משימה בלשונית ניהול: שם, כמה נקודות, של מי, ובאילו ימים.' : 'עוד לא נוספו משימות ללוח.'));
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
   due.forEach(t => {
     const who = t.assignee === 'all' ? (S.me !== 'all' ? S.me : null) : t.assignee;
@@ -370,16 +365,20 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   const auth = getAuth(app);
   getRedirectResult(auth).catch(e => console.error(e));
 
-  $('authBtn').addEventListener('click', async () => {
-    const u = auth.currentUser;
-    if (u && !u.isAnonymous){ await signOut(auth); toast('יצאת ממצב הורה'); return; }
+  async function adminSignIn(){
     const provider = new GoogleAuthProvider();
     try{ await signInWithPopup(auth, provider); }
     catch(e){
       if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment'){ await signInWithRedirect(auth, provider); }
       else if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request'){ console.error(e); toast('הכניסה לא הצליחה'); }
     }
+  }
+  let taps = [];
+  $('appTitle').addEventListener('click', () => {
+    const now = Date.now(); taps = taps.filter(t => now - t < 4000); taps.push(now);
+    if (taps.length >= 5){ taps = []; const u = auth.currentUser; if (!u || u.isAnonymous) adminSignIn(); }
   });
+  $('logoutBtn').addEventListener('click', async () => { S.tab = 'today'; await signOut(auth); toast('יצאת'); });
 
   onAuthStateChanged(auth, user => {
     unsubs.forEach(u => u()); unsubs = [];
