@@ -83,6 +83,25 @@ service cloud.firestore {
       allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
     }
 
+    // פרופיל: כולם רואים; כל אחד משנה רק את התמונה של עצמו (המנהל של כולם).
+    match /profiles/{memberId} {
+      allow read: if signedIn();
+      allow write: if (isAdmin() || boundTo(memberId))
+        && request.resource.data.keys().hasOnly(['avatar'])
+        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 16;
+    }
+
+    // מכשירים שמקבלים התראות. רק השרת (וגם המנהל) קורא אותם.
+    match /pushTokens/{token} {
+      allow read: if isAdmin();
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['memberId','uid','at'])
+        && request.resource.data.uid == request.auth.uid
+        && memberExists(request.resource.data.memberId)
+        && (isAdmin() || boundTo(request.resource.data.memberId));
+      allow delete: if signedIn() && (isAdmin() || resource.data.uid == request.auth.uid);
+    }
+
     match /members/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();

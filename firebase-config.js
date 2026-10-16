@@ -8,3 +8,6 @@ export const firebaseConfig = {
   messagingSenderId: "491523225113",
   appId: "1:491523225113:web:48bbbb3b44ab76edba5c88"
 };
+
+// מפתח להתראות (Web Push). Firebase → Project settings → Cloud Messaging → Web Push certificates → Key pair.
+export const vapidKey = "PASTE_HERE";

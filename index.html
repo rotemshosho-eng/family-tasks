@@ -49,7 +49,7 @@
   </section>
 
   <div class="mebar" id="meBar" hidden>
-    <span class="ava sm" id="meAva"></span><strong id="meName"></strong>
+    <button type="button" class="mebar-open" id="meBarOpen" aria-label="הפרופיל שלי"><span class="ava sm" id="meAva"></span><strong id="meName"></strong></button>
     <span class="grow"></span>
     <button type="button" class="btn ghost small" id="switchUser">החלפת משתמש</button>
   </div>
@@ -200,6 +200,14 @@
     <div class="sheet-titles"><strong id="chatTitle"></strong><span class="sub" id="chatSub"></span></div>
   </div>
   <div class="sheet-body" id="chatBody"></div>
+</div>
+<!-- profile of one family member -->
+<div class="sheet" id="profileSheet" hidden role="dialog" aria-modal="true" aria-label="פרופיל">
+  <div class="sheet-head">
+    <button type="button" class="btn ghost small" id="profileBack">חזרה</button>
+    <div class="sheet-titles"><strong>פרופיל</strong></div>
+  </div>
+  <div class="sheet-body scroll" id="profileBody"></div>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script type="module" src="app.js"></script>

@@ -1,4 +1,5 @@
-import { firebaseConfig } from './firebase-config.js';
+import * as cfg from './firebase-config.js';
+const firebaseConfig = cfg.firebaseConfig;
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -7,9 +8,9 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
-let db = null, unsubs = [];
+let db = null, unsubs = [], fbApp = null;
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -38,6 +39,8 @@ function fail(e){ console.error(e); const c = e && e.code;
 function status(msg){ const s = $('status'); s.textContent = msg || ''; s.hidden = !msg; }
 
 const member = id => S.members.find(m => m.id === id);
+const avatarOf = id => S.profiles[id]?.avatar || (member(id)?.name || '?').trim().charAt(0);
+const AVATARS = ['🦊','🐼','🐯','🦁','🐸','🐙','🦄','🐶','🐱','🐵','🐨','🦖','🚀','⚽','🎸','🌟','🍕','🎮','🌈','🐬'];
 const mName = id => id === 'all' ? 'כולם' : (member(id)?.name || 'לא משויך');
 const mColor = id => member(id)?.color || '#8A9690';
 const isTimed = t => t.timed === true;
@@ -121,14 +124,14 @@ function render(){
   else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
   $('login').hidden = !needLogin;
-  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('tabs').hidden = true; S.chatOpen = null; renderChatSheet(); renderLogin(); }
+  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
   if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
   $('who').hidden = !S.isAdmin;
   $('meBar').hidden = !bound;
-  if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = m.name.charAt(0); $('meAva').style.background = m.color; }
+  if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  renderChatSheet();
+  renderChatSheet(); renderProfileSheet();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
@@ -242,6 +245,93 @@ async function deleteTask(t, withPoints){
 
 /* ---------- chat ---------- */
 const chatCount = t => S.messages.filter(m => m.taskId === t.id).length;
+/* ---------- profiles ---------- */
+function memberStats(id){
+  const ws = weekStart(), td = today();
+  const mine = S.logs.filter(l => l.memberId === id);
+  let week = 0, total = 0, done = 0; const days = new Set();
+  for (const l of mine){ const p = Number(l.points) || 0; total += p; if (l.day >= ws) week += p; if (l.kind === 'task' || l.kind === 'timed'){ done++; days.add(l.day); } }
+  // streak: consecutive days, ending today (or yesterday if nothing yet today), with at least one finished task
+  let streak = 0; const d = new Date(); if (!days.has(td)) d.setDate(d.getDate() - 1);
+  while (days.has(dstr(d))){ streak++; d.setDate(d.getDate() - 1); }
+  return { week, total, done, streak, recent: mine.slice().sort((a,b) => b.at - a.at).slice(0, 15) };
+}
+const canEditProfile = id => S.isAdmin || (S.binding && S.binding.memberId === id);
+function openProfile(id){ S.profileOpen = id; render(); }
+function closeProfile(){ S.profileOpen = null; render(); }
+async function setAvatar(id, a){
+  try{ await setDoc(doc(db,'profiles',id), { avatar:a }); toast('התמונה עודכנה'); }catch(e){ fail(e); }
+}
+function renderProfileSheet(){
+  const m = S.profileOpen ? member(S.profileOpen) : null;
+  const sheet = $('profileSheet');
+  if (!m){ S.profileOpen = null; sheet.hidden = true; if (!S.chatOpen) document.body.classList.remove('locked'); return; }
+  sheet.hidden = false; document.body.classList.add('locked');
+  const st = memberStats(m.id); const own = canEditProfile(m.id);
+  const ils = v => shekelsFor(v) != null ? fmtILS(shekelsFor(v)) : null;
+  const tile = (label, value, sub) => h('div', { class:'stat' }, h('span', { class:'stat-v' }, value), h('span', { class:'stat-l' }, label), sub ? h('span', { class:'stat-s' }, sub) : null);
+  const body = $('profileBody'); body.replaceChildren(
+    h('div', { class:'prof-hero', style:`--m:${m.color}` },
+      h('div', { class:'prof-ava' }, avatarOf(m.id)),
+      h('h2', { class:'prof-name' }, m.name)),
+    h('div', { class:'stats' },
+      tile('השבוע', st.week, ils(st.week)),
+      tile('סה״כ נקודות', st.total, ils(st.total)),
+      tile('משימות שבוצעו', st.done),
+      tile('ימים ברצף', st.streak)),
+    own ? h('section', { class:'panel' }, h('h2', null, 'בחירת תמונה'),
+      h('div', { class:'ava-grid' }, AVATARS.map(a => h('button', { type:'button', class:'ava-pick', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)))) : null,
+    own && (!S.isAdmin || (S.binding && S.binding.memberId === m.id)) ? notifPanel(m.id) : null,
+    h('section', { class:'panel' }, h('h2', null, 'מה נעשה לאחרונה'),
+      st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
+        return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
+          h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p)); }))
+      : h('p', { class:'sub' }, 'עוד לא בוצעו משימות.')));
+}
+
+/* ---------- push notifications (this device) ---------- */
+const pushSupported = () => 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function notifPanel(memberId){
+  const token = store.get('ft-push-token');
+  let note = '', btn = null;
+  if (!cfg.vapidKey || String(cfg.vapidKey).startsWith('PASTE')) note = 'ההתראות עוד לא הוגדרו בשרת.';
+  else if (!pushSupported()) note = isIOS() && !isStandalone()
+    ? 'באייפון, התראות עובדות רק אחרי שמוסיפים את האפליקציה למסך הבית (Safari ← שיתוף ← הוסף למסך הבית) ופותחים אותה משם.'
+    : 'הדפדפן הזה לא תומך בהתראות.';
+  else if (Notification.permission === 'denied') note = 'ההתראות חסומות בהגדרות הטלפון. כדי לקבל אותן, מאפשרים התראות לאפליקציה בהגדרות.';
+  else if (token && Notification.permission === 'granted'){
+    note = 'התראות פעילות בטלפון הזה: הודעות בצ\'אט, משימות חדשות ותזכורת בערב על מה שנשאר.';
+    btn = h('button', { type:'button', class:'btn ghost', onclick:() => disablePush() }, 'כיבוי התראות');
+  } else {
+    note = 'קבלת התראה על הודעות בצ\'אט, משימות חדשות ותזכורת בערב על מה שנשאר.';
+    btn = h('button', { type:'button', class:'btn', onclick:() => enablePush(memberId) }, 'הפעלת התראות');
+  }
+  return h('section', { class:'panel' }, h('h2', null, 'התראות'), h('p', { class:'sub' }, note), btn);
+}
+async function enablePush(memberId){
+  try{
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted'){ toast('ההתראות לא אושרו'); render(); return; }
+    const M = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js');
+    if (!(await M.isSupported())){ toast('הדפדפן הזה לא תומך בהתראות'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const token = await M.getToken(M.getMessaging(fbApp), { vapidKey: cfg.vapidKey, serviceWorkerRegistration: reg });
+    if (!token){ toast('לא הצלחנו להפעיל התראות'); return; }
+    await setDoc(doc(db,'pushTokens',token), { memberId, uid: S.user.uid, at: Date.now() });
+    store.set('ft-push-token', token); toast('ההתראות הופעלו'); render();
+  }catch(e){ console.error(e); toast('לא הצלחנו להפעיל התראות'); }
+}
+async function disablePush(){
+  const token = store.get('ft-push-token');
+  try{
+    if (token){ await deleteDoc(doc(db,'pushTokens',token)).catch(() => {});
+      const M = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js'); await M.deleteToken(M.getMessaging(fbApp)).catch(() => {}); }
+    store.set('ft-push-token', ''); toast('ההתראות כובו'); render();
+  }catch(e){ fail(e); }
+}
+
 // Unread = messages from others after the last time this device opened that task's chat.
 const unreadFor = t => S.messages.filter(m => m.taskId === t.id && m.memberId !== S.me && msgMs(m) > (S.seen[t.id] || 0)).length;
 function markSeen_chat(taskId){
@@ -314,8 +404,8 @@ function renderBoard(){
   const top = rows[0].wk;
   rows.forEach(r => { const lead = top > 0 && r.wk === top;
     const wkILS = shekelsFor(r.wk), totILS = shekelsFor(r.tot);
-    b.append(h('div', { class:'score' + (lead ? ' lead' : ''), style:`--m:${r.m.color}` },
-      h('div', { class:'ava', style:`background:${r.m.color}` }, (r.m.name || '?').trim().charAt(0)),
+    b.append(h('button', { type:'button', class:'score' + (lead ? ' lead' : ''), style:`--m:${r.m.color}`, 'aria-label':`הפרופיל של ${r.m.name}`, onclick:() => openProfile(r.m.id) },
+      h('div', { class:'ava', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
       h('div', { class:'info' },
         lead ? h('span', { class:'crown' }, 'מוביל/ה השבוע') : null,
         h('span', { class:'name' }, r.m.name),
@@ -346,7 +436,7 @@ function renderToday(){
     if (timed) meta.push(h('span', null, '·'), h('span', null, `עד ${t.maxMinutes} דק׳`));
     if (t.pinned) meta.unshift(h('span', { class:'pin-tag' }, 'נעוצה'), h('span', null, '·'));
     const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
-      h('div', { class:'ava sm', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}`, 'aria-hidden':'true' }, t.assignee === 'all' ? '★' : (mName(t.assignee) || '?').charAt(0)),
+      h('div', { class:'ava sm', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}`, 'aria-hidden':'true' }, t.assignee === 'all' ? '★' : avatarOf(t.assignee)),
       h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta)),
       h('span', { class:'pts-pill' + (isTimed(t) ? '' : ' ltr') }, pill(t)),
       chatButton(t),
@@ -423,7 +513,7 @@ function renderAdminLists(){
   if (!S.members.length) M.append(h('p', { class:'sub' }, 'הוסיפו את בני המשפחה, אחד אחד.'));
   S.members.forEach(m => { const pin = S.pins[m.id];
     M.append(h('div', { class:'arow' },
-      h('div', { class:'ava sm', style:`background:${m.color}` }, m.name.charAt(0)),
+      h('div', { class:'ava sm', style:`background:${m.color}` }, avatarOf(m.id)),
       h('div', { class:'t' }, h('strong', null, m.name),
         h('small', { class: pin ? '' : 'err' }, pin ? `קוד כניסה: ${pin}` : 'אין קוד: לא יכול/ה להיכנס')),
       h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
@@ -551,6 +641,9 @@ function buildStatic(){
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
   $('chatBack').addEventListener('click', closeChat);
+  $('profileBack').addEventListener('click', closeProfile);
+  $('meBarOpen').addEventListener('click', () => { if (S.binding) openProfile(S.binding.memberId); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.profileOpen) closeProfile(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.chatOpen) closeChat(); });
   const sd = $('sg-days'); DAYS.forEach((d, i) => sd.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'sg-day-'+i, value:i, checked:true }), d)));
   document.querySelectorAll('input[name=sg-type]').forEach(r => r.addEventListener('change', () => { $('sg-dayswrap').hidden = !$('sg-type-repeat').checked; }));
@@ -575,7 +668,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   $('setup').hidden = false;
 } else {
-  const app = initializeApp(firebaseConfig);
+  const app = initializeApp(firebaseConfig); fbApp = app;
   db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
   const auth = getAuth(app);
   getRedirectResult(auth).catch(e => console.error(e));
@@ -612,6 +705,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('logs', a => { S.logs = a; });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });
+    sub('profiles', a => { S.profiles = Object.fromEntries(a.map(p => [p.id, p])); });
     S.binding = null; S.bindLoaded = false;
     unsubs.push(onSnapshot(doc(db,'bindings',user.uid), s => {
       S.binding = s.exists() ? s.data() : null; S.bindLoaded = true; render();
