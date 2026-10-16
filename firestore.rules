@@ -1,0 +1,56 @@
+rules_version = '2';
+// חוקי האבטחה של לוח המשימות.
+// לפני ההדבקה ב-Firebase: החליפו את ADMIN_EMAIL בכתובת ה-Gmail של ההורה (אפשר כמה, ראו למטה).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // הורה = מי שנכנס עם גוגל עם אחת מהכתובות האלה.
+    // להוספת הורה שני: ['ADMIN_EMAIL', 'second@gmail.com']
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['ADMIN_EMAIL'];
+    }
+
+    function taskDoc(id) { return get(/databases/$(database)/documents/tasks/$(id)); }
+
+    // בני משפחה ומשימות: כולם רואים, רק הורה משנה.
+    match /members/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /tasks/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // יומן ביצועים ונקודות.
+    match /logs/{id} {
+      allow read: if signedIn();
+
+      // הורה יכול הכל. ילד יכול רק לסמן משימה קיימת כבוצעה,
+      // בדיוק בניקוד שההורה קבע, ועם שעה אמיתית (לא אפשר לזייף נקודות או תאריכים).
+      allow create: if isAdmin() || (
+        signedIn()
+        && request.resource.data.keys().hasOnly(['kind','taskId','title','memberId','points','day','at'])
+        && request.resource.data.kind == 'task'
+        && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
+        && exists(/databases/$(database)/documents/members/$(request.resource.data.memberId))
+        && request.resource.data.points == taskDoc(request.resource.data.taskId).data.points
+        && request.resource.data.at is int
+        && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
+      );
+
+      // ילד יכול לבטל סימון שלו עד 12 שעות אחרי. בונוסים והיסטוריה ישנה: רק הורה.
+      allow delete: if isAdmin() || (
+        signedIn()
+        && resource.data.kind == 'task'
+        && request.time.toMillis() - resource.data.at < 43200000
+      );
+
+      allow update: if isAdmin();
+    }
+  }
+}
