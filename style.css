@@ -169,6 +169,8 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 .msg-text{overflow-wrap:anywhere;white-space:pre-wrap}
 .msg-del{border:0;background:none;color:inherit;opacity:.7;font:500 .75rem var(--body);cursor:pointer;padding:0;text-decoration:underline}
 .chat-send{display:flex;gap:8px}
+.family-chat .chat{border-top:0;padding-top:0}
+.family-chat .chat-list{max-height:min(62vh,560px);min-height:200px}
 .chat-send input{flex:1;min-width:0}
 
 /* login + current user bar */

@@ -7,7 +7,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { chatSeen:0, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [];
 
@@ -28,6 +28,7 @@ const dow = () => new Date().getDay();
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return dstr(d); };
 const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 S.me = store.get('ft-me') || 'all';
+S.chatSeen = Number(store.get('ft-chat-seen')) || 0;
 
 let toastT;
 function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
@@ -104,12 +105,14 @@ async function removeLog(l){ try{ await deleteDoc(doc(db,'logs',l.id)); toast('�
 
 /* ---------- render ---------- */
 function render(){
+  const typing = document.activeElement && document.activeElement.id === 'chat-input';
   const d = new Date();
   $('dateline').textContent = `יום ${DAYS[d.getDay()]}׳, ${d.getDate()}.${d.getMonth()+1}`;
   if (!S.isAdmin && S.tab === 'admin') S.tab = 'today';
-  $('tabs').hidden = !S.isAdmin;
+  $('tabs').hidden = !S.user;
+  $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin;
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
-  $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
+  $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin'; $('view-chat').hidden = S.tab !== 'chat';
   // A family member's device is locked to whoever signed in with their code. Only the admin can view as anyone.
   const bound = !S.isAdmin && S.binding && member(S.binding.memberId) ? S.binding.memberId : null;
   const needLogin = !!S.user && !S.isAdmin && S.bindLoaded && !bound;
@@ -117,16 +120,19 @@ function render(){
   else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
   $('login').hidden = !needLogin;
-  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; renderLogin(); }
-  if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
+  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('view-chat').hidden = true; $('tabs').hidden = true; renderLogin(); }
+  if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; $('view-chat').hidden = true; return; }
   $('who').hidden = !S.isAdmin;
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = m.name.charAt(0); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
+  if (S.tab === 'chat'){ const last = S.messages.filter(m => m.taskId === GENERAL).reduce((x, m) => Math.max(x, msgMs(m)), 0); if (last > S.chatSeen){ S.chatSeen = last; store.set('ft-chat-seen', String(last)); } }
+  const unread = S.messages.filter(m => m.taskId === GENERAL && msgMs(m) > S.chatSeen && m.memberId !== S.me).length;
+  $('tabs').querySelector('[data-tab="chat"]').textContent = unread ? `צ'אט (${unread})` : "צ'אט";
+  const gc = $('generalChat'); gc.replaceChildren(); if (S.tab === 'chat') gc.append(chatPanel({ id: GENERAL }));
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  const typing = document.activeElement && document.activeElement.id === 'chat-input';
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); }
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -237,6 +243,7 @@ async function deleteTask(t, withPoints){
 }
 
 /* ---------- chat ---------- */
+const GENERAL = 'general';
 const chatCount = t => S.messages.filter(m => m.taskId === t.id).length;
 function chatButton(t){
   const n = chatCount(t); const open = S.chatOpen === t.id;
@@ -255,7 +262,7 @@ function chatPanel(t){
       h('div', { class:'msg-text' }, m.text),
       S.isAdmin ? h('button', { type:'button', class:'msg-del', 'aria-label':'מחיקת הודעה', onclick:() => deleteDoc(doc(db,'messages',m.id)).catch(fail) }, 'מחיקה') : null))
     : h('p', { class:'sub' }, 'עוד אין הודעות. אפשר לסכם כאן מי עושה מה.'));
-  const input = h('input', { type:'text', id:'chat-input', maxlength:'300', placeholder: canWrite ? `כתיבה בתור ${mName(S.me)}` : 'בחרו למעלה מי משתמש עכשיו', disabled: !canWrite });
+  const input = h('input', { type:'text', id:'chat-input', maxlength:'1000', placeholder: canWrite ? `כתיבה בתור ${mName(S.me)}` : 'בחרו למעלה מי משתמש עכשיו', disabled: !canWrite });
   input.value = S.chatDraft;
   input.addEventListener('input', () => { S.chatDraft = input.value; });
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing){ e.preventDefault(); sendMessage(t); } });
@@ -267,7 +274,7 @@ async function sendMessage(t){
   if (!(S.me !== 'all' && member(S.me))){ toast('בחרו למעלה מי משתמש עכשיו'); return; }
   if (!text) return;
   S.chatDraft = ''; const inp = $('chat-input'); if (inp) inp.value = '';
-  try{ await addDoc(collection(db,'messages'), { taskId:t.id, memberId:S.me, text:text.slice(0,300), at: serverTimestamp() }); }
+  try{ await addDoc(collection(db,'messages'), { taskId:t.id, memberId:S.me, text:text.slice(0,1000), at: serverTimestamp() }); }
   catch(e){ S.chatDraft = text; fail(e); render(); }
 }
 function renderWho(){

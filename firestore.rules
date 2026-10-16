@@ -99,9 +99,11 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['taskId','memberId','text','at'])
         && request.resource.data.text is string
-        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
         && request.resource.data.at == request.time
-        && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
+        && request.resource.data.taskId is string
+        && (request.resource.data.taskId == 'general'
+            || exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId)))
         && memberExists(request.resource.data.memberId)
         && (isAdmin() || boundTo(request.resource.data.memberId));
       allow delete: if isAdmin();

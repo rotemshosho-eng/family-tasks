@@ -25,7 +25,8 @@
     </div>
     <nav class="tabs" id="tabs" hidden>
       <button type="button" data-tab="today" aria-pressed="true">היום</button>
-      <button type="button" data-tab="admin" aria-pressed="false">ניהול</button>
+      <button type="button" data-tab="chat" aria-pressed="false">צ'אט</button>
+      <button type="button" data-tab="admin" aria-pressed="false" hidden>ניהול</button>
     </nav>
   </header>
 
@@ -108,6 +109,12 @@
   </main>
 
   <!-- ADMIN -->
+  <!-- FAMILY CHAT -->
+  <main id="view-chat" class="section" hidden>
+    <div class="section-head"><h2>הצ'אט של המשפחה</h2></div>
+    <div class="panel family-chat" id="generalChat"></div>
+  </main>
+
   <main id="view-admin" class="section stack" hidden>
     <section class="panel">
       <h2 id="tfHead">משימה חדשה</h2>
