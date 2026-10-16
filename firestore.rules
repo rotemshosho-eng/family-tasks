@@ -22,6 +22,7 @@ service cloud.firestore {
         && d.kind == 'task'
         && exists(/databases/$(database)/documents/tasks/$(d.taskId))
         && taskDoc(d.taskId).data.get('timed', false) == false
+        && taskDoc(d.taskId).data.get('pending', false) == false
         && memberExists(d.memberId)
         && d.points == taskDoc(d.taskId).data.points
         && freshTime(d);
@@ -51,9 +52,20 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // כל אחד יכול להוסיף משימה, אבל בלי נקודות: היא נשמרת כ"מחכה לניקוד".
+    // רק המנהל קובע נקודות, עורך או מוחק.
     match /tasks/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create: if isAdmin() || (
+        signedIn()
+        && request.resource.data.keys().hasOnly(['title','assignee','type','days','pending','suggestedBy','createdAt'])
+        && request.resource.data.pending == true
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 80
+        && request.resource.data.type in ['once', 'repeat']
+        && request.resource.data.days is list && request.resource.data.days.size() <= 7
+      );
+      allow update, delete: if isAdmin();
     }
     match /settings/{id} {
       allow read: if signedIn();

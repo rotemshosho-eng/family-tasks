@@ -53,6 +53,7 @@ function timedResult(task, tm){
 const clock = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${pad(s % 60)}`; };
 function recLabel(t){ if (t.type === 'once') return 'חד-פעמית'; const d = (t.days || []).slice().sort(); return d.length === 7 ? 'כל יום' : 'ימים ' + d.map(i => DAYS[i]).join(' '); }
 function isDue(t){
+  if (t.pending) return false;
   if (t.type === 'once') return !S.logs.some(l => l.taskId === t.id);
   return (t.days || []).includes(dow()) && !S.logs.some(l => l.taskId === t.id && l.day === today());
 }
@@ -110,11 +111,48 @@ function render(){
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
   $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
-  renderWho(); renderBoard(); renderToday(); renderAuth();
-  if (S.isAdmin){ renderAdminLists(); syncSelects(); }
+  const nPend = S.tasks.filter(t => t.pending).length;
+  $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
+  $('sgSec').hidden = !S.user || S.isAdmin || !S.members.length;
+  renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
+  if (S.isAdmin){ renderAdminLists(); }
 }
 // Nothing on screen says who manages the board: the admin entry is a hidden gesture (5 quick taps on the title).
 function renderAuth(){}
+function renderPending(){
+  const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all' || t.suggestedBy === S.me;
+  const list = S.tasks.filter(t => t.pending && mine(t)).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  $('pendSec').hidden = !list.length; $('pendCount').textContent = list.length ? String(list.length) : '';
+  const P = $('pendList'); P.replaceChildren();
+  list.forEach(t => P.append(h('div', { class:'task' },
+    h('div', { class:'body' }, h('span', { class:'title' }, t.title),
+      h('div', { class:'meta' },
+        h('span', { class:'tag' }, h('span', { class:'dot', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}` }),
+          t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee)),
+        h('span', null, '·'), h('span', null, recLabel(t)),
+        t.suggestedBy && member(t.suggestedBy) ? [h('span', null, '·'), h('span', null, `נוספה ע״י ${mName(t.suggestedBy)}`)] : null)),
+    S.isAdmin
+      ? h('button', { type:'button', class:'btn', onclick:() => { S.tab = 'admin'; render(); editTask(t); } }, 'קביעת ניקוד')
+      : h('span', { class:'pts-pill' }, 'בקרוב'))));
+}
+function toggleSuggest(open){
+  $('sg-panel').hidden = !open; $('sg-toggle').hidden = open; $('sg-toggle').setAttribute('aria-expanded', String(open));
+  if (open){ if (S.me !== 'all' && member(S.me)) $('sg-assignee').value = S.me; $('sg-title').focus(); }
+}
+async function saveSuggestion(){
+  const title = $('sg-title').value.trim();
+  const type = $('sg-type-repeat').checked ? 'repeat' : 'once';
+  const days = type === 'repeat' ? DAYS.map((_, i) => i).filter(i => $('sg-day-'+i).checked) : [];
+  if (!title){ toast('כתבו מה צריך לעשות'); $('sg-title').focus(); return; }
+  if (type === 'repeat' && !days.length){ toast('בחרו לפחות יום אחד'); return; }
+  const btn = $('sg-save'); btn.disabled = true;
+  try{
+    await addDoc(collection(db,'tasks'), { title, assignee: $('sg-assignee').value || 'all', type, days, pending:true,
+      suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
+    toast('המשימה נוספה ומחכה לניקוד');
+    $('sg-title').value = ''; toggleSuggest(false);
+  }catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
 function renderWho(){
   const w = $('who'); w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
   const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === id),
@@ -209,16 +247,18 @@ function syncSelects(){
     S.members.forEach(m => sel.append(h('option', { value:m.id }, m.name)));
     if ([...sel.options].some(o => o.value === v)) sel.value = v; };
   fill($('tf-assignee'), true); fill($('bf-member'), false);
+  const sg = $('sg-assignee'), had = sg.options.length; fill(sg, true);
+  if (!had && S.me !== 'all' && member(S.me)) sg.value = S.me;
 }
 function renderAdminLists(){
   const A = $('atList'); A.replaceChildren(); $('atCount').textContent = S.tasks.length ? String(S.tasks.length) : '';
   if (!S.tasks.length) A.append(h('p', { class:'sub' }, 'אין משימות עדיין. הוסיפו את הראשונה למעלה.'));
-  S.tasks.slice().sort((a,b) => (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
+  S.tasks.slice().sort((a,b) => (!!b.pending - !!a.pending) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
     const doneOnce = t.type === 'once' && S.logs.some(l => l.taskId === t.id);
     A.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, t.title), h('small', null, `${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${doneOnce ? ' · בוצעה' : ''}`)),
-      h('span', { class:'pts-pill' }, pill(t)),
-      h('button', { type:'button', class:'btn ghost small', onclick:() => editTask(t) }, 'עריכה'),
+      h('div', { class:'t' }, h('strong', null, t.title), h('small', null, `${t.pending ? 'מחכה לניקוד · ' : ''}${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${doneOnce ? ' · בוצעה' : ''}`)),
+      t.pending ? null : h('span', { class:'pts-pill' }, pill(t)),
+      h('button', { type:'button', class:'btn ' + (t.pending ? '' : 'ghost ') + 'small', onclick:() => editTask(t) }, t.pending ? 'קביעת ניקוד' : 'עריכה'),
       armedBtn('t'+t.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'tasks',t.id)); toast('המשימה נמחקה'); if (S.editTask === t.id) resetTaskForm(); }catch(e){ fail(e); } })));
   });
 
@@ -240,7 +280,7 @@ function renderAdminLists(){
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
 function editTask(t){
-  S.editTask = t.id; $('tfHead').textContent = 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
+  S.editTask = t.id; $('tfHead').textContent = t.pending ? `קביעת ניקוד: ${t.title}` : 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
   $('tf-title').value = t.title; $('tf-assignee').value = member(t.assignee) ? t.assignee : 'all';
   setMode(isTimed(t) ? 'timed' : 'fixed');
   $('tf-points').value = t.points ?? 10; $('tf-rate').value = t.ratePerMin ?? 1; $('tf-max').value = t.maxMinutes ?? 30; updateHint();
@@ -343,6 +383,11 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  const sd = $('sg-days'); DAYS.forEach((d, i) => sd.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'sg-day-'+i, value:i, checked:true }), d)));
+  document.querySelectorAll('input[name=sg-type]').forEach(r => r.addEventListener('change', () => { $('sg-dayswrap').hidden = !$('sg-type-repeat').checked; }));
+  $('sg-toggle').addEventListener('click', () => toggleSuggest(true));
+  $('sg-cancel').addEventListener('click', () => toggleSuggest(false));
+  $('sg-save').addEventListener('click', saveSuggestion);
   document.querySelectorAll('input[name=tf-mode]').forEach(r => r.addEventListener('change', () => setMode($('tf-mode-timed').checked ? 'timed' : 'fixed')));
   ['tf-rate','tf-max'].forEach(id => $(id).addEventListener('input', updateHint));
   updateHint();
