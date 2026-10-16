@@ -111,7 +111,7 @@ function render(){
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
   $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
-  const nPend = S.tasks.filter(t => t.pending).length;
+  const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   $('sgSec').hidden = !S.user || S.isAdmin || !S.members.length;
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
@@ -139,20 +139,30 @@ function toggleSuggest(open){
   $('sg-panel').hidden = !open; $('sg-toggle').hidden = open; $('sg-toggle').setAttribute('aria-expanded', String(open));
   if (open){ if (S.me !== 'all' && member(S.me)) $('sg-assignee').value = S.me; $('sg-title').focus(); }
 }
+function setSgMode(m){ $(m === 'timed' ? 'sg-mode-timed' : 'sg-mode-fixed').checked = true; $('sg-fixed-row').hidden = m === 'timed'; $('sg-timed-row').hidden = m !== 'timed'; }
+// Anyone can add a task with its own points or time. It is live at once; the admin sees it marked "new" and can edit or delete it.
 async function saveSuggestion(){
   const title = $('sg-title').value.trim();
   const type = $('sg-type-repeat').checked ? 'repeat' : 'once';
   const days = type === 'repeat' ? DAYS.map((_, i) => i).filter(i => $('sg-day-'+i).checked) : [];
+  const timed = $('sg-mode-timed').checked;
+  const points = Math.round(Number($('sg-points').value));
+  const ratePerMin = Math.round(Number($('sg-rate').value)), maxMinutes = Math.round(Number($('sg-max').value));
   if (!title){ toast('כתבו מה צריך לעשות'); $('sg-title').focus(); return; }
   if (type === 'repeat' && !days.length){ toast('בחרו לפחות יום אחד'); return; }
+  if (!timed && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
+  if (timed && (!(ratePerMin >= 1) || ratePerMin > 100)){ toast('נקודות לדקה: מספר בין 1 ל-100'); return; }
+  if (timed && (!(maxMinutes >= 1) || maxMinutes > 240)){ toast('תקרה: בין 1 ל-240 דקות'); return; }
   const btn = $('sg-save'); btn.disabled = true;
   try{
-    await addDoc(collection(db,'tasks'), { title, assignee: $('sg-assignee').value || 'all', type, days, pending:true,
+    await addDoc(collection(db,'tasks'), { title, assignee: $('sg-assignee').value || 'all', type, days, timed,
+      ...(timed ? { ratePerMin, maxMinutes } : { points }), reviewed:false,
       suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
-    toast('המשימה נוספה ומחכה לניקוד');
-    $('sg-title').value = ''; toggleSuggest(false);
+    toast('המשימה נוספה');
+    $('sg-title').value = ''; setSgMode('fixed'); toggleSuggest(false);
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
+async function markSeen(t){ try{ await updateDoc(doc(db,'tasks',t.id), { reviewed:true }); }catch(e){ fail(e); } }
 function renderWho(){
   const w = $('who'); w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
   const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === id),
@@ -253,11 +263,15 @@ function syncSelects(){
 function renderAdminLists(){
   const A = $('atList'); A.replaceChildren(); $('atCount').textContent = S.tasks.length ? String(S.tasks.length) : '';
   if (!S.tasks.length) A.append(h('p', { class:'sub' }, 'אין משימות עדיין. הוסיפו את הראשונה למעלה.'));
-  S.tasks.slice().sort((a,b) => (!!b.pending - !!a.pending) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
+  const isNew = t => t.pending || t.reviewed === false;
+  S.tasks.slice().sort((a,b) => (isNew(b) - isNew(a)) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
     const doneOnce = t.type === 'once' && S.logs.some(l => l.taskId === t.id);
+    const by = t.suggestedBy && member(t.suggestedBy) ? ` · נוספה ע״י ${mName(t.suggestedBy)}` : '';
     A.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, t.title), h('small', null, `${t.pending ? 'מחכה לניקוד · ' : ''}${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${doneOnce ? ' · בוצעה' : ''}`)),
+      h('div', { class:'t' }, h('strong', null, t.title),
+        h('small', null, `${t.pending ? 'מחכה לניקוד · ' : (t.reviewed === false ? 'חדשה · ' : '')}${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${by}${doneOnce ? ' · בוצעה' : ''}`)),
       t.pending ? null : h('span', { class:'pts-pill' }, pill(t)),
+      t.reviewed === false && !t.pending ? h('button', { type:'button', class:'btn small', onclick:() => markSeen(t) }, 'ראיתי') : null,
       h('button', { type:'button', class:'btn ' + (t.pending ? '' : 'ghost ') + 'small', onclick:() => editTask(t) }, t.pending ? 'קביעת ניקוד' : 'עריכה'),
       armedBtn('t'+t.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'tasks',t.id)); toast('המשימה נמחקה'); if (S.editTask === t.id) resetTaskForm(); }catch(e){ fail(e); } })));
   });
@@ -318,7 +332,7 @@ async function saveTask(){
   try{
     if (S.editTask){
       const old = S.tasks.find(x => x.id === S.editTask);
-      await setDoc(doc(db,'tasks',S.editTask), { ...data, createdAt: old?.createdAt || Date.now() });
+      await setDoc(doc(db,'tasks',S.editTask), { ...data, reviewed:true, suggestedBy: old?.suggestedBy ?? null, createdAt: old?.createdAt || Date.now() });
       toast('המשימה עודכנה');
     }
     else { await addDoc(collection(db,'tasks'), { ...data, createdAt: Date.now() }); toast('המשימה נוספה'); }
@@ -388,6 +402,7 @@ function buildStatic(){
   $('sg-toggle').addEventListener('click', () => toggleSuggest(true));
   $('sg-cancel').addEventListener('click', () => toggleSuggest(false));
   $('sg-save').addEventListener('click', saveSuggestion);
+  document.querySelectorAll('input[name=sg-mode]').forEach(r => r.addEventListener('change', () => setSgMode($('sg-mode-timed').checked ? 'timed' : 'fixed')));
   document.querySelectorAll('input[name=tf-mode]').forEach(r => r.addEventListener('change', () => setMode($('tf-mode-timed').checked ? 'timed' : 'fixed')));
   ['tf-rate','tf-max'].forEach(id => $(id).addEventListener('input', updateHint));
   updateHint();

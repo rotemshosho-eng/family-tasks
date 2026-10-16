@@ -63,7 +63,19 @@
           </div>
         </div>
         <div class="field" id="sg-dayswrap" hidden><span class="lab">באילו ימים</span><div class="days" id="sg-days"></div></div>
-        <p class="sub">הנקודות נקבעות אחרי ההוספה. עד אז המשימה מופיעה ב"מחכות לניקוד".</p>
+        <div class="field"><span class="lab">איך מחשבים נקודות</span>
+          <div class="seg">
+            <label><input type="radio" name="sg-mode" id="sg-mode-fixed" value="fixed" checked> מספר קבוע</label>
+            <label><input type="radio" name="sg-mode" id="sg-mode-timed" value="timed"> לפי זמן</label>
+          </div>
+        </div>
+        <div class="row" id="sg-fixed-row">
+          <div class="field"><label for="sg-points">נקודות</label><input type="number" id="sg-points" min="0" max="1000" value="10" inputmode="numeric"></div>
+        </div>
+        <div class="row" id="sg-timed-row" hidden>
+          <div class="field"><label for="sg-rate">נקודות לכל דקה</label><input type="number" id="sg-rate" min="1" max="100" value="1" inputmode="numeric"></div>
+          <div class="field"><label for="sg-max">תקרה (דקות)</label><input type="number" id="sg-max" min="1" max="240" value="30" inputmode="numeric"></div>
+        </div>
         <div class="row">
           <button type="button" class="btn" id="sg-save">הוספה</button>
           <button type="button" class="btn ghost" id="sg-cancel">ביטול</button>
