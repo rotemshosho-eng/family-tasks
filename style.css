@@ -97,6 +97,16 @@ input[type=text],input[type=number],select{font:inherit;font-size:16px;color:var
 .num{font-family:var(--num);font-variant-numeric:tabular-nums;font-weight:700}
 .gold{color:var(--gold)}
 .neg{color:var(--danger)}
+.score .money{font:700 .85rem var(--num);color:var(--accent);font-variant-numeric:tabular-nums}
+.running{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border-radius:10px;background:var(--sunk);border:1.5px solid var(--accent)}
+.running .clock{font:700 1.35rem/1 var(--num);font-variant-numeric:tabular-nums;min-width:4.2ch}
+.running .who-run{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.running .earn{font:700 .95rem var(--num);color:var(--gold);font-variant-numeric:tabular-nums}
+.running .capnote{font-size:.8rem;color:var(--muted)}
+.running .grow{flex:1}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--danger);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);
   padding:10px 18px;border-radius:999px;font-weight:600;max-width:calc(100% - 32px);z-index:20}

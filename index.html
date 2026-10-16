@@ -57,10 +57,21 @@
     <section class="panel">
       <h2 id="tfHead">משימה חדשה</h2>
       <div class="field"><label for="tf-title">מה צריך לעשות</label><input type="text" id="tf-title" maxlength="80" placeholder="למשל: להוציא את הזבל"></div>
-      <div class="row">
-        <div class="field"><label for="tf-points">נקודות</label><input type="number" id="tf-points" min="0" max="1000" value="10" inputmode="numeric"></div>
-        <div class="field"><label for="tf-assignee">של מי</label><select id="tf-assignee"></select></div>
+      <div class="field"><label for="tf-assignee">של מי</label><select id="tf-assignee"></select></div>
+      <div class="field"><span class="lab">איך מחשבים נקודות</span>
+        <div class="seg">
+          <label><input type="radio" name="tf-mode" id="tf-mode-fixed" value="fixed" checked> מספר קבוע</label>
+          <label><input type="radio" name="tf-mode" id="tf-mode-timed" value="timed"> לפי זמן</label>
+        </div>
       </div>
+      <div class="row" id="tf-fixed-row">
+        <div class="field"><label for="tf-points">נקודות</label><input type="number" id="tf-points" min="0" max="1000" value="10" inputmode="numeric"></div>
+      </div>
+      <div class="row" id="tf-timed-row" hidden>
+        <div class="field"><label for="tf-rate">נקודות לכל דקה</label><input type="number" id="tf-rate" min="1" max="100" value="1" inputmode="numeric"></div>
+        <div class="field"><label for="tf-max">תקרה (דקות)</label><input type="number" id="tf-max" min="1" max="240" value="30" inputmode="numeric"></div>
+      </div>
+      <p class="sub" id="tf-timed-hint" hidden></p>
       <div class="field"><span class="lab">סוג</span>
         <div class="seg">
           <label><input type="radio" name="tf-type" id="tf-type-repeat" value="repeat" checked> חוזרת</label>
@@ -87,6 +98,16 @@
       </div>
       <div class="field"><label for="bf-reason">סיבה</label><input type="text" id="bf-reason" maxlength="60" placeholder="למשל: עזרה בלי שביקשו"></div>
       <div><button type="button" class="btn" id="bf-save">עדכון נקודות</button></div>
+    </section>
+
+    <section class="panel">
+      <h2>המרה לכסף</h2>
+      <p class="sub">כמה שקלים שווה כמות נקודות. אם השקלים 0, הסכום לא יוצג.</p>
+      <div class="row">
+        <div class="field"><label for="mo-points">נקודות</label><input type="number" id="mo-points" min="1" value="100" inputmode="numeric"></div>
+        <div class="field"><label for="mo-shekels">שווים בשקלים (₪)</label><input type="number" id="mo-shekels" min="0" step="0.5" value="10" inputmode="decimal"></div>
+      </div>
+      <div><button type="button" class="btn" id="mo-save">שמירה</button></div>
     </section>
 
     <section class="panel">

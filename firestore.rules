@@ -1,13 +1,11 @@
 rules_version = '2';
 // חוקי האבטחה של לוח המשימות.
-// לפני ההדבקה ב-Firebase: החליפו את ADMIN_EMAIL בכתובת ה-Gmail של ההורה (אפשר כמה, ראו למטה).
+// לפני ההדבקה ב-Firebase: ודאו שהמייל בשורת isAdmin הוא המייל של ההורה (אפשר כמה, מופרדים בפסיק).
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
 
-    // הורה = מי שנכנס עם גוגל עם אחת מהכתובות האלה.
-    // להוספת הורה שני: ['ADMIN_EMAIL', 'second@gmail.com']
     function isAdmin() {
       return signedIn()
         && request.auth.token.email_verified == true
@@ -15,8 +13,40 @@ service cloud.firestore {
     }
 
     function taskDoc(id) { return get(/databases/$(database)/documents/tasks/$(id)); }
+    function memberExists(id) { return exists(/databases/$(database)/documents/members/$(id)); }
+    function freshTime(d) { return d.at is int && math.abs(d.at - request.time.toMillis()) < 600000; }
 
-    // בני משפחה ומשימות: כולם רואים, רק הורה משנה.
+    // משימה רגילה: הניקוד חייב להיות בדיוק מה שההורה קבע.
+    function validFixed(d) {
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','day','at'])
+        && d.kind == 'task'
+        && exists(/databases/$(database)/documents/tasks/$(d.taskId))
+        && taskDoc(d.taskId).data.get('timed', false) == false
+        && memberExists(d.memberId)
+        && d.points == taskDoc(d.taskId).data.points
+        && freshTime(d);
+    }
+
+    // משימה לפי זמן: הדקות נבדקות מול שעת ההתחלה שהשרת רשם, עד התקרה,
+    // והטיימר נמחק באותה פעולה (אי אפשר לקבל נקודות פעמיים על אותו טיימר).
+    function validTimed(d) {
+      let timerPath = /databases/$(database)/documents/timers/$(d.timerId);
+      let timer = get(timerPath).data;
+      let task = taskDoc(d.taskId).data;
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','minutes','timerId','day','at'])
+        && d.kind == 'timed'
+        && d.timerId == d.taskId + '__' + d.memberId
+        && timer.taskId == d.taskId
+        && timer.memberId == d.memberId
+        && task.get('timed', false) == true
+        && d.minutes is int && d.minutes >= 1 && d.minutes <= task.maxMinutes
+        && d.minutes * 60000 <= request.time.toMillis() - timer.startedAt.toMillis() + 60000
+        && d.points == d.minutes * task.ratePerMin
+        && !existsAfter(timerPath)
+        && freshTime(d);
+    }
+
+    // בני משפחה, משימות והגדרות: כולם רואים, רק הורה משנה.
     match /members/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
@@ -25,31 +55,36 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // טיימרים פעילים. שעת ההתחלה נקבעת בשרת, לא בטלפון.
+    match /timers/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['taskId','memberId','startedAt'])
+        && id == request.resource.data.taskId + '__' + request.resource.data.memberId
+        && request.resource.data.startedAt == request.time
+        && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
+        && taskDoc(request.resource.data.taskId).data.get('timed', false) == true
+        && memberExists(request.resource.data.memberId);
+      allow delete: if signedIn();
+    }
 
     // יומן ביצועים ונקודות.
     match /logs/{id} {
       allow read: if signedIn();
-
-      // הורה יכול הכל. ילד יכול רק לסמן משימה קיימת כבוצעה,
-      // בדיוק בניקוד שההורה קבע, ועם שעה אמיתית (לא אפשר לזייף נקודות או תאריכים).
-      allow create: if isAdmin() || (
-        signedIn()
-        && request.resource.data.keys().hasOnly(['kind','taskId','title','memberId','points','day','at'])
-        && request.resource.data.kind == 'task'
-        && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
-        && exists(/databases/$(database)/documents/members/$(request.resource.data.memberId))
-        && request.resource.data.points == taskDoc(request.resource.data.taskId).data.points
-        && request.resource.data.at is int
-        && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
-      );
-
-      // ילד יכול לבטל סימון שלו עד 12 שעות אחרי. בונוסים והיסטוריה ישנה: רק הורה.
+      allow create: if isAdmin()
+        || (signedIn() && request.resource.data.kind == 'task' && validFixed(request.resource.data))
+        || (signedIn() && request.resource.data.kind == 'timed' && validTimed(request.resource.data));
+      // ילד יכול לבטל ביצוע שלו עד 12 שעות אחרי. בונוסים והיסטוריה ישנה: רק הורה.
       allow delete: if isAdmin() || (
         signedIn()
-        && resource.data.kind == 'task'
+        && resource.data.kind in ['task', 'timed']
         && request.time.toMillis() - resource.data.at < 43200000
       );
-
       allow update: if isAdmin();
     }
   }

@@ -1,13 +1,13 @@
 import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { members:[], tasks:[], logs:[], me:'all', tab:'today', isAdmin:false, user:null,
+const S = { members:[], tasks:[], logs:[], timers:[], money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [];
 
@@ -39,6 +39,18 @@ function status(msg){ const s = $('status'); s.textContent = msg || ''; s.hidden
 const member = id => S.members.find(m => m.id === id);
 const mName = id => id === 'all' ? 'כולם' : (member(id)?.name || 'לא משויך');
 const mColor = id => member(id)?.color || '#8A9690';
+const isTimed = t => t.timed === true;
+const pill = t => isTimed(t) ? `${t.ratePerMin} לדקה` : `+${t.points}`;
+const shekelsFor = p => { const m = S.money; if (!m || !(m.shekels > 0) || !(m.points > 0)) return null; return p * m.shekels / m.points; };
+const fmtILS = v => '₪' + (Math.round(v * 100) / 100).toLocaleString('he-IL', { maximumFractionDigits: 2 });
+const timerId = (taskId, memberId) => `${taskId}__${memberId}`;
+const startMs = tm => tm.startedAt && typeof tm.startedAt.toMillis === 'function' ? tm.startedAt.toMillis() : Date.now();
+function timedResult(task, tm){
+  const ms = Math.max(0, Date.now() - startMs(tm));
+  const minutes = Math.min(task.maxMinutes, Math.floor(ms / 60000));
+  return { ms, minutes, points: minutes * task.ratePerMin, capped: ms >= task.maxMinutes * 60000 };
+}
+const clock = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${pad(s % 60)}`; };
 function recLabel(t){ if (t.type === 'once') return 'חד-פעמית'; const d = (t.days || []).slice().sort(); return d.length === 7 ? 'כל יום' : 'ימים ' + d.map(i => DAYS[i]).join(' '); }
 function isDue(t){
   if (t.type === 'once') return !S.logs.some(l => l.taskId === t.id);
@@ -64,6 +76,29 @@ async function complete(t, memberId){
     toast(`${mName(memberId)} קיבל/ה ${t.points} נקודות`);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
 }
+async function startTimer(t, memberId){
+  const id = timerId(t.id, memberId);
+  if (!db || S.busy.has(id)) return; S.busy.add(id); S.openPick = null; render();
+  try{
+    await setDoc(doc(db,'timers',id), { taskId:t.id, memberId, startedAt: serverTimestamp() });
+    toast(`הטיימר של ${mName(memberId)} התחיל`);
+  }catch(e){ fail(e); } finally{ S.busy.delete(id); render(); }
+}
+async function finishTimer(t, tm){
+  if (!db || S.busy.has(tm.id)) return;
+  const r = timedResult(t, tm);
+  if (r.minutes < 1){ toast('צריך לפחות דקה שלמה. אפשר להמשיך או לבטל.'); return; }
+  S.busy.add(tm.id); render();
+  try{
+    const b = writeBatch(db);
+    b.set(doc(collection(db,'logs')), { kind:'timed', taskId:t.id, title:t.title, memberId:tm.memberId,
+      minutes:r.minutes, points:r.points, timerId:tm.id, day:today(), at:Date.now() });
+    b.delete(doc(db,'timers',tm.id));
+    await b.commit();
+    toast(`${mName(tm.memberId)}: ${r.minutes} דקות, ${r.points} נקודות`);
+  }catch(e){ fail(e); } finally{ S.busy.delete(tm.id); render(); }
+}
+async function cancelTimer(tm){ try{ await deleteDoc(doc(db,'timers',tm.id)); toast('הטיימר בוטל'); }catch(e){ fail(e); } }
 async function removeLog(l){ try{ await deleteDoc(doc(db,'logs',l.id)); toast('בוטל'); }catch(e){ fail(e); } }
 
 /* ---------- render ---------- */
@@ -106,13 +141,15 @@ function renderBoard(){
     return { m, wk, tot }; }).sort((a,b) => b.wk - a.wk);
   const top = rows[0].wk;
   rows.forEach(r => { const lead = top > 0 && r.wk === top;
+    const wkILS = shekelsFor(r.wk), totILS = shekelsFor(r.tot);
     b.append(h('div', { class:'score' + (lead ? ' lead' : '') },
       h('div', { class:'ava', style:`background:${r.m.color}` }, (r.m.name || '?').trim().charAt(0)),
       h('div', { class:'info' },
         lead ? h('span', { class:'crown' }, 'מוביל/ה השבוע') : null,
         h('span', { class:'name' }, r.m.name),
         h('span', { class:'pts' }, r.wk),
-        h('span', { class:'tot' }, `סה״כ ${r.tot}`)))); });
+        wkILS != null ? h('span', { class:'money' }, `${fmtILS(wkILS)} השבוע`) : null,
+        h('span', { class:'tot' }, `סה״כ ${r.tot}` + (totILS != null ? ` · ${fmtILS(totILS)}` : ''))))); });
 }
 function renderToday(){
   const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all';
@@ -125,30 +162,47 @@ function renderToday(){
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
   due.forEach(t => {
     const who = t.assignee === 'all' ? (S.me !== 'all' ? S.me : null) : t.assignee;
-    const busy = S.busy.has(t.id);
+    const timed = isTimed(t);
+    const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
+    const whoRunning = who && running.some(tm => tm.memberId === who);
+    const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
+    const act = timed ? (m => startTimer(t, m)) : (m => complete(t, m));
+    const meta = [
+      h('span', { class:'tag' }, h('span', { class:'dot', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}` }),
+        t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee)),
+      h('span', null, '·'), h('span', null, recLabel(t))];
+    if (timed) meta.push(h('span', null, '·'), h('span', null, `עד ${t.maxMinutes} דק׳`));
     const card = h('div', { class:'task' },
-      h('div', { class:'body' }, h('span', { class:'title' }, t.title),
-        h('div', { class:'meta' },
-          h('span', { class:'tag' }, h('span', { class:'dot', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}` }),
-            t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee)),
-          h('span', null, '·'), h('span', null, recLabel(t)))),
-      h('span', { class:'pts-pill' }, `+${t.points}`),
-      h('button', { type:'button', class:'btn', disabled: busy || !S.members.length, onclick:() => {
-        if (who && member(who)) complete(t, who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } } },
-        busy ? 'שומר…' : 'סיימתי'));
-    if (S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, 'מי עשה?'),
-      S.members.map(m => h('button', { type:'button', class:'chip', onclick:() => complete(t, m.id) },
+      h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta)),
+      h('span', { class:'pts-pill' }, pill(t)),
+      whoRunning ? null : h('button', { type:'button', class:'btn', disabled: busy || !S.members.length, onclick:() => {
+        if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } } },
+        busy ? 'שומר…' : (timed ? 'התחלתי' : 'סיימתי')));
+    running.forEach(tm => {
+      const r = timedResult(t, tm); const b = S.busy.has(tm.id);
+      card.append(h('div', { class:'running' },
+        h('span', { class:'pulse', 'aria-hidden':'true' }),
+        h('span', { class:'who-run' }, h('span', { class:'dot', style:`background:${mColor(tm.memberId)}` }), mName(tm.memberId)),
+        h('span', { class:'clock', 'data-timer':tm.id }, clock(r.ms)),
+        h('span', { class:'earn', 'data-earn':tm.id }, `+${r.points}`),
+        h('span', { class:'capnote', 'data-cap':tm.id }, r.capped ? 'הגיע לתקרה' : ''),
+        h('span', { class:'grow' }),
+        h('button', { type:'button', class:'btn small', disabled:b, onclick:() => finishTimer(t, tm) }, b ? 'שומר…' : 'סיימתי'),
+        h('button', { type:'button', class:'btn ghost small', disabled:b, onclick:() => cancelTimer(tm) }, 'ביטול')));
+    });
+    if (S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
+      S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
         h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
     L.append(card);
   });
   const td = today();
-  const done = S.logs.filter(l => l.kind === 'task' && l.day === td && (S.me === 'all' || l.memberId === S.me)).sort((a,b) => b.at - a.at);
+  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && l.day === td && (S.me === 'all' || l.memberId === S.me)).sort((a,b) => b.at - a.at);
   $('doneSec').hidden = !done.length;
   $('doneCount').textContent = done.length ? `${done.reduce((s,l) => s + (Number(l.points)||0), 0)} נקודות` : '';
   const D = $('doneList'); D.replaceChildren();
   done.forEach(l => D.append(h('div', { class:'done' },
     h('span', { class:'dot', style:`background:${mColor(l.memberId)}` }),
-    h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}`),
+    h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '')),
     h('span', { class:'num gold' }, `+${l.points}`),
     h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול'))));
 }
@@ -167,8 +221,8 @@ function renderAdminLists(){
   S.tasks.slice().sort((a,b) => (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
     const doneOnce = t.type === 'once' && S.logs.some(l => l.taskId === t.id);
     A.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, t.title), h('small', null, `${mName(t.assignee)} · ${recLabel(t)}${doneOnce ? ' · בוצעה' : ''}`)),
-      h('span', { class:'pts-pill' }, `+${t.points}`),
+      h('div', { class:'t' }, h('strong', null, t.title), h('small', null, `${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${doneOnce ? ' · בוצעה' : ''}`)),
+      h('span', { class:'pts-pill' }, pill(t)),
       h('button', { type:'button', class:'btn ghost small', onclick:() => editTask(t) }, 'עריכה'),
       armedBtn('t'+t.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'tasks',t.id)); toast('המשימה נמחקה'); if (S.editTask === t.id) resetTaskForm(); }catch(e){ fail(e); } })));
   });
@@ -186,33 +240,52 @@ function renderAdminLists(){
   if (!hist.length) H.append(h('p', { class:'sub' }, 'כאן יופיע כל מה שבוצע וכל שינוי נקודות.'));
   hist.forEach(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
     H.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : ''}${l.title}`)),
+      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : ''}${l.title}${l.minutes ? ` (${l.minutes} דק׳)` : ''}`)),
       h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p),
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
 function editTask(t){
   S.editTask = t.id; $('tfHead').textContent = 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
-  $('tf-title').value = t.title; $('tf-points').value = t.points; $('tf-assignee').value = member(t.assignee) ? t.assignee : 'all';
+  $('tf-title').value = t.title; $('tf-assignee').value = member(t.assignee) ? t.assignee : 'all';
+  setMode(isTimed(t) ? 'timed' : 'fixed');
+  $('tf-points').value = t.points ?? 10; $('tf-rate').value = t.ratePerMin ?? 1; $('tf-max').value = t.maxMinutes ?? 30; updateHint();
   $(t.type === 'once' ? 'tf-type-once' : 'tf-type-repeat').checked = true; $('tf-dayswrap').hidden = t.type === 'once';
   DAYS.forEach((_, i) => $('tf-day-'+i).checked = (t.days || []).includes(i) || t.type === 'once');
   $('tf-title').scrollIntoView({ behavior:'smooth', block:'center' }); $('tf-title').focus({ preventScroll:true });
 }
 function resetTaskForm(){
   S.editTask = null; $('tfHead').textContent = 'משימה חדשה'; $('tf-save').textContent = 'הוספת משימה'; $('tf-cancel').hidden = true;
-  $('tf-title').value = ''; $('tf-points').value = 10; $('tf-type-repeat').checked = true; $('tf-dayswrap').hidden = false;
+  $('tf-title').value = ''; $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); updateHint();
+  $('tf-type-repeat').checked = true; $('tf-dayswrap').hidden = false;
   DAYS.forEach((_, i) => $('tf-day-'+i).checked = true);
 }
+function setMode(m){ $(m === 'timed' ? 'tf-mode-timed' : 'tf-mode-fixed').checked = true; $('tf-fixed-row').hidden = m === 'timed'; $('tf-timed-row').hidden = m !== 'timed'; $('tf-timed-hint').hidden = m !== 'timed'; }
+function updateHint(){
+  const r = Math.round(Number($('tf-rate').value)) || 0, mx = Math.round(Number($('tf-max').value)) || 0;
+  const ils = shekelsFor(r * mx);
+  $('tf-timed-hint').textContent = `מקסימום למשימה: ${r * mx} נקודות` + (ils != null ? ` (${fmtILS(ils)})` : '') + `. אחרי ${mx} דקות הטיימר מפסיק לצבור.`;
+}
 async function saveTask(){
-  const title = $('tf-title').value.trim(); const points = Math.round(Number($('tf-points').value));
+  const title = $('tf-title').value.trim();
+  const timed = $('tf-mode-timed').checked;
+  const points = Math.round(Number($('tf-points').value));
+  const ratePerMin = Math.round(Number($('tf-rate').value)), maxMinutes = Math.round(Number($('tf-max').value));
   const type = $('tf-type-once').checked ? 'once' : 'repeat';
   const days = type === 'repeat' ? DAYS.map((_, i) => i).filter(i => $('tf-day-'+i).checked) : [];
   if (!title){ toast('כתבו מה צריך לעשות'); $('tf-title').focus(); return; }
-  if (!Number.isFinite(points) || points < 0 || points > 1000){ toast('נקודות: מספר בין 0 ל-1000'); return; }
+  if (!timed && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
+  if (timed && (!(ratePerMin >= 1) || ratePerMin > 100)){ toast('נקודות לדקה: מספר בין 1 ל-100'); return; }
+  if (timed && (!(maxMinutes >= 1) || maxMinutes > 240)){ toast('תקרה: בין 1 ל-240 דקות'); return; }
   if (type === 'repeat' && !days.length){ toast('בחרו לפחות יום אחד'); return; }
-  const data = { title, points, assignee: $('tf-assignee').value || 'all', type, days };
+  const data = { title, assignee: $('tf-assignee').value || 'all', type, days, timed,
+    ...(timed ? { ratePerMin, maxMinutes } : { points }) };
   const btn = $('tf-save'); btn.disabled = true;
   try{
-    if (S.editTask){ await updateDoc(doc(db,'tasks',S.editTask), data); toast('המשימה עודכנה'); }
+    if (S.editTask){
+      const old = S.tasks.find(x => x.id === S.editTask);
+      await setDoc(doc(db,'tasks',S.editTask), { ...data, createdAt: old?.createdAt || Date.now() });
+      toast('המשימה עודכנה');
+    }
     else { await addDoc(collection(db,'tasks'), { ...data, createdAt: Date.now() }); toast('המשימה נוספה'); }
     resetTaskForm();
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
@@ -247,6 +320,25 @@ async function saveBonus(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 
+async function saveMoney(){
+  const points = Math.round(Number($('mo-points').value)); const shekels = Math.round(Number($('mo-shekels').value) * 100) / 100;
+  if (!(points >= 1)){ toast('כמות נקודות: לפחות 1'); return; }
+  if (!(shekels >= 0)){ toast('שקלים: 0 או יותר'); return; }
+  const btn = $('mo-save'); btn.disabled = true;
+  try{ await setDoc(doc(db,'settings','money'), { points, shekels }); toast(shekels > 0 ? `${points} נקודות = ${fmtILS(shekels)}` : 'הסכום בשקלים הוסתר'); }
+  catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
+// Updates running clocks once a second without rebuilding the page.
+function tick(){
+  for (const tm of S.timers){
+    const el = document.querySelector(`[data-timer="${CSS.escape(tm.id)}"]`); if (!el) continue;
+    const t = S.tasks.find(x => x.id === tm.taskId); if (!t || !isTimed(t)) continue;
+    const r = timedResult(t, tm);
+    el.textContent = clock(r.ms);
+    const e = document.querySelector(`[data-earn="${CSS.escape(tm.id)}"]`); if (e) e.textContent = `+${r.points}`;
+    const c = document.querySelector(`[data-cap="${CSS.escape(tm.id)}"]`); if (c) c.textContent = r.capped ? 'הגיע לתקרה' : '';
+  }
+}
 function buildStatic(){
   const dw = $('tf-days'); DAYS.forEach((d, i) => dw.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'tf-day-'+i, value:i, checked:true }), d)));
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
@@ -255,12 +347,17 @@ function buildStatic(){
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
+  $('mo-save').addEventListener('click', saveMoney);
+  document.querySelectorAll('input[name=tf-mode]').forEach(r => r.addEventListener('change', () => setMode($('tf-mode-timed').checked ? 'timed' : 'fixed')));
+  ['tf-rate','tf-max'].forEach(id => $(id).addEventListener('input', updateHint));
+  updateHint();
 }
 
 /* ---------- boot ---------- */
 buildStatic(); render();
 let lastDay = today();
 setInterval(() => { if (today() !== lastDay){ lastDay = today(); render(); } }, 60000);
+setInterval(tick, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -290,11 +387,20 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     if (!user){ signInAnonymously(auth).catch(e => { console.error(e); status('לא הצלחנו להתחבר. בדקו שכניסה אנונימית מופעלת ב-Firebase.'); }); render(); return; }
     status('');
     const sub = (name, fn) => unsubs.push(onSnapshot(collection(db, name),
-      s => { fn(s.docs.map(x => ({ id:x.id, ...x.data() }))); render(); },
+      s => { fn(s.docs.map(x => ({ id:x.id, ...x.data({ serverTimestamps:'estimate' }) }))); render(); },
       e => { console.error(e); status(e.code === 'permission-denied' ? 'אין הרשאה לקרוא את הנתונים. בדקו את חוקי האבטחה ב-Firebase.' : 'בעיה בחיבור לנתונים.'); }));
     sub('members', a => { S.members = a.sort((x,y) => (x.order||0) - (y.order||0)); if (!S.memInit){ S.memInit = true; resetMemberForm(); } });
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; });
+    sub('timers', a => { S.timers = a; });
+    unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
+      const m = s.exists() ? s.data() : { points:100, shekels:0 };
+      S.money = { points:Number(m.points) || 100, shekels:Number(m.shekels) || 0 };
+      if (document.activeElement !== $('mo-points') && document.activeElement !== $('mo-shekels')){
+        $('mo-points').value = S.money.points; $('mo-shekels').value = S.money.shekels;
+      }
+      updateHint(); render();
+    }, e => console.error(e)));
     render();
   });
 }
