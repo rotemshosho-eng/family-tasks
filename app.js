@@ -270,7 +270,7 @@ function renderProfileSheet(){
   const st = memberStats(m.id); const own = canEditProfile(m.id);
   const ils = v => shekelsFor(v) != null ? fmtILS(shekelsFor(v)) : null;
   const tile = (label, value, sub) => h('div', { class:'stat' }, h('span', { class:'stat-v' }, value), h('span', { class:'stat-l' }, label), sub ? h('span', { class:'stat-s' }, sub) : null);
-  const body = $('profileBody'); body.replaceChildren(
+  const body = $('profileBody'); body.replaceChildren(...[
     h('div', { class:'prof-hero', style:`--m:${m.color}` },
       h('div', { class:'prof-ava' }, avatarOf(m.id)),
       h('h2', { class:'prof-name' }, m.name)),
@@ -286,7 +286,7 @@ function renderProfileSheet(){
       st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
         return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
           h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p)); }))
-      : h('p', { class:'sub' }, 'עוד לא בוצעו משימות.')));
+      : h('p', { class:'sub' }, 'עוד לא בוצעו משימות.'))].filter(Boolean));
 }
 
 /* ---------- push notifications (this device) ---------- */
