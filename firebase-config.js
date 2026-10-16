@@ -13,4 +13,4 @@ export const firebaseConfig = {
 export const vapidKey = "BEuaxtn0g49tPcFagAX1xrHUFVyNjGw10IhC7xvpWvRlLTecEEsqPJoPWmwisoVS0ncL95jO_NBrdy6QmWe46jY";
 
 // מזהה הכניסה עם גוגל (Web client ID). Firebase → Authentication → Sign-in method → Google → Web SDK configuration.
-export const googleClientId = "PASTE_HERE";
+export const googleClientId = "491523225113-depqf187s0ikftkjtvk0l8obgkknmct4.apps.googleusercontent.com";
