@@ -169,8 +169,21 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 .msg-text{overflow-wrap:anywhere;white-space:pre-wrap}
 .msg-del{border:0;background:none;color:inherit;opacity:.7;font:500 .75rem var(--body);cursor:pointer;padding:0;text-decoration:underline}
 .chat-send{display:flex;gap:8px}
-.family-chat .chat{border-top:0;padding-top:0}
-.family-chat .chat-list{max-height:min(62vh,560px);min-height:200px}
+/* full-screen task chat */
+body.locked{overflow:hidden}
+.sheet{position:fixed;inset:0;z-index:15;background:var(--bg);display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:sheetIn .18s ease-out}
+@keyframes sheetIn{from{transform:translateY(12px);opacity:0}}
+.sheet-head{display:flex;align-items:center;gap:12px;background:var(--surface);box-shadow:0 3px 0 var(--line);
+  padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.sheet-titles{display:flex;flex-direction:column;min-width:0}
+.sheet-titles strong{font:600 1.15rem var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-body{flex:1;min-height:0;display:flex;flex-direction:column;width:100%;max-width:640px;margin:0 auto;
+  padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.sheet-body .chat{flex:1;min-height:0;border-top:0;padding-top:0}
+.sheet-body .chat-list{flex:1;max-height:none;min-height:0}
+.sheet-body .chat-send{padding-top:8px}
+.btn.unread{background:var(--coin);color:var(--coin-ink);box-shadow:0 3px 0 var(--coin-deep)}
 .chat-send input{flex:1;min-width:0}
 
 /* login + current user bar */

@@ -7,7 +7,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { chatSeen:0, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [];
 
@@ -28,7 +28,7 @@ const dow = () => new Date().getDay();
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return dstr(d); };
 const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 S.me = store.get('ft-me') || 'all';
-S.chatSeen = Number(store.get('ft-chat-seen')) || 0;
+S.seen = (() => { try{ return JSON.parse(store.get('ft-seen') || '{}') || {}; }catch(e){ return {}; } })();
 
 let toastT;
 function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
@@ -109,10 +109,11 @@ function render(){
   const d = new Date();
   $('dateline').textContent = `יום ${DAYS[d.getDay()]}׳, ${d.getDate()}.${d.getMonth()+1}`;
   if (!S.isAdmin && S.tab === 'admin') S.tab = 'today';
-  $('tabs').hidden = !S.user;
+  $('tabs').hidden = !S.user || !S.isAdmin;
   $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin;
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
-  $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin'; $('view-chat').hidden = S.tab !== 'chat';
+  if (S.tab === 'chat') S.tab = 'today';
+  $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
   // A family member's device is locked to whoever signed in with their code. Only the admin can view as anyone.
   const bound = !S.isAdmin && S.binding && member(S.binding.memberId) ? S.binding.memberId : null;
   const needLogin = !!S.user && !S.isAdmin && S.bindLoaded && !bound;
@@ -120,17 +121,14 @@ function render(){
   else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
   $('login').hidden = !needLogin;
-  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('view-chat').hidden = true; $('tabs').hidden = true; renderLogin(); }
-  if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; $('view-chat').hidden = true; return; }
+  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('tabs').hidden = true; S.chatOpen = null; renderChatSheet(); renderLogin(); }
+  if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
   $('who').hidden = !S.isAdmin;
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = m.name.charAt(0); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  if (S.tab === 'chat'){ const last = S.messages.filter(m => m.taskId === GENERAL).reduce((x, m) => Math.max(x, msgMs(m)), 0); if (last > S.chatSeen){ S.chatSeen = last; store.set('ft-chat-seen', String(last)); } }
-  const unread = S.messages.filter(m => m.taskId === GENERAL && msgMs(m) > S.chatSeen && m.memberId !== S.me).length;
-  $('tabs').querySelector('[data-tab="chat"]').textContent = unread ? `צ'אט (${unread})` : "צ'אט";
-  const gc = $('generalChat'); gc.replaceChildren(); if (S.tab === 'chat') gc.append(chatPanel({ id: GENERAL }));
+  renderChatSheet();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
@@ -243,13 +241,30 @@ async function deleteTask(t, withPoints){
 }
 
 /* ---------- chat ---------- */
-const GENERAL = 'general';
 const chatCount = t => S.messages.filter(m => m.taskId === t.id).length;
+// Unread = messages from others after the last time this device opened that task's chat.
+const unreadFor = t => S.messages.filter(m => m.taskId === t.id && m.memberId !== S.me && msgMs(m) > (S.seen[t.id] || 0)).length;
+function markSeen_chat(taskId){
+  const last = S.messages.filter(m => m.taskId === taskId).reduce((x, m) => Math.max(x, msgMs(m)), 0);
+  if (last > (S.seen[taskId] || 0)){ S.seen[taskId] = last; store.set('ft-seen', JSON.stringify(S.seen)); }
+}
 function chatButton(t){
-  const n = chatCount(t); const open = S.chatOpen === t.id;
-  return h('button', { type:'button', class:'btn ghost small', 'aria-expanded':String(open),
-    onclick:() => { S.chatOpen = open ? null : t.id; S.chatDraft = ''; render(); if (!open) setTimeout(() => $('chat-input')?.focus(), 0); } },
-    n ? `צ'אט (${n})` : "צ'אט");
+  const n = chatCount(t), u = unreadFor(t);
+  return h('button', { type:'button', class:'btn small ' + (u ? 'unread' : 'ghost'), onclick:() => openChat(t.id) },
+    u ? `צ'אט · ${u} חדשות` : (n ? `צ'אט (${n})` : "צ'אט"));
+}
+function openChat(id){ S.chatOpen = id; S.chatDraft = ''; render(); setTimeout(() => $('chat-input')?.focus(), 30); }
+function closeChat(){ if (S.chatOpen) markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; render(); }
+// The open task's chat fills the screen, like a messaging app.
+function renderChatSheet(){
+  const t = S.chatOpen ? S.tasks.find(x => x.id === S.chatOpen) : null;
+  const sheet = $('chatSheet');
+  if (!t){ if (S.chatOpen) S.chatOpen = null; sheet.hidden = true; document.body.classList.remove('locked'); return; }
+  markSeen_chat(t.id);
+  sheet.hidden = false; document.body.classList.add('locked');
+  $('chatTitle').textContent = t.title;
+  $('chatSub').textContent = `${t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee)} · ${recLabel(t)}`;
+  const body = $('chatBody'); body.replaceChildren(chatPanel(t));
 }
 const msgMs = m => m.at && typeof m.at.toMillis === 'function' ? m.at.toMillis() : Date.now();
 function msgTime(m){ const d = new Date(msgMs(m)); const t = `${pad(d.getHours())}:${pad(d.getMinutes())}`; return dstr(d) === today() ? t : `${d.getDate()}.${d.getMonth()+1} ${t}`; }
@@ -353,7 +368,6 @@ function renderToday(){
     if (S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
       S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
         h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
-    if (S.chatOpen === t.id && S.tab === 'today') card.append(chatPanel(t));
     L.append(card);
   });
   const td = today();
@@ -402,7 +416,6 @@ function renderAdminLists(){
         h('button', { type:'button', class:'btn danger small', onclick:() => deleteTask(t, false) }, earned ? 'למחוק רק את המשימה' : 'למחוק'),
         h('button', { type:'button', class:'btn ghost small', onclick:() => { S.delAsk = null; render(); } }, 'ביטול')));
     }
-    if (S.chatOpen === t.id && S.tab === 'admin') row.append(chatPanel(t));
     A.append(row);
   });
 
@@ -537,6 +550,8 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  $('chatBack').addEventListener('click', closeChat);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.chatOpen) closeChat(); });
   const sd = $('sg-days'); DAYS.forEach((d, i) => sd.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'sg-day-'+i, value:i, checked:true }), d)));
   document.querySelectorAll('input[name=sg-type]').forEach(r => r.addEventListener('change', () => { $('sg-dayswrap').hidden = !$('sg-type-repeat').checked; }));
   $('sg-toggle').addEventListener('click', () => toggleSuggest(true));

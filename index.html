@@ -25,7 +25,6 @@
     </div>
     <nav class="tabs" id="tabs" hidden>
       <button type="button" data-tab="today" aria-pressed="true">היום</button>
-      <button type="button" data-tab="chat" aria-pressed="false">צ'אט</button>
       <button type="button" data-tab="admin" aria-pressed="false" hidden>ניהול</button>
     </nav>
   </header>
@@ -109,12 +108,6 @@
   </main>
 
   <!-- ADMIN -->
-  <!-- FAMILY CHAT -->
-  <main id="view-chat" class="section" hidden>
-    <div class="section-head"><h2>הצ'אט של המשפחה</h2></div>
-    <div class="panel family-chat" id="generalChat"></div>
-  </main>
-
   <main id="view-admin" class="section stack" hidden>
     <section class="panel">
       <h2 id="tfHead">משימה חדשה</h2>
@@ -199,6 +192,14 @@
     </section>
   </main>
 
+</div>
+<!-- full-screen chat for one task -->
+<div class="sheet" id="chatSheet" hidden role="dialog" aria-modal="true" aria-labelledby="chatTitle">
+  <div class="sheet-head">
+    <button type="button" class="btn ghost small" id="chatBack">חזרה</button>
+    <div class="sheet-titles"><strong id="chatTitle"></strong><span class="sub" id="chatSub"></span></div>
+  </div>
+  <div class="sheet-body" id="chatBody"></div>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script type="module" src="app.js"></script>
