@@ -281,7 +281,7 @@ function renderProfileSheet(){
       tile('ימים ברצף', st.streak)),
     own ? h('section', { class:'panel' }, h('h2', null, 'בחירת תמונה'),
       h('div', { class:'ava-grid' }, AVATARS.map(a => h('button', { type:'button', class:'ava-pick', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)))) : null,
-    own && (!S.isAdmin || (S.binding && S.binding.memberId === m.id)) ? notifPanel(m.id) : null,
+    own ? notifPanel(m.id) : null,
     h('section', { class:'panel' }, h('h2', null, 'מה נעשה לאחרונה'),
       st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
         return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
