@@ -69,7 +69,22 @@ service cloud.firestore {
     match /tasks/{id} {
       allow read: if signedIn();
       allow create: if isAdmin() || (signedIn() && validNewTask(request.resource.data));
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin();
+      // משימה נעוצה: אף אחד, גם לא המנהל, לא יכול למחוק אותה עד שמבטלים נעיצה.
+      allow delete: if isAdmin() && resource.data.get('pinned', false) == false;
+    }
+
+    // צ'אט של כל משימה: כולם קוראים וכותבים בשם בן משפחה, רק המנהל מוחק.
+    match /messages/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['taskId','memberId','text','at'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300
+        && request.resource.data.at == request.time
+        && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
+        && memberExists(request.resource.data.memberId);
+      allow delete: if isAdmin();
     }
     match /settings/{id} {
       allow read: if signedIn();

@@ -7,7 +7,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { members:[], tasks:[], logs:[], timers:[], money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [];
 
@@ -114,8 +114,11 @@ function render(){
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   $('sgSec').hidden = !S.user || S.isAdmin || !S.members.length;
+  const typing = document.activeElement && document.activeElement.id === 'chat-input';
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); }
+  const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
+  if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
 }
 // Nothing on screen says who manages the board: the admin entry is a hidden gesture (5 quick taps on the title).
 function renderAuth(){}
@@ -163,6 +166,61 @@ async function saveSuggestion(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function markSeen(t){ try{ await updateDoc(doc(db,'tasks',t.id), { reviewed:true }); }catch(e){ fail(e); } }
+
+/* ---------- pin & delete (admin) ---------- */
+async function togglePin(t){
+  try{ await updateDoc(doc(db,'tasks',t.id), { pinned: !t.pinned }); toast(t.pinned ? 'הנעיצה בוטלה' : 'המשימה ננעצה. אי אפשר למחוק אותה עד שמבטלים נעיצה.'); }
+  catch(e){ fail(e); }
+}
+const taskLogs = t => S.logs.filter(l => l.taskId === t.id);
+// Deletes the task with its chat and running timers; withPoints also removes every point it ever gave.
+async function deleteTask(t, withPoints){
+  if (t.pinned){ toast('המשימה נעוצה. קודם מבטלים נעיצה.'); return; }
+  const refs = [doc(db,'tasks',t.id),
+    ...S.messages.filter(m => m.taskId === t.id).map(m => doc(db,'messages',m.id)),
+    ...S.timers.filter(tm => tm.taskId === t.id).map(tm => doc(db,'timers',tm.id)),
+    ...(withPoints ? taskLogs(t).map(l => doc(db,'logs',l.id)) : [])];
+  try{
+    for (let i = 0; i < refs.length; i += 450){ const b = writeBatch(db); refs.slice(i, i + 450).forEach(r => b.delete(r)); await b.commit(); }
+    S.delAsk = null; if (S.editTask === t.id) resetTaskForm();
+    toast(withPoints ? 'המשימה והנקודות שלה נמחקו' : 'המשימה נמחקה, הנקודות נשארו');
+  }catch(e){ fail(e); }
+}
+
+/* ---------- chat ---------- */
+const chatCount = t => S.messages.filter(m => m.taskId === t.id).length;
+function chatButton(t){
+  const n = chatCount(t); const open = S.chatOpen === t.id;
+  return h('button', { type:'button', class:'btn ghost small', 'aria-expanded':String(open),
+    onclick:() => { S.chatOpen = open ? null : t.id; S.chatDraft = ''; render(); if (!open) setTimeout(() => $('chat-input')?.focus(), 0); } },
+    n ? `צ'אט (${n})` : "צ'אט");
+}
+const msgMs = m => m.at && typeof m.at.toMillis === 'function' ? m.at.toMillis() : Date.now();
+function msgTime(m){ const d = new Date(msgMs(m)); const t = `${pad(d.getHours())}:${pad(d.getMinutes())}`; return dstr(d) === today() ? t : `${d.getDate()}.${d.getMonth()+1} ${t}`; }
+function chatPanel(t){
+  const msgs = S.messages.filter(m => m.taskId === t.id).sort((a,b) => msgMs(a) - msgMs(b));
+  const canWrite = S.me !== 'all' && member(S.me);
+  const list = h('div', { class:'chat-list', id:'chat-list' },
+    msgs.length ? msgs.map(m => h('div', { class:'msg' + (m.memberId === S.me ? ' mine' : '') },
+      h('div', { class:'msg-head' }, h('span', { class:'dot', style:`background:${mColor(m.memberId)}` }), h('strong', null, mName(m.memberId)), h('span', { class:'msg-time' }, msgTime(m))),
+      h('div', { class:'msg-text' }, m.text),
+      S.isAdmin ? h('button', { type:'button', class:'msg-del', 'aria-label':'מחיקת הודעה', onclick:() => deleteDoc(doc(db,'messages',m.id)).catch(fail) }, 'מחיקה') : null))
+    : h('p', { class:'sub' }, 'עוד אין הודעות. אפשר לסכם כאן מי עושה מה.'));
+  const input = h('input', { type:'text', id:'chat-input', maxlength:'300', placeholder: canWrite ? `כתיבה בתור ${mName(S.me)}` : 'בחרו למעלה מי משתמש עכשיו', disabled: !canWrite });
+  input.value = S.chatDraft;
+  input.addEventListener('input', () => { S.chatDraft = input.value; });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing){ e.preventDefault(); sendMessage(t); } });
+  return h('div', { class:'chat' }, list,
+    h('div', { class:'chat-send' }, input, h('button', { type:'button', class:'btn small', disabled: !canWrite, onclick:() => sendMessage(t) }, 'שליחה')));
+}
+async function sendMessage(t){
+  const text = S.chatDraft.trim();
+  if (!(S.me !== 'all' && member(S.me))){ toast('בחרו למעלה מי משתמש עכשיו'); return; }
+  if (!text) return;
+  S.chatDraft = ''; const inp = $('chat-input'); if (inp) inp.value = '';
+  try{ await addDoc(collection(db,'messages'), { taskId:t.id, memberId:S.me, text:text.slice(0,300), at: serverTimestamp() }); }
+  catch(e){ S.chatDraft = text; fail(e); render(); }
+}
 function renderWho(){
   const w = $('who'); w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
   const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === id),
@@ -196,7 +254,7 @@ function renderBoard(){
 }
 function renderToday(){
   const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all';
-  const due = S.tasks.filter(t => isDue(t) && mine(t)).sort((a,b) => (a.type === 'once') - (b.type === 'once') || (b.points - a.points));
+  const due = S.tasks.filter(t => isDue(t) && mine(t)).sort((a,b) => (!!b.pinned - !!a.pinned) || (a.type === 'once') - (b.type === 'once') || ((b.points||0) - (a.points||0)));
   $('todoTitle').textContent = S.me === 'all' ? 'מה נשאר להיום' : `מה נשאר ל${mName(S.me)} היום`;
   $('todoCount').textContent = due.length ? `${due.length} משימות` : '';
   const L = $('todo'); L.replaceChildren();
@@ -215,9 +273,11 @@ function renderToday(){
         t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee)),
       h('span', null, '·'), h('span', null, recLabel(t))];
     if (timed) meta.push(h('span', null, '·'), h('span', null, `עד ${t.maxMinutes} דק׳`));
-    const card = h('div', { class:'task' },
+    if (t.pinned) meta.unshift(h('span', { class:'pin-tag' }, 'נעוצה'), h('span', null, '·'));
+    const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
       h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta)),
       h('span', { class:'pts-pill' }, pill(t)),
+      chatButton(t),
       whoRunning ? null : h('button', { type:'button', class:'btn', disabled: busy || !S.members.length, onclick:() => {
         if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } } },
         busy ? 'שומר…' : (timed ? 'התחלתי' : 'סיימתי')));
@@ -236,6 +296,7 @@ function renderToday(){
     if (S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
       S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
         h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
+    if (S.chatOpen === t.id && S.tab === 'today') card.append(chatPanel(t));
     L.append(card);
   });
   const td = today();
@@ -264,16 +325,28 @@ function renderAdminLists(){
   const A = $('atList'); A.replaceChildren(); $('atCount').textContent = S.tasks.length ? String(S.tasks.length) : '';
   if (!S.tasks.length) A.append(h('p', { class:'sub' }, 'אין משימות עדיין. הוסיפו את הראשונה למעלה.'));
   const isNew = t => t.pending || t.reviewed === false;
-  S.tasks.slice().sort((a,b) => (isNew(b) - isNew(a)) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
+  S.tasks.slice().sort((a,b) => (!!b.pinned - !!a.pinned) || (isNew(b) - isNew(a)) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
     const doneOnce = t.type === 'once' && S.logs.some(l => l.taskId === t.id);
     const by = t.suggestedBy && member(t.suggestedBy) ? ` · נוספה ע״י ${mName(t.suggestedBy)}` : '';
-    A.append(h('div', { class:'arow' },
+    const row = h('div', { class:'arow wrap' },
       h('div', { class:'t' }, h('strong', null, t.title),
-        h('small', null, `${t.pending ? 'מחכה לניקוד · ' : (t.reviewed === false ? 'חדשה · ' : '')}${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${by}${doneOnce ? ' · בוצעה' : ''}`)),
+        h('small', null, `${t.pinned ? 'נעוצה · ' : ''}${t.pending ? 'מחכה לניקוד · ' : (t.reviewed === false ? 'חדשה · ' : '')}${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${by}${doneOnce ? ' · בוצעה' : ''}`)),
       t.pending ? null : h('span', { class:'pts-pill' }, pill(t)),
       t.reviewed === false && !t.pending ? h('button', { type:'button', class:'btn small', onclick:() => markSeen(t) }, 'ראיתי') : null,
       h('button', { type:'button', class:'btn ' + (t.pending ? '' : 'ghost ') + 'small', onclick:() => editTask(t) }, t.pending ? 'קביעת ניקוד' : 'עריכה'),
-      armedBtn('t'+t.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'tasks',t.id)); toast('המשימה נמחקה'); if (S.editTask === t.id) resetTaskForm(); }catch(e){ fail(e); } })));
+      h('button', { type:'button', class:'btn ghost small', 'aria-pressed':String(!!t.pinned), onclick:() => togglePin(t) }, t.pinned ? 'ביטול נעיצה' : 'נעיצה'),
+      chatButton(t),
+      t.pinned ? null : h('button', { type:'button', class:'btn danger small', onclick:() => { S.delAsk = S.delAsk === t.id ? null : t.id; render(); } }, 'מחיקה'));
+    if (S.delAsk === t.id && !t.pinned){
+      const earned = taskLogs(t).reduce((s, l) => s + (Number(l.points) || 0), 0);
+      row.append(h('div', { class:'delask' },
+        h('span', null, earned ? `המשימה הזו נתנה עד עכשיו ${earned} נקודות${shekelsFor(earned) != null ? ` (${fmtILS(shekelsFor(earned))})` : ''}.` : 'המשימה עוד לא נתנה נקודות.'),
+        earned ? h('button', { type:'button', class:'btn danger armed small', onclick:() => deleteTask(t, true) }, `למחוק גם את ${earned} הנקודות`) : null,
+        h('button', { type:'button', class:'btn danger small', onclick:() => deleteTask(t, false) }, earned ? 'למחוק רק את המשימה' : 'למחוק'),
+        h('button', { type:'button', class:'btn ghost small', onclick:() => { S.delAsk = null; render(); } }, 'ביטול')));
+    }
+    if (S.chatOpen === t.id && S.tab === 'admin') row.append(chatPanel(t));
+    A.append(row);
   });
 
   const M = $('amList'); M.replaceChildren();
@@ -332,7 +405,7 @@ async function saveTask(){
   try{
     if (S.editTask){
       const old = S.tasks.find(x => x.id === S.editTask);
-      await setDoc(doc(db,'tasks',S.editTask), { ...data, reviewed:true, suggestedBy: old?.suggestedBy ?? null, createdAt: old?.createdAt || Date.now() });
+      await setDoc(doc(db,'tasks',S.editTask), { ...data, reviewed:true, pinned: !!old?.pinned, suggestedBy: old?.suggestedBy ?? null, createdAt: old?.createdAt || Date.now() });
       toast('המשימה עודכנה');
     }
     else { await addDoc(collection(db,'tasks'), { ...data, createdAt: Date.now() }); toast('המשימה נוספה'); }
@@ -452,6 +525,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; });
     sub('timers', a => { S.timers = a; });
+    sub('messages', a => { S.messages = a; });
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
       const m = s.exists() ? s.data() : { points:100, shekels:0 };
       S.money = { points:Number(m.points) || 100, shekels:Number(m.shekels) || 0 };
