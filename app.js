@@ -243,7 +243,7 @@ function renderBoard(){
   const top = rows[0].wk;
   rows.forEach(r => { const lead = top > 0 && r.wk === top;
     const wkILS = shekelsFor(r.wk), totILS = shekelsFor(r.tot);
-    b.append(h('div', { class:'score' + (lead ? ' lead' : '') },
+    b.append(h('div', { class:'score' + (lead ? ' lead' : ''), style:`--m:${r.m.color}` },
       h('div', { class:'ava', style:`background:${r.m.color}` }, (r.m.name || '?').trim().charAt(0)),
       h('div', { class:'info' },
         lead ? h('span', { class:'crown' }, 'מוביל/ה השבוע') : null,
@@ -275,8 +275,9 @@ function renderToday(){
     if (timed) meta.push(h('span', null, '·'), h('span', null, `עד ${t.maxMinutes} דק׳`));
     if (t.pinned) meta.unshift(h('span', { class:'pin-tag' }, 'נעוצה'), h('span', null, '·'));
     const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
+      h('div', { class:'ava sm', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}`, 'aria-hidden':'true' }, t.assignee === 'all' ? '★' : (mName(t.assignee) || '?').charAt(0)),
       h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta)),
-      h('span', { class:'pts-pill' }, pill(t)),
+      h('span', { class:'pts-pill' + (isTimed(t) ? '' : ' ltr') }, pill(t)),
       chatButton(t),
       whoRunning ? null : h('button', { type:'button', class:'btn', disabled: busy || !S.members.length, onclick:() => {
         if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } } },
@@ -331,7 +332,7 @@ function renderAdminLists(){
     const row = h('div', { class:'arow wrap' },
       h('div', { class:'t' }, h('strong', null, t.title),
         h('small', null, `${t.pinned ? 'נעוצה · ' : ''}${t.pending ? 'מחכה לניקוד · ' : (t.reviewed === false ? 'חדשה · ' : '')}${mName(t.assignee)} · ${recLabel(t)}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${by}${doneOnce ? ' · בוצעה' : ''}`)),
-      t.pending ? null : h('span', { class:'pts-pill' }, pill(t)),
+      t.pending ? null : h('span', { class:'pts-pill' + (isTimed(t) ? '' : ' ltr') }, pill(t)),
       t.reviewed === false && !t.pending ? h('button', { type:'button', class:'btn small', onclick:() => markSeen(t) }, 'ראיתי') : null,
       h('button', { type:'button', class:'btn ' + (t.pending ? '' : 'ghost ') + 'small', onclick:() => editTask(t) }, t.pending ? 'קביעת ניקוד' : 'עריכה'),
       h('button', { type:'button', class:'btn ghost small', 'aria-pressed':String(!!t.pinned), onclick:() => togglePin(t) }, t.pinned ? 'ביטול נעיצה' : 'נעיצה'),
