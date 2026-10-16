@@ -198,6 +198,7 @@ body.locked{overflow:hidden}
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .gate{width:min(380px,100%);gap:14px}
 .gate .code-input{max-width:none}
+.gbtn{display:flex;justify-content:center;min-height:44px}
 .linkbtn{border:0;background:none;color:var(--accent);font:500 .92rem var(--body);cursor:pointer;padding:4px 0;text-decoration:underline;align-self:flex-start}
 .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);
   padding:11px 20px;border-radius:999px;font:600 .95rem var(--display);max-width:calc(100% - 32px);z-index:20;box-shadow:0 4px 0 rgb(0 0 0 / .2);

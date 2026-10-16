@@ -11,3 +11,6 @@ export const firebaseConfig = {
 
 // מפתח להתראות (Web Push). Firebase → Project settings → Cloud Messaging → Web Push certificates → Key pair.
 export const vapidKey = "BEuaxtn0g49tPcFagAX1xrHUFVyNjGw10IhC7xvpWvRlLTecEEsqPJoPWmwisoVS0ncL95jO_NBrdy6QmWe46jY";
+
+// מזהה הכניסה עם גוגל (Web client ID). Firebase → Authentication → Sign-in method → Google → Web SDK configuration.
+export const googleClientId = "PASTE_HERE";

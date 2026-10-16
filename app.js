@@ -4,7 +4,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
-  signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
@@ -175,7 +175,8 @@ async function loginGo(){
 }
 /* ---------- admin mode by code ---------- */
 let agFails = 0, agLockUntil = 0;
-function openAdminGate(){ $('adminGate').hidden = false; $('ag-err').hidden = true; $('ag-code').value = ''; setTimeout(() => $('ag-code').focus(), 30); }
+let openAdminGateHook = null;
+function openAdminGate(){ if (openAdminGateHook) openAdminGateHook(); $('adminGate').hidden = false; $('ag-err').hidden = true; $('ag-code').value = ''; setTimeout(() => $('ag-code').focus(), 30); }
 function closeAdminGate(){ $('adminGate').hidden = true; $('ag-code').value = ''; }
 async function adminCodeGo(){
   const code = $('ag-code').value.trim(); const err = $('ag-err');
@@ -711,7 +712,32 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   const auth = getAuth(app);
   getRedirectResult(auth).catch(e => console.error(e));
 
+  // Google sign-in through Google's own button / account chooser (works inside the installed phone app,
+  // where Firebase's popup and redirect flows break). Falls back to the popup when no client ID is set.
+  const hasGIS = () => cfg.googleClientId && !String(cfg.googleClientId).startsWith('PASTE');
+  let gisLoad = null, gisInit = false;
+  const loadGIS = () => gisLoad || (gisLoad = new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => res(); s.onerror = () => { gisLoad = null; rej(new Error('gsi load failed')); }; document.head.appendChild(s); }));
+  async function showGoogleButton(){
+    const box = $('ag-gbtn'); if (!hasGIS()){ box.hidden = true; return; }
+    try{
+      await loadGIS();
+      if (!gisInit){
+        google.accounts.id.initialize({ client_id: cfg.googleClientId, use_fedcm_for_prompt: true, auto_select: false, cancel_on_tap_outside: true,
+          callback: async r => {
+            try{ await signInWithCredential(auth, GoogleAuthProvider.credential(r.credential)); closeAdminGate(); toast('נכנסת עם גוגל'); }
+            catch(e){ console.error(e); toast('הכניסה עם גוגל לא הצליחה'); }
+          } });
+        gisInit = true;
+      }
+      box.hidden = false; box.replaceChildren();
+      google.accounts.id.renderButton(box, { theme:'outline', size:'large', shape:'pill', text:'signin_with', locale:'he', width: 260 });
+    }catch(e){ console.error(e); box.hidden = true; }
+  }
+  openAdminGateHook = showGoogleButton;
   async function adminSignIn(){
+    if (hasGIS()){ try{ await loadGIS(); showGoogleButton(); google.accounts.id.prompt(); }catch(e){ console.error(e); } return; }
     const provider = new GoogleAuthProvider();
     try{ await signInWithPopup(auth, provider); }
     catch(e){
@@ -724,7 +750,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     const now = Date.now(); taps = taps.filter(t => now - t < 4000); taps.push(now);
     if (taps.length >= 5){ taps = []; if (!S.isAdmin) openAdminGate(); }
   });
-  $('ag-google').addEventListener('click', () => { closeAdminGate(); adminSignIn(); });
+  $('ag-google').addEventListener('click', () => { if (!hasGIS()) closeAdminGate(); adminSignIn(); });
   $('login-go').addEventListener('click', loginGo);
   $('login-code').addEventListener('keydown', e => { if (e.key === 'Enter') loginGo(); });
   $('login-back').addEventListener('click', () => { S.loginPick = null; S.loginErr = ''; render(); });
