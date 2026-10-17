@@ -399,3 +399,4 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .chip.preset.added{opacity:.45;text-decoration:line-through}
 .reward-admin{display:flex;gap:12px;align-self:stretch;justify-content:flex-end}
 .linkbtn.danger{color:var(--danger)}
+.editbtn{min-width:36px;padding:0 8px;font-size:.95rem}

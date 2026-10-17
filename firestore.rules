@@ -104,6 +104,20 @@ service cloud.firestore {
 
     // קודי כניסה: רק המנהל רואה ומשנה.
     // קוד המנהל עצמו: רק מנהל רואה ומשנה. ההגדרה הראשונה נעשית כשנכנסים עם גוגל.
+    function validTaskShape(d) {
+      return (!('check' in d) || d.check is bool)
+        && (d.assignee != 'rotate' || (d.rotation is list && d.rotation.size() >= 2 && d.rotation.size() <= 20))
+        && (!('rotation' in d) || d.assignee == 'rotate')
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 80
+        && d.assignee is string
+        && d.type in ['once', 'repeat']
+        && d.days is list && d.days.size() <= 7
+        && ((d.timed == true && d.ratePerMin is int && d.ratePerMin >= 1 && d.ratePerMin <= 100
+              && d.maxMinutes is int && d.maxMinutes >= 1 && d.maxMinutes <= 240 && !('points' in d))
+         || (d.timed == false && d.points is int && d.points >= 0 && d.points <= 1000
+              && !('ratePerMin' in d) && !('maxMinutes' in d)));
+    }
+
     match /private/{docId} {
       allow read, write: if isAdmin();
     }
@@ -176,7 +190,16 @@ service cloud.firestore {
     match /tasks/{id} {
       allow read: if signedIn();
       allow create: if isAdmin() || (signedIn() && validNewTask(request.resource.data));
-      allow update: if isAdmin();
+      // עריכה: המנהל תמיד. הורה כל משימה לא נעוצה. כל אחד את המשימה שהוא הוסיף.
+      allow update: if isAdmin() || (
+        resource.data.get('pinned', false) == false
+        && resource.data.get('pending', false) == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','check','rotation','reviewed','editedBy'])
+        && request.resource.data.reviewed == false
+        && validTaskShape(request.resource.data)
+        && request.resource.data.editedBy is string && boundTo(request.resource.data.editedBy)
+        && (get(/databases/$(database)/documents/members/$(request.resource.data.editedBy)).data.get('role', '') == 'parent'
+            || resource.data.get('suggestedBy', '') == request.resource.data.editedBy));
       // משימה נעוצה: אף אחד, גם לא המנהל, לא יכול למחוק אותה עד שמבטלים נעיצה.
       allow delete: if isAdmin() && resource.data.get('pinned', false) == false;
     }

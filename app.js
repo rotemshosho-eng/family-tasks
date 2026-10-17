@@ -1,7 +1,7 @@
 import * as cfg from './firebase-config.js';
 const firebaseConfig = cfg.firebaseConfig;
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+import { deleteField, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
@@ -9,7 +9,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
 const S = { rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
-  editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
+  editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
 /* ---------- helpers ---------- */
@@ -312,8 +312,34 @@ function renderPending(){
       : h('span', { class:'pts-pill' }, 'בקרוב'))));
 }
 function toggleSuggest(open){
+  if (!open && S.editSg) resetSgEdit();
   $('sg-panel').hidden = !open; $('sg-toggle').hidden = open; $('sg-toggle').setAttribute('aria-expanded', String(open));
-  if (open){ if (S.me !== 'all' && member(S.me)) $('sg-assignee').value = S.me; $('sg-title').focus(); }
+  if (open && !S.editSg){ if (S.me !== 'all' && member(S.me)) $('sg-assignee').value = S.me; $('sg-title').focus(); }
+}
+// Who may edit a task: the admin always; a parent any task that isn't pinned; anyone the task they added themselves.
+function canEditTask(t){
+  if (S.isAdmin) return true;
+  if (t.pinned || t.pending || !S.boundId) return false;
+  return isParentMember(S.boundId) || t.suggestedBy === S.boundId;
+}
+function openTaskEdit(t){
+  if (S.isAdmin){ S.tab = 'admin'; render(); editTask(t); return; }
+  S.editSg = t.id; S.tab = 'tasks'; render();
+  $('sgHead').textContent = 'עריכת משימה'; $('sg-save').textContent = 'שמירת שינויים';
+  $('sg-title').value = t.title;
+  const sel = $('sg-assignee'); sel.value = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
+  $('sg-rot').querySelectorAll('input').forEach(i => i.checked = (t.rotation || []).includes(i.value)); $('sg-rotwrap').hidden = sel.value !== 'rotate';
+  $('sg-check').checked = !!t.check;
+  setSgMode(isTimed(t) ? 'timed' : 'fixed');
+  $('sg-points').value = t.points ?? 10; $('sg-rate').value = t.ratePerMin ?? 1; $('sg-max').value = t.maxMinutes ?? 30;
+  $(t.type === 'once' ? 'sg-type-once' : 'sg-type-repeat').checked = true; $('sg-dayswrap').hidden = t.type === 'once';
+  DAYS.forEach((_, i) => $('sg-day-'+i).checked = (t.days || []).includes(i) || t.type === 'once');
+  toggleSuggest(true);
+  $('sg-panel').scrollIntoView({ behavior:'smooth', block:'start' }); $('sg-title').focus({ preventScroll:true });
+}
+function resetSgEdit(){
+  S.editSg = null; $('sgHead').textContent = 'משימה חדשה'; $('sg-save').textContent = 'הוספה';
+  $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed');
 }
 function setSgMode(m){ $(m === 'timed' ? 'sg-mode-timed' : 'sg-mode-fixed').checked = true; $('sg-fixed-row').hidden = m === 'timed'; $('sg-timed-row').hidden = m !== 'timed'; }
 // Anyone can add a task with its own points or time. It is live at once; the admin sees it marked "new" and can edit or delete it.
@@ -333,6 +359,18 @@ async function saveSuggestion(){
   const rotation = assignee === 'rotate' ? [...$('sg-rot').querySelectorAll('input:checked')].map(i => i.value) : [];
   if (assignee === 'rotate' && rotation.length < 2){ toast('בתורנות צריך לפחות שני בני משפחה'); return; }
   const btn = $('sg-save'); btn.disabled = true;
+  if (S.editSg){
+    const old = S.tasks.find(x => x.id === S.editSg);
+    if (!old){ toast('המשימה כבר לא קיימת'); resetSgEdit(); toggleSuggest(false); btn.disabled = false; return; }
+    try{
+      await updateDoc(doc(db,'tasks',old.id), { title, assignee, type, days, timed, check: $('sg-check').checked,
+        rotation: assignee === 'rotate' ? rotation : deleteField(),
+        points: timed ? deleteField() : points, ratePerMin: timed ? ratePerMin : deleteField(), maxMinutes: timed ? maxMinutes : deleteField(),
+        reviewed:false, editedBy: S.boundId });
+      toast('המשימה עודכנה'); toggleSuggest(false);
+    }catch(e){ fail(e); } finally{ btn.disabled = false; }
+    return;
+  }
   try{
     await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked,
       ...(assignee === 'rotate' ? { rotation } : {}),
@@ -648,6 +686,7 @@ function taskCard(t, canAct){
     h('div', { class:'ticon', 'aria-hidden':'true' }, taskIcon(t)),
     h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta),
       h('span', { class:'task-sub' }, sub.join(' · '))),
+    canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
     chatButton(t),
     control);
   running.forEach(tm => {
