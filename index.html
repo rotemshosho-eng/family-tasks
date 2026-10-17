@@ -35,9 +35,29 @@
   </div>
   <div id="status" class="notice" hidden></div>
 
-  <!-- LOGIN: each device signs in as one family member with that member's code -->
+  <!-- LOGIN: sign in with Google (and join), or as a family member with that member's code -->
   <section id="login" class="panel login" hidden>
     <h2 id="login-title">מי אתה?</h2>
+
+    <div id="login-google" class="stack-sm">
+      <p class="sub">נכנסים עם חשבון הגוגל. בפעם הראשונה בוחרים שם, ואחרי אישור אפשר להתחיל.</p>
+      <div class="gbtn" id="login-gbtn"></div>
+      <button type="button" class="btn ghost" id="login-gfallback" hidden>כניסה עם Google</button>
+      <div class="or"><span>או עם קוד</span></div>
+    </div>
+
+    <div id="login-join" class="stack-sm" hidden>
+      <p class="sub" id="join-email"></p>
+      <div class="field"><label for="join-name">איך לקרוא לך?</label><input type="text" id="join-name" maxlength="20" placeholder="השם שיופיע בלוח"></div>
+      <div class="field"><span class="lab">צבע</span><div class="swatches" id="join-colors"></div></div>
+      <div class="row"><button type="button" class="btn" id="join-go">הצטרפות</button><button type="button" class="btn ghost" id="join-out">יציאה</button></div>
+    </div>
+
+    <div id="login-wait" class="stack-sm" hidden>
+      <p><strong id="wait-name"></strong>, הבקשה שלך נשלחה. ברגע שמנהל הלוח יאשר, הלוח ייפתח כאן.</p>
+      <div class="row"><button type="button" class="btn ghost" id="wait-cancel">ביטול הבקשה</button><button type="button" class="btn ghost" id="wait-out">יציאה</button></div>
+    </div>
+
     <div class="who" id="login-members"></div>
     <div id="login-pin" class="stack-sm" hidden>
       <div class="field"><label for="login-code" id="login-label">הקוד שלך</label>
@@ -109,6 +129,12 @@
 
   <!-- ADMIN -->
   <main id="view-admin" class="section stack" hidden>
+    <section class="panel" id="joinsPanel" hidden>
+      <div class="section-head"><h2>מחכים לאישור</h2><span class="count" id="joinsCount"></span></div>
+      <p class="sub">אנשים שנרשמו עם חשבון גוגל ורוצים להצטרף ללוח.</p>
+      <div id="joinsList"></div>
+    </section>
+
     <section class="panel">
       <h2 id="tfHead">משימה חדשה</h2>
       <div class="field"><label for="tf-title">מה צריך לעשות</label><input type="text" id="tf-title" maxlength="80" placeholder="למשל: להוציא את הזבל"></div>
@@ -174,6 +200,7 @@
       </div>
       <p class="sub" id="mf-pin-hint">עם הקוד הזה בן המשפחה נכנס מהטלפון שלו. בלי קוד הוא לא יכול להיכנס.</p>
       <div class="field"><span class="lab">צבע</span><div class="swatches" id="mf-colors"></div></div>
+      <label class="check"><input type="checkbox" id="mf-admin"> מנהל: מקבל תג "מנהל" ותמונות פרופיל מיוחדות</label>
       <div class="row">
         <button type="button" class="btn" id="mf-save">הוספה</button>
         <button type="button" class="btn ghost" id="mf-cancel" hidden>ביטול עריכה</button>

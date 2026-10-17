@@ -25,12 +25,16 @@ service cloud.firestore {
     function freshTime(d) { return d.at is int && math.abs(d.at - request.time.toMillis()) < 600000; }
 
     // המכשיר הזה נכנס בתור בן המשפחה m עם הקוד הנכון שלו. שינוי קוד מנתק את כל המכשירים שנכנסו עם הקוד הישן.
+    // המכשיר הזה פועל בשם בן המשפחה m: נכנס עם הקוד הנכון שלו, או מחובר עם חשבון הגוגל שמקושר אליו.
     function boundTo(m) {
       let bPath = /databases/$(database)/documents/bindings/$(request.auth.uid);
       let pPath = /databases/$(database)/documents/pins/$(m);
-      return signedIn() && exists(bPath) && exists(pPath)
-        && get(bPath).data.memberId == m
-        && get(bPath).data.pin == get(pPath).data.pin;
+      let mPath = /databases/$(database)/documents/members/$(m);
+      return signedIn() && (
+        (exists(bPath) && exists(pPath)
+          && get(bPath).data.memberId == m
+          && get(bPath).data.pin == get(pPath).data.pin)
+        || (exists(mPath) && get(mPath).data.get('uid', '') == request.auth.uid));
     }
 
     function validFixed(d) {
@@ -107,11 +111,28 @@ service cloud.firestore {
     }
 
     // פרופיל: כולם רואים; כל אחד משנה רק את התמונה של עצמו (המנהל של כולם).
+    // פרופיל: כל אחד משנה את התמונה של עצמו. תמונות המנהל רק למי שמסומן כמנהל.
     match /profiles/{memberId} {
       allow read: if signedIn();
       allow write: if (isAdmin() || boundTo(memberId))
         && request.resource.data.keys().hasOnly(['avatar'])
-        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 16;
+        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 16
+        && (!(request.resource.data.avatar in ['👑','🏆','💎','🐉','🦅','🔥'])
+            || get(/databases/$(database)/documents/members/$(memberId)).data.get('admin', false) == true);
+    }
+
+    // בקשות הצטרפות עם חשבון גוגל: כל אחד שולח בקשה בשם עצמו, רק המנהל רואה את כולן ומאשר.
+    match /joinRequests/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.resource.data.keys().hasOnly(['name','color','email','at'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 20
+        && request.resource.data.color is string && request.resource.data.color.size() <= 9
+        && request.resource.data.email == request.auth.token.get('email', '')
+        && request.resource.data.at is int;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
     }
 
     // מכשירים שמקבלים התראות. רק השרת (וגם המנהל) קורא אותם.

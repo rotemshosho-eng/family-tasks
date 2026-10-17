@@ -8,7 +8,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -40,6 +40,9 @@ function status(msg){ const s = $('status'); s.textContent = msg || ''; s.hidden
 
 const member = id => S.members.find(m => m.id === id);
 const avatarOf = id => S.profiles[id]?.avatar || (member(id)?.name || '?').trim().charAt(0);
+const ADMIN_AVATARS = ['👑','🏆','💎','🐉','🦅','🔥'];
+const isAdminMember = id => member(id)?.admin === true;
+const adminTag = id => isAdminMember(id) ? h('span', { class:'admin-tag' }, '👑 מנהל') : null;
 const AVATARS = ['🦊','🐼','🐯','🦁','🐸','🐙','🦄','🐶','🐱','🐵','🐨','🦖','🚀','⚽','🎸','🌟','🍕','🎮','🌈','🐬'];
 const mName = id => id === 'all' ? 'כולם' : (member(id)?.name || 'לא משויך');
 const mColor = id => member(id)?.color || '#8A9690';
@@ -118,24 +121,29 @@ function render(){
   if (S.tab === 'chat') S.tab = 'today';
   $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
   // A family member's device is locked to whoever signed in with their code. Only the admin can view as anyone.
-  const bound = !S.isAdmin && S.binding && member(S.binding.memberId) ? S.binding.memberId : null;
-  const needLogin = !!S.user && !S.isAdmin && S.bindLoaded && !bound;
+  // Who this device belongs to: a Google account linked to a member, or a member's code.
+  const isGoogle = !!S.user && !S.user.isAnonymous;
+  const gMember = isGoogle ? S.members.find(m => m.uid && m.uid === S.user.uid) : null;
+  const bound = S.isAdmin ? null : (gMember ? gMember.id : (S.binding && member(S.binding.memberId) ? S.binding.memberId : null));
+  S.boundId = bound;
+  const ready = S.bindLoaded && S.adminChecked;
+  const needLogin = !!S.user && !S.isAdmin && ready && !bound;
   if (bound) S.me = bound;
   else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
   $('login').hidden = !needLogin;
   if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
-  if (!S.isAdmin && !S.bindLoaded && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
+  if (!S.isAdmin && !ready && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
   $('who').hidden = !S.isAdmin;
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
-  const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length;
+  const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
   $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   renderChatSheet(); renderProfileSheet();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
-  if (S.isAdmin){ renderAdminLists(); }
+  if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
 }
@@ -143,11 +151,26 @@ function render(){
 function renderAuth(){}
 
 /* ---------- sign in as a family member, with that member's code ---------- */
+let loginGoogleHook = null, googleSignInHook = null;
 function renderLogin(){
   const box = $('login-members'); box.replaceChildren();
+  const isGoogle = !!S.user && !S.user.isAnonymous;
+  // Signed in with Google but not on the board yet: ask for a name, or show that the request is waiting.
+  $('login-join').hidden = !(isGoogle && !S.myJoin);
+  $('login-wait').hidden = !(isGoogle && S.myJoin);
+  if (isGoogle){
+    $('login-google').hidden = true; box.hidden = true; $('login-pin').hidden = true; $('login-empty').hidden = true;
+    $('login-title').textContent = S.myJoin ? 'מחכה לאישור' : 'הצטרפות ללוח';
+    $('join-email').textContent = `נכנסת בתור ${S.user.email || S.user.displayName || ''}`;
+    if (S.myJoin) $('wait-name').textContent = S.myJoin.name;
+    else if (!$('join-name').value && S.user.displayName && document.activeElement !== $('join-name')) $('join-name').value = S.user.displayName.split(' ')[0].slice(0, 20);
+    return;
+  }
   $('login-empty').hidden = S.members.length > 0;
   const pick = S.loginPick && member(S.loginPick) ? member(S.loginPick) : null;
   $('login-title').textContent = pick ? `שלום ${pick.name}` : 'מי אתה?';
+  $('login-google').hidden = !!pick;
+  if (!pick && loginGoogleHook && !$('login-gbtn').childElementCount) loginGoogleHook('login-gbtn');
   box.hidden = !!pick; $('login-pin').hidden = !pick;
   if (pick){ $('login-label').textContent = `הקוד של ${pick.name}`; }
   S.members.forEach(m => box.append(h('button', { type:'button', class:'chip', onclick:() => {
@@ -208,8 +231,39 @@ async function saveAdminCode(){
 
 async function switchUser(){
   if (!S.user) return;
-  S.chatOpen = null; S.openPick = null;
-  try{ await deleteDoc(doc(db,'bindings',S.user.uid)); }catch(e){ fail(e); }
+  S.chatOpen = null; S.openPick = null; S.profileOpen = null;
+  try{
+    if (!S.user.isAnonymous){ await signOut(getAuth(fbApp)); return; }
+    await deleteDoc(doc(db,'bindings',S.user.uid));
+  }catch(e){ fail(e); }
+}
+
+/* ---------- joining with a Google account ---------- */
+async function sendJoin(){
+  const name = $('join-name').value.trim(); const color = (document.querySelector('input[name=join-color]:checked') || {}).value || COLORS[0];
+  if (!name){ toast('כתבו איך לקרוא לך'); $('join-name').focus(); return; }
+  const btn = $('join-go'); btn.disabled = true;
+  try{ await setDoc(doc(db,'joinRequests',S.user.uid), { name, color, email: S.user.email || '', at: Date.now() }); toast('הבקשה נשלחה'); }
+  catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
+async function cancelJoin(){ try{ await deleteDoc(doc(db,'joinRequests',S.user.uid)); }catch(e){ fail(e); } }
+async function approveJoin(j){
+  try{
+    const b = writeBatch(db);
+    b.set(doc(collection(db,'members')), { name: j.name, color: j.color || COLORS[0], order: Date.now(), uid: j.id, email: j.email || '' });
+    b.delete(doc(db,'joinRequests',j.id));
+    await b.commit(); toast(`${j.name} הצטרף/ה ללוח`);
+  }catch(e){ fail(e); }
+}
+async function rejectJoin(j){ try{ await deleteDoc(doc(db,'joinRequests',j.id)); toast('הבקשה נדחתה'); }catch(e){ fail(e); } }
+function renderJoins(){
+  $('joinsPanel').hidden = !S.joins.length; $('joinsCount').textContent = S.joins.length ? String(S.joins.length) : '';
+  const L = $('joinsList'); L.replaceChildren();
+  S.joins.slice().sort((a,b) => (a.at||0) - (b.at||0)).forEach(j => L.append(h('div', { class:'arow' },
+    h('div', { class:'ava sm', style:`background:${j.color || COLORS[0]}` }, (j.name || '?').charAt(0)),
+    h('div', { class:'t' }, h('strong', null, j.name), h('small', null, j.email || '')),
+    h('button', { type:'button', class:'btn small', onclick:() => approveJoin(j) }, 'אישור'),
+    armedBtn('j'+j.id, 'דחייה', () => rejectJoin(j)))));
 }
 function renderPending(){
   const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all' || t.suggestedBy === S.me;
@@ -289,7 +343,7 @@ function memberStats(id){
   while (days.has(dstr(d))){ streak++; d.setDate(d.getDate() - 1); }
   return { week, total, done, streak, recent: mine.slice().sort((a,b) => b.at - a.at).slice(0, 15) };
 }
-const canEditProfile = id => S.isAdmin || (S.binding && S.binding.memberId === id);
+const canEditProfile = id => S.isAdmin || S.boundId === id;
 function openProfile(id){ S.profileOpen = id; render(); }
 function closeProfile(){ S.profileOpen = null; render(); }
 async function setAvatar(id, a){
@@ -306,14 +360,16 @@ function renderProfileSheet(){
   const body = $('profileBody'); body.replaceChildren(...[
     h('div', { class:'prof-hero', style:`--m:${m.color}` },
       h('div', { class:'prof-ava' }, avatarOf(m.id)),
-      h('h2', { class:'prof-name' }, m.name)),
+      h('div', { class:'prof-name-wrap' }, h('h2', { class:'prof-name' }, m.name), adminTag(m.id))),
     h('div', { class:'stats' },
       tile('השבוע', st.week, ils(st.week)),
       tile('סה״כ נקודות', st.total, ils(st.total)),
       tile('משימות שבוצעו', st.done),
       tile('ימים ברצף', st.streak)),
     own ? h('section', { class:'panel' }, h('h2', null, 'בחירת תמונה'),
-      h('div', { class:'ava-grid' }, AVATARS.map(a => h('button', { type:'button', class:'ava-pick', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)))) : null,
+      h('div', { class:'ava-grid' },
+        (isAdminMember(m.id) ? ADMIN_AVATARS : []).map(a => h('button', { type:'button', class:'ava-pick special', title:'תמונה של מנהל', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)),
+        AVATARS.map(a => h('button', { type:'button', class:'ava-pick', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)))) : null,
     own ? notifPanel(m.id) : null,
     h('section', { class:'panel' }, h('h2', null, 'מה נעשה לאחרונה'),
       st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
@@ -396,7 +452,7 @@ function chatPanel(t){
   const canWrite = S.me !== 'all' && member(S.me);
   const list = h('div', { class:'chat-list', id:'chat-list' },
     msgs.length ? msgs.map(m => h('div', { class:'msg' + (m.memberId === S.me ? ' mine' : '') },
-      h('div', { class:'msg-head' }, h('span', { class:'dot', style:`background:${mColor(m.memberId)}` }), h('strong', null, mName(m.memberId)), h('span', { class:'msg-time' }, msgTime(m))),
+      h('div', { class:'msg-head' }, h('span', { class:'dot', style:`background:${mColor(m.memberId)}` }), h('strong', null, mName(m.memberId)), isAdminMember(m.memberId) ? h('span', { title:'מנהל' }, '👑') : null, h('span', { class:'msg-time' }, msgTime(m))),
       h('div', { class:'msg-text' }, m.text),
       S.isAdmin ? h('button', { type:'button', class:'msg-del', 'aria-label':'מחיקת הודעה', onclick:() => deleteDoc(doc(db,'messages',m.id)).catch(fail) }, 'מחיקה') : null))
     : h('p', { class:'sub' }, 'עוד אין הודעות. אפשר לסכם כאן מי עושה מה.'));
@@ -442,6 +498,7 @@ function renderBoard(){
       h('div', { class:'info' },
         lead ? h('span', { class:'crown' }, 'מוביל/ה השבוע') : null,
         h('span', { class:'name' }, r.m.name),
+        adminTag(r.m.id),
         h('span', { class:'pts' }, r.wk),
         wkILS != null ? h('span', { class:'money' }, `${fmtILS(wkILS)} השבוע`) : null,
         h('span', { class:'tot' }, `סה״כ ${r.tot}` + (totILS != null ? ` · ${fmtILS(totILS)}` : ''))))); });
@@ -548,7 +605,7 @@ function renderAdminLists(){
     M.append(h('div', { class:'arow' },
       h('div', { class:'ava sm', style:`background:${m.color}` }, avatarOf(m.id)),
       h('div', { class:'t' }, h('strong', null, m.name),
-        h('small', { class: pin ? '' : 'err' }, pin ? `קוד כניסה: ${pin}` : 'אין קוד: לא יכול/ה להיכנס')),
+        h('small', { class: (pin || m.uid) ? '' : 'err' }, [m.admin ? 'מנהל' : null, m.uid ? `גוגל: ${m.email || 'מחובר'}` : null, pin ? `קוד כניסה: ${pin}` : (m.uid ? null : 'אין קוד ואין גוגל: לא יכול/ה להיכנס')].filter(Boolean).join(' · '))),
       h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
       armedBtn('m'+m.id, 'הסרה', async () => { try{
         const b = writeBatch(db); b.delete(doc(db,'members',m.id)); b.delete(doc(db,'pins',m.id)); await b.commit(); toast(`${m.name} הוסר/ה`);
@@ -610,11 +667,11 @@ async function saveTask(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 function editMember(m){
-  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
+  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-admin').checked = m.admin === true; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
 function resetMemberForm(){
-  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
+  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-admin').checked = false; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
   const used = new Set(S.members.map(m => m.color)); const i = Math.max(0, COLORS.findIndex(c => !used.has(c))); $('mf-color-'+i).checked = true;
 }
 async function saveMember(){
@@ -626,7 +683,8 @@ async function saveMember(){
   try{
     const b = writeBatch(db);
     const ref = S.editMember ? doc(db,'members',S.editMember) : doc(collection(db,'members'));
-    if (S.editMember) b.update(ref, { name, color }); else b.set(ref, { name, color, order: Date.now() });
+    const admin = $('mf-admin').checked;
+    if (S.editMember) b.update(ref, { name, color, admin }); else b.set(ref, { name, color, admin, order: Date.now() });
     if (pin) b.set(doc(db,'pins',ref.id), { pin });
     await b.commit();
     toast(S.editMember ? 'נשמר' : `${name} נוסף/ה` + (pin ? '' : '. בלי קוד אי אפשר להיכנס בשמו/ה.'));
@@ -667,6 +725,7 @@ function tick(){
 function buildStatic(){
   const dw = $('tf-days'); DAYS.forEach((d, i) => dw.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'tf-day-'+i, value:i, checked:true }), d)));
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
+  const jc = $('join-colors'); COLORS.forEach((c, i) => jc.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'join-color', id:'join-color-'+i, value:c, checked: i === 0 }))));
   document.querySelectorAll('input[name=tf-type]').forEach(r => r.addEventListener('change', () => { $('tf-dayswrap').hidden = $('tf-type-once').checked; }));
   $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; render(); });
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
@@ -680,7 +739,7 @@ function buildStatic(){
   $('adminGate').addEventListener('click', e => { if (e.target === $('adminGate')) closeAdminGate(); });
   $('ac-save').addEventListener('click', saveAdminCode);
   $('profileBack').addEventListener('click', closeProfile);
-  $('meBarOpen').addEventListener('click', () => { if (S.binding) openProfile(S.binding.memberId); });
+  $('meBarOpen').addEventListener('click', () => { if (S.boundId) openProfile(S.boundId); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.profileOpen) closeProfile(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.chatOpen) closeChat(); });
   const sd = $('sg-days'); DAYS.forEach((d, i) => sd.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'sg-day-'+i, value:i, checked:true }), d)));
@@ -718,8 +777,8 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   const loadGIS = () => gisLoad || (gisLoad = new Promise((res, rej) => {
     const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
     s.onload = () => res(); s.onerror = () => { gisLoad = null; rej(new Error('gsi load failed')); }; document.head.appendChild(s); }));
-  async function showGoogleButton(){
-    const box = $('ag-gbtn'); if (!hasGIS()){ box.hidden = true; return; }
+  async function showGoogleButton(boxId = 'ag-gbtn'){
+    const box = $(boxId); if (!hasGIS()){ box.hidden = true; if (boxId === 'login-gbtn') $('login-gfallback').hidden = false; return; }
     try{
       await loadGIS();
       if (!gisInit){
@@ -732,9 +791,10 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
       }
       box.hidden = false; box.replaceChildren();
       google.accounts.id.renderButton(box, { theme:'outline', size:'large', shape:'pill', text:'signin_with', locale:'he', width: 260 });
-    }catch(e){ console.error(e); box.hidden = true; }
+    }catch(e){ console.error(e); box.hidden = true; if (boxId === 'login-gbtn') $('login-gfallback').hidden = false; }
   }
-  openAdminGateHook = showGoogleButton;
+  openAdminGateHook = () => showGoogleButton('ag-gbtn');
+  loginGoogleHook = id => showGoogleButton(id);
   async function adminSignIn(){
     if (hasGIS()){ try{ await loadGIS(); showGoogleButton(); google.accounts.id.prompt(); }catch(e){ console.error(e); } return; }
     const provider = new GoogleAuthProvider();
@@ -754,6 +814,12 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   $('login-code').addEventListener('keydown', e => { if (e.key === 'Enter') loginGo(); });
   $('login-back').addEventListener('click', () => { S.loginPick = null; S.loginErr = ''; render(); });
   $('switchUser').addEventListener('click', switchUser);
+  $('login-gfallback').addEventListener('click', adminSignIn);
+  $('join-go').addEventListener('click', sendJoin);
+  $('join-name').addEventListener('keydown', e => { if (e.key === 'Enter') sendJoin(); });
+  $('join-out').addEventListener('click', () => signOut(auth));
+  $('wait-out').addEventListener('click', () => signOut(auth));
+  $('wait-cancel').addEventListener('click', cancelJoin);
   // Leaving admin mode: drop the code session; a Google sign-in is signed out (the device returns to its family member).
   $('logoutBtn').addEventListener('click', async () => {
     S.tab = 'today';
@@ -765,7 +831,8 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
 
   onAuthStateChanged(auth, user => {
     unsubs.forEach(u => u()); unsubs = [];
-    S.user = user; S.googleAdmin = !!user && !user.isAnonymous; S.codeAdmin = false; S.isAdmin = S.googleAdmin;
+    // Admin = allowed to read private/admin (Google account of the admin, or this device's admin code).
+    S.user = user; S.isAdmin = false; S.adminChecked = false; S.joins = []; S.myJoin = null;
     if (!user){ signInAnonymously(auth).catch(e => { console.error(e); status('לא הצלחנו להתחבר. בדקו שכניסה אנונימית מופעלת ב-Firebase.'); }); render(); return; }
     status('');
     const sub = (name, fn) => unsubs.push(onSnapshot(collection(db, name),
@@ -785,16 +852,21 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     const startAdminSubs = () => { if (pinsUnsub) return;
       pinsUnsub = onSnapshot(collection(db,'pins'), s => { S.pins = Object.fromEntries(s.docs.map(p => [p.id, p.data().pin])); render(); }, e => console.error(e));
       unsubs.push(() => { pinsUnsub && pinsUnsub(); pinsUnsub = null; }); };
-    if (S.googleAdmin) startAdminSubs();
-    // Admin by code: this device holds adminSessions/<uid> with the admin code. It counts only if the code is
-    // still current, which we learn by being allowed to read private/admin.
-    unsubs.push(onSnapshot(doc(db,'adminSessions',user.uid), async s => {
+    let joinsUnsub = null;
+    const startJoinsSub = () => { if (joinsUnsub) return;
+      joinsUnsub = onSnapshot(collection(db,'joinRequests'), s => { S.joins = s.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, e => console.error(e));
+      unsubs.push(() => { joinsUnsub && joinsUnsub(); joinsUnsub = null; }); };
+    const checkAdmin = async hasSession => {
       let ok = false;
-      if (s.exists()){ try{ await getDoc(doc(db,'private','admin')); ok = true; }catch(e){ ok = false; } }
-      S.codeAdmin = ok; S.isAdmin = S.googleAdmin || ok;
-      if (S.isAdmin) startAdminSubs(); else { S.pins = {}; }
+      if (hasSession || !user.isAnonymous){ try{ await getDoc(doc(db,'private','admin')); ok = true; }catch(e){ ok = false; } }
+      S.isAdmin = ok; S.adminChecked = true;
+      if (ok){ startAdminSubs(); startJoinsSub(); } else { S.pins = {}; S.joins = []; }
       render();
-    }, e => console.error(e)));
+    };
+    // Admin by code: this device holds adminSessions/<uid> with the admin code; it counts while the code is current.
+    unsubs.push(onSnapshot(doc(db,'adminSessions',user.uid), s => checkAdmin(s.exists()), e => { console.error(e); checkAdmin(false); }));
+    // A Google account that isn't on the board yet: its own join request, if it sent one.
+    if (!user.isAnonymous) unsubs.push(onSnapshot(doc(db,'joinRequests',user.uid), s => { S.myJoin = s.exists() ? s.data() : null; render(); }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
       const m = s.exists() ? s.data() : { points:100, shekels:0 };
       S.money = { points:Number(m.points) || 100, shekels:Number(m.shekels) || 0 };
