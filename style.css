@@ -1,30 +1,32 @@
-/* Concept: a family game board. Each person is a big colored token, points are gold coins,
-   action buttons press down like game buttons. Everything else stays quiet so the tokens carry the color. */
+/* HomeQuest: the house run like a game. Calm navy structure, green for done, gold for points,
+   on a light grey-blue ground. Cards are white and flat; color is saved for progress and points. */
 :root{
-  --bg:#F2F4FF;          /* pale periwinkle table */
+  --bg:#F4F6FA;          /* light ground */
   --surface:#FFFFFF;
-  --sunk:#E9ECFB;
-  --ink:#1C1F3E;         /* deep indigo text */
-  --muted:#636889;
-  --line:#D9DDF3;
-  --accent:#5B4BF5;      /* violet: primary action */
-  --accent-deep:#3E30C9;
+  --sunk:#EDF1F7;
+  --ink:#172B4D;         /* navy: text and primary */
+  --muted:#5E6C84;
+  --line:#DFE4EC;
+  --accent:#172B4D;      /* primary action */
+  --accent-deep:#0B1A33;
   --accent-ink:#FFFFFF;
-  --coin:#FFC02E;        /* points */
-  --coin-deep:#D89400;
-  --coin-ink:#3A2600;
-  --good:#12A97F;
-  --danger:#E5486A;
-  --display:"Fredoka","Rubik",system-ui,sans-serif;
+  --coin:#FFB84D;        /* points */
+  --coin-deep:#E0941F;
+  --coin-ink:#4A2E00;
+  --good:#39B980;        /* done */
+  --good-soft:#E3F6EC;
+  --danger:#E5484D;
+  --display:"Rubik",system-ui,-apple-system,"Segoe UI",sans-serif;
   --body:"Rubik",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --r-lg:22px; --r-md:14px; --r-sm:10px;
+  --r-lg:20px; --r-md:14px; --r-sm:10px;
+  --nav-h:68px;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#12142B; --surface:#1C1F3F; --sunk:#171A36; --ink:#EEF0FF; --muted:#A3A8CC; --line:#2D3160;
-  --accent:#8A7EFF; --accent-deep:#5B4BF5; --accent-ink:#0F1030;
-  --coin:#FFC83D; --coin-deep:#C98A00; --coin-ink:#2E1F00;
-  --good:#3CD3A6; --danger:#FF6F8C; color-scheme:dark}}
+  --bg:#0E1626; --surface:#172238; --sunk:#121C2F; --ink:#E8EEF8; --muted:#9AA8C0; --line:#26334D;
+  --accent:#E8EEF8; --accent-deep:#AFC0DA; --accent-ink:#0E1626;
+  --coin:#FFC266; --coin-deep:#D9922A; --coin-ink:#3A2400;
+  --good:#45C98E; --good-soft:#163A2B; --danger:#FF6B70; color-scheme:dark}}
 
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -237,3 +239,69 @@ button.score:active{transform:translateY(2px)}
 .ava-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:8px}
 .ava-pick{aspect-ratio:1;max-width:100%;border:2px solid var(--line);background:var(--sunk);border-radius:var(--r-md);font-size:1.6rem;cursor:pointer}
 .ava-pick[aria-pressed="true"]{border-color:var(--accent);background:var(--surface);box-shadow:0 3px 0 var(--accent-deep)}
+
+
+/* ===== HomeQuest layout ===== */
+.wrap{padding-bottom:calc(var(--nav-h) + 28px + env(safe-area-inset-bottom,0px))}
+h1{font-weight:700;font-size:1.7rem}
+h2{font-weight:600;font-size:1.15rem}
+.hero{align-items:center;flex-wrap:nowrap}
+.hero-text{min-width:0}
+.hero-kicker{margin:0 0 2px;color:var(--muted);font-size:.9rem}
+#dateline{color:var(--muted);font-family:var(--body);font-weight:400;font-size:.92rem;margin-top:2px}
+.hero-me{border:0;background:none;padding:0;cursor:pointer;flex:none}
+.hero-me .ava{width:48px;height:48px;font-size:1.5rem;box-shadow:0 0 0 3px var(--surface), 0 0 0 5px var(--line)}
+
+/* progress */
+.progress-card{background:var(--surface);border-radius:var(--r-lg);padding:16px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgb(23 43 77 / .08)}
+.progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.progress-head strong{font-weight:600}
+.progress-pct{font-weight:700;color:var(--good);font-variant-numeric:tabular-nums}
+.progress-bar{height:10px;border-radius:999px;background:var(--sunk);overflow:hidden}
+.progress-bar span{display:block;height:100%;width:0;border-radius:inherit;background:var(--good);transition:width .5s ease}
+
+/* task cards: icon tile, title, gold points, round check */
+.task{box-shadow:0 1px 3px rgb(23 43 77 / .08);gap:12px;padding:12px 14px}
+.task .title{font-family:var(--body);font-weight:600;font-size:1.05rem}
+.ticon{flex:none;width:44px;height:44px;border-radius:12px;background:var(--sunk);display:grid;place-items:center;font-size:1.35rem}
+.pts-line{display:inline-flex;align-items:center;gap:5px;color:var(--coin-deep);font-weight:600;font-size:.9rem}
+.star{color:var(--coin);font-size:1rem;line-height:1}
+.task-sub{color:var(--muted);font-size:.8rem}
+.meta{gap:6px}
+.task.pinned{box-shadow:0 0 0 2px var(--coin), 0 1px 3px rgb(23 43 77 / .08)}
+.check{flex:none;width:40px;height:40px;border-radius:50%;border:2.5px solid var(--line);background:var(--surface);cursor:pointer;
+  display:grid;place-items:center;color:var(--good);font:700 1.1rem var(--body);transition:border-color .15s, background .15s}
+.check:hover:not(:disabled){border-color:var(--good)}
+.check:active:not(:disabled){background:var(--good-soft)}
+.check:disabled{opacity:.5}
+.btn.start{background:var(--good);color:#fff;box-shadow:none}
+.btn{box-shadow:none}
+.btn:active:not(:disabled){transform:translateY(1px);box-shadow:none}
+.btn.ghost{box-shadow:0 0 0 1.5px var(--line) inset}
+.btn.ghost:active:not(:disabled){box-shadow:0 0 0 1.5px var(--line) inset}
+.done{border:0;background:var(--surface);box-shadow:0 1px 3px rgb(23 43 77 / .06)}
+.done::before{content:"✓";flex:none;width:26px;height:26px;border-radius:50%;background:var(--good);color:#fff;display:grid;place-items:center;font-weight:700;font-size:.85rem}
+.done > .dot{display:none}
+.group-h{margin:8px 0 0;font-size:.95rem;font-weight:600;color:var(--muted)}
+.empty,.panel,.stat{box-shadow:0 1px 3px rgb(23 43 77 / .08)}
+
+/* family scoreboard keeps each member's own color */
+.score{box-shadow:none}
+.score.lead{box-shadow:0 0 0 3px var(--coin)}
+.crown{background:var(--coin);color:var(--coin-ink)}
+
+/* bottom navigation */
+.bottomnav{position:fixed;inset:auto 0 0 0;z-index:12;display:flex;justify-content:center;gap:4px;background:var(--surface);
+  box-shadow:0 -1px 0 var(--line), 0 -6px 18px rgb(23 43 77 / .06);
+  padding:8px max(12px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.bottomnav button{flex:1;max-width:150px;min-height:52px;border:0;background:none;color:var(--muted);border-radius:14px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:500 .8rem var(--body)}
+.bottomnav .ni{font-size:1.25rem;line-height:1;filter:grayscale(1);opacity:.7}
+.bottomnav button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.bottomnav button[aria-pressed="true"] .ni{filter:none;opacity:1}
+.toast{bottom:calc(var(--nav-h) + 18px + env(safe-area-inset-bottom,0px))}
+@media (prefers-reduced-motion: reduce){.progress-bar span{transition:none}}
+.task .body{flex:1 1 0}
+.chatbtn{flex:none;min-width:40px;height:36px;padding:0 10px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;font:600 .85rem var(--body);cursor:pointer}
+.chatbtn.unread{background:var(--coin);border-color:var(--coin);color:var(--coin-ink)}

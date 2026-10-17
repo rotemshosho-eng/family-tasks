@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>משימות הבית</title>
-<meta name="theme-color" content="#5B4BF5">
+<meta name="theme-color" content="#172B4D">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -13,20 +13,18 @@
 <meta name="apple-mobile-web-app-title" content="משימות הבית">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Rubik:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
+  <header class="hero">
+    <div class="hero-text">
+      <p class="hero-kicker">המשפחה שלנו</p>
       <h1 id="appTitle">לוח המשימות של הבית</h1>
       <p class="sub" id="dateline"></p>
     </div>
-    <nav class="tabs" id="tabs" hidden>
-      <button type="button" data-tab="today" aria-pressed="true">היום</button>
-      <button type="button" data-tab="admin" aria-pressed="false" hidden>ניהול</button>
-    </nav>
+    <button type="button" class="hero-me" id="heroMe" hidden aria-label="הפרופיל שלי"><span class="ava" id="heroAva"></span></button>
   </header>
 
   <div id="setup" class="notice" hidden>
@@ -68,23 +66,27 @@
     <p class="sub" id="login-empty" hidden>עוד לא הוגדרו בני משפחה. מי שמנהל את הלוח צריך להוסיף אותם.</p>
   </section>
 
-  <div class="mebar" id="meBar" hidden>
-    <button type="button" class="mebar-open" id="meBarOpen" aria-label="הפרופיל שלי"><span class="ava sm" id="meAva"></span><strong id="meName"></strong></button>
-    <span class="grow"></span>
-    <button type="button" class="btn ghost small" id="switchUser">החלפת משתמש</button>
-  </div>
 
   <!-- TODAY -->
   <main id="view-today" class="section stack">
     <div class="who" id="who"></div>
-    <section class="section">
-      <div class="section-head"><h2>נקודות השבוע</h2><span class="count">השבוע מתחיל ביום ראשון</span></div>
-      <div class="board" id="board"></div>
+    <section class="progress-card" id="progress" aria-label="ההתקדמות של היום">
+      <div class="progress-head"><strong>ההתקדמות של היום</strong><span class="progress-pct" id="progPct">0%</span></div>
+      <div class="progress-bar"><span id="progFill"></span></div>
+      <p class="sub" id="progText"></p>
     </section>
     <section class="section">
       <div class="section-head"><h2 id="todoTitle">מה נשאר להיום</h2><span class="count" id="todoCount"></span></div>
       <div class="list" id="todo"></div>
     </section>
+    <section class="section" id="doneSec" hidden>
+      <div class="section-head"><h2>בוצע היום</h2><span class="count" id="doneCount"></span></div>
+      <div class="list" id="doneList"></div>
+    </section>
+  </main>
+
+  <!-- ALL TASKS -->
+  <main id="view-tasks" class="section stack" hidden>
     <section class="section" id="pendSec" hidden>
       <div class="section-head"><h2>מחכות לניקוד</h2><span class="count" id="pendCount"></span></div>
       <div class="list" id="pendList"></div>
@@ -121,9 +123,22 @@
         </div>
       </div>
     </section>
-    <section class="section" id="doneSec" hidden>
-      <div class="section-head"><h2>בוצע היום</h2><span class="count" id="doneCount"></span></div>
-      <div class="list" id="doneList"></div>
+    <section class="section">
+      <div class="section-head"><h2>כל המשימות</h2><span class="count" id="allCount"></span></div>
+      <div class="list" id="allTasks"></div>
+    </section>
+  </main>
+
+  <!-- FAMILY -->
+  <main id="view-family" class="section stack" hidden>
+    <div class="mebar" id="meBar" hidden>
+    <button type="button" class="mebar-open" id="meBarOpen" aria-label="הפרופיל שלי"><span class="ava sm" id="meAva"></span><strong id="meName"></strong></button>
+    <span class="grow"></span>
+    <button type="button" class="btn ghost small" id="switchUser">החלפת משתמש</button>
+  </div>
+    <section class="section">
+      <div class="section-head"><h2>נקודות השבוע</h2><span class="count">השבוע מתחיל ביום ראשון</span></div>
+      <div class="board" id="board"></div>
     </section>
   </main>
 
@@ -229,6 +244,12 @@
   </main>
 
 </div>
+<nav class="bottomnav" id="tabs" hidden aria-label="ניווט">
+  <button type="button" data-tab="today" aria-pressed="true"><span class="ni" aria-hidden="true">🏠</span>בית</button>
+  <button type="button" data-tab="tasks" aria-pressed="false"><span class="ni" aria-hidden="true">📅</span>משימות</button>
+  <button type="button" data-tab="family" aria-pressed="false"><span class="ni" aria-hidden="true">👥</span>משפחה</button>
+  <button type="button" data-tab="admin" aria-pressed="false" hidden><span class="ni" aria-hidden="true">⚙️</span><span class="nl">ניהול</span></button>
+</nav>
 <!-- full-screen chat for one task -->
 <div class="sheet" id="chatSheet" hidden role="dialog" aria-modal="true" aria-labelledby="chatTitle">
   <div class="sheet-head">

@@ -115,11 +115,13 @@ function render(){
   const d = new Date();
   $('dateline').textContent = `יום ${DAYS[d.getDay()]}׳, ${d.getDate()}.${d.getMonth()+1}`;
   if (!S.isAdmin && S.tab === 'admin') S.tab = 'today';
-  $('tabs').hidden = !S.user || !S.isAdmin;
+  $('tabs').hidden = !S.user;
   $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin;
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
-  if (S.tab === 'chat') S.tab = 'today';
-  $('view-today').hidden = S.tab !== 'today'; $('view-admin').hidden = S.tab !== 'admin';
+  if (!['today','tasks','family','admin'].includes(S.tab)) S.tab = 'today';
+  const VIEWS = ['today','tasks','family','admin'];
+  const hideViews = () => VIEWS.forEach(v => $('view-'+v).hidden = true);
+  VIEWS.forEach(v => $('view-'+v).hidden = S.tab !== v);
   // A family member's device is locked to whoever signed in with their code. Only the admin can view as anyone.
   // Who this device belongs to: a Google account linked to a member, or a member's code.
   const isGoogle = !!S.user && !S.user.isAnonymous;
@@ -132,17 +134,18 @@ function render(){
   else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
   $('login').hidden = !needLogin;
-  if (needLogin){ $('view-today').hidden = true; $('view-admin').hidden = true; $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
-  if (!S.isAdmin && !ready && S.user){ $('view-today').hidden = true; $('view-admin').hidden = true; return; }
+  if (needLogin){ hideViews(); $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
+  if (!S.isAdmin && !ready && S.user){ hideViews(); $('tabs').hidden = true; return; }
+  renderHero(bound);
   $('who').hidden = !S.isAdmin;
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
-  $('tabs').querySelector('[data-tab="admin"]').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
+  $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   renderChatSheet(); renderProfileSheet();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderAllTasks(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
@@ -429,8 +432,9 @@ function markSeen_chat(taskId){
 }
 function chatButton(t){
   const n = chatCount(t), u = unreadFor(t);
-  return h('button', { type:'button', class:'btn small ' + (u ? 'unread' : 'ghost'), onclick:() => openChat(t.id) },
-    u ? `צ'אט · ${u} חדשות` : (n ? `צ'אט (${n})` : "צ'אט"));
+  return h('button', { type:'button', class:'chatbtn' + (u ? ' unread' : ''), onclick:() => openChat(t.id),
+    'aria-label': u ? `צ'אט, ${u} הודעות חדשות` : `צ'אט${n ? `, ${n} הודעות` : ''}` },
+    h('span', { 'aria-hidden':'true' }, '💬'), u ? String(u) : (n ? String(n) : null));
 }
 function openChat(id){ S.chatOpen = id; S.chatDraft = ''; render(); setTimeout(() => $('chat-input')?.focus(), 30); }
 function closeChat(){ if (S.chatOpen) markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; render(); }
@@ -512,44 +516,7 @@ function renderToday(){
   if (!S.tasks.length) L.append(h('div', { class:'empty' }, h('strong', null, 'אין עדיין משימות'),
     S.isAdmin ? 'הוסיפו משימה בלשונית ניהול: שם, כמה נקודות, של מי, ובאילו ימים.' : 'עוד לא נוספו משימות ללוח.'));
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
-  due.forEach(t => {
-    const who = t.assignee === 'all' ? (S.me !== 'all' ? S.me : null) : t.assignee;
-    const timed = isTimed(t);
-    const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
-    const whoRunning = who && running.some(tm => tm.memberId === who);
-    const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
-    const act = timed ? (m => startTimer(t, m)) : (m => complete(t, m));
-    const meta = [
-      h('span', { class:'tag' }, h('span', { class:'dot', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}` }),
-        t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee)),
-      h('span', null, '·'), h('span', null, recLabel(t))];
-    if (timed) meta.push(h('span', null, '·'), h('span', null, `עד ${t.maxMinutes} דק׳`));
-    if (t.pinned) meta.unshift(h('span', { class:'pin-tag' }, 'נעוצה'), h('span', null, '·'));
-    const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
-      h('div', { class:'ava sm', style:`background:${t.assignee === 'all' ? 'var(--muted)' : mColor(t.assignee)}`, 'aria-hidden':'true' }, t.assignee === 'all' ? '★' : avatarOf(t.assignee)),
-      h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta)),
-      h('span', { class:'pts-pill' + (isTimed(t) ? '' : ' ltr') }, pill(t)),
-      chatButton(t),
-      whoRunning ? null : h('button', { type:'button', class:'btn', disabled: busy || !S.members.length, onclick:() => {
-        if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } } },
-        busy ? 'שומר…' : (timed ? 'התחלתי' : 'סיימתי')));
-    running.forEach(tm => {
-      const r = timedResult(t, tm); const b = S.busy.has(tm.id);
-      card.append(h('div', { class:'running' },
-        h('span', { class:'pulse', 'aria-hidden':'true' }),
-        h('span', { class:'who-run' }, h('span', { class:'dot', style:`background:${mColor(tm.memberId)}` }), mName(tm.memberId)),
-        h('span', { class:'clock', 'data-timer':tm.id }, clock(r.ms)),
-        h('span', { class:'earn', 'data-earn':tm.id }, `+${r.points}`),
-        h('span', { class:'capnote', 'data-cap':tm.id }, r.capped ? 'הגיע לתקרה' : ''),
-        h('span', { class:'grow' }),
-        h('button', { type:'button', class:'btn small', disabled:b, onclick:() => finishTimer(t, tm) }, b ? 'שומר…' : 'סיימתי'),
-        h('button', { type:'button', class:'btn ghost small', disabled:b, onclick:() => cancelTimer(tm) }, 'ביטול')));
-    });
-    if (S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
-      S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
-        h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
-    L.append(card);
-  });
+  due.forEach(t => L.append(taskCard(t, true)));
   const td = today();
   const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && l.day === td && (S.me === 'all' || l.memberId === S.me)).sort((a,b) => b.at - a.at);
   $('doneSec').hidden = !done.length;
@@ -560,6 +527,90 @@ function renderToday(){
     h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '')),
     h('span', { class:'num gold' }, `+${l.points}`),
     h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול'))));
+}
+
+
+/* ---------- home: greeting, progress, task cards ---------- */
+function greeting(){ const hr = new Date().getHours(); return hr < 5 ? 'לילה טוב' : hr < 12 ? 'בוקר טוב' : hr < 17 ? 'צהריים טובים' : hr < 21 ? 'ערב טוב' : 'לילה טוב'; }
+function renderHero(bound){
+  const who = bound || (S.me !== 'all' ? S.me : null);
+  const m = who ? member(who) : null;
+  $('appTitle').textContent = m ? `${greeting()}, ${m.name}!` : `${greeting()}!`;
+  const btn = $('heroMe'); btn.hidden = !m;
+  if (m){ $('heroAva').textContent = avatarOf(m.id); $('heroAva').style.background = m.color; btn.onclick = () => openProfile(m.id); }
+}
+// Today's progress for whoever is shown: tasks finished today vs. finished + still due today.
+function renderProgress(){
+  const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all';
+  const left = S.tasks.filter(t => isDue(t) && mine(t)).length;
+  const td = today();
+  const doneIds = new Set(S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && l.day === td && (S.me === 'all' || l.memberId === S.me)).map(l => l.taskId));
+  const done = doneIds.size, total = done + left;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  $('progress').hidden = !total;
+  $('progPct').textContent = `${pct}%`;
+  $('progFill').style.width = `${pct}%`;
+  $('progText').textContent = left ? `${done} מתוך ${total} משימות הושלמו` : 'כל המשימות של היום הושלמו 🎉';
+}
+const ICONS = [[/זבל|פח/, '🗑️'], [/כלים|מדיח/, '🍽️'], [/כביס|לתלות|לקפל/, '🧺'], [/מיטה|חדר|לסדר|מדפ/, '🛏️'], [/כלב/, '🐕'], [/חתול/, '🐈'],
+  [/לקרוא|ספר/, '📚'], [/שיעורי|ללמוד|מבחן/, '✏️'], [/להשקות|גינה|עציצ|צמח/, '🪴'], [/לבשל|ארוחה|מטבח|אוכל|שולחן/, '🍳'], [/שיניים|מקלחת|אמבט/, '🪥'],
+  [/שואב|לטאטא|לנקות|ניקיון|אבק/, '🧹'], [/רצפה|לשטוף/, '🧽'], [/קניות|סופר/, '🛒'], [/נגינה|לנגן|פסנתר|גיטרה/, '🎵'], [/ספורט|ריצה|אימון|כדור/, '⚽']];
+const taskIcon = t => (ICONS.find(([re]) => re.test(t.title || '')) || [null, '📋'])[1];
+// One task as a card. canAct: show the finish/start control (tasks due today).
+function taskCard(t, canAct){
+  const who = t.assignee === 'all' ? (S.me !== 'all' ? S.me : null) : t.assignee;
+  const timed = isTimed(t);
+  const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
+  const whoRunning = who && running.some(tm => tm.memberId === who);
+  const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
+  const act = timed ? (m => startTimer(t, m)) : (m => complete(t, m));
+  const go = () => { if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } };
+  const meta = [h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), timed ? `${t.ratePerMin} נקודות לדקה, עד ${t.maxMinutes} דק׳` : `${t.points} נקודות`)];
+  const sub = [t.assignee === 'all' ? 'מי שרוצה' : mName(t.assignee), recLabel(t)];
+  if (t.pinned) sub.unshift('נעוצה');
+  let control = null;
+  if (canAct && !whoRunning){
+    control = timed
+      ? h('button', { type:'button', class:'btn small start', disabled: busy || !S.members.length, onclick: go }, busy ? 'שומר…' : 'התחלתי')
+      : h('button', { type:'button', class:'check', 'aria-label':`סיימתי: ${t.title}`, disabled: busy || !S.members.length, onclick: go }, busy ? '…' : '');
+  }
+  const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
+    h('div', { class:'ticon', 'aria-hidden':'true' }, taskIcon(t)),
+    h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta),
+      h('span', { class:'task-sub' }, sub.join(' · '))),
+    chatButton(t),
+    control);
+  running.forEach(tm => {
+    const r = timedResult(t, tm); const b = S.busy.has(tm.id);
+    card.append(h('div', { class:'running' },
+      h('span', { class:'pulse', 'aria-hidden':'true' }),
+      h('span', { class:'who-run' }, h('span', { class:'dot', style:`background:${mColor(tm.memberId)}` }), mName(tm.memberId)),
+      h('span', { class:'clock', 'data-timer':tm.id }, clock(r.ms)),
+      h('span', { class:'earn', 'data-earn':tm.id }, `+${r.points}`),
+      h('span', { class:'capnote', 'data-cap':tm.id }, r.capped ? 'הגיע לתקרה' : ''),
+      h('span', { class:'grow' }),
+      h('button', { type:'button', class:'btn small', disabled:b, onclick:() => finishTimer(t, tm) }, b ? 'שומר…' : 'סיימתי'),
+      h('button', { type:'button', class:'btn ghost small', disabled:b, onclick:() => cancelTimer(tm) }, 'ביטול')));
+  });
+  if (canAct && S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
+    S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
+      h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
+  return card;
+}
+// Every task, grouped: due today, other repeating days, one-time tasks already done.
+function renderAllTasks(){
+  const L = $('allTasks'); L.replaceChildren();
+  const mine = t => S.me === 'all' || t.assignee === S.me || t.assignee === 'all';
+  const list = S.tasks.filter(t => !t.pending && mine(t));
+  $('allCount').textContent = list.length ? String(list.length) : '';
+  if (!list.length){ L.append(h('div', { class:'empty' }, h('strong', null, 'אין עדיין משימות'), 'משימות חדשות יופיעו כאן.')); return; }
+  const dueNow = list.filter(isDue), later = list.filter(t => !isDue(t) && t.type !== 'once'), finished = list.filter(t => !isDue(t) && t.type === 'once');
+  const group = (title, items, canAct) => { if (!items.length) return;
+    L.append(h('h3', { class:'group-h' }, title));
+    items.sort((a,b) => (!!b.pinned - !!a.pinned) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => L.append(taskCard(t, canAct))); };
+  group('להיום', dueNow, true);
+  group('בימים אחרים', later, false);
+  group('חד-פעמיות שבוצעו', finished, false);
 }
 
 /* ---------- admin ---------- */
@@ -727,7 +778,7 @@ function buildStatic(){
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
   const jc = $('join-colors'); COLORS.forEach((c, i) => jc.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'join-color', id:'join-color-'+i, value:c, checked: i === 0 }))));
   document.querySelectorAll('input[name=tf-type]').forEach(r => r.addEventListener('change', () => { $('tf-dayswrap').hidden = $('tf-type-once').checked; }));
-  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; render(); });
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; S.openPick = null; render(); window.scrollTo(0, 0); });
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
