@@ -8,7 +8,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -107,6 +107,19 @@ async function complete(t, memberId){
     toast(t.check ? `נשלח לאישור: ${t.points} נקודות יתווספו אחרי בדיקה` : `${mName(memberId)} קיבל/ה ${t.points} נקודות`);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
 }
+// Quantity tasks: the child types how many (e.g. 7 socks); points = full bundles x points per bundle.
+async function completeQty(t, memberId, n){
+  n = Math.round(Number(n));
+  if (!(n >= t.qtyPer)){ toast(`צריך לפחות ${t.qtyPer} ${t.qtyUnit}`); return; }
+  if (n > t.qtyMax){ toast(`התקרה היא ${t.qtyMax} ${t.qtyUnit} ביום`); return; }
+  if (!db || S.busy.has(t.id)) return; S.busy.add(t.id); S.qtyAsk = null; render();
+  const points = qtyPoints(t, n);
+  try{
+    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points, count:n, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
+    toast(t.check ? `נשלח לאישור: ${n} ${t.qtyUnit} = ${points} נקודות` : `${mName(memberId)}: ${n} ${t.qtyUnit} = ${points} נקודות`);
+  }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
+}
+function askQty(t, memberId){ S.qtyAsk = { id:t.id, m:memberId, val:'' }; S.openPick = null; render(); setTimeout(() => $('qtyIn')?.focus(), 0); }
 async function startTimer(t, memberId){
   const id = timerId(t.id, memberId);
   if (!db || S.busy.has(id)) return; S.busy.add(id); S.openPick = null; render();
@@ -331,7 +344,7 @@ function openTaskEdit(t){
   const sel = $('sg-assignee'); sel.value = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
   $('sg-rot').querySelectorAll('input').forEach(i => i.checked = (t.rotation || []).includes(i.value)); $('sg-rotwrap').hidden = sel.value !== 'rotate';
   $('sg-check').checked = !!t.check;
-  setSgMode(isTimed(t) ? 'timed' : 'fixed');
+  setSgMode(modeOf(t)); fillQty('sg', t);
   $('sg-points').value = t.points ?? 10; $('sg-rate').value = t.ratePerMin ?? 1; $('sg-max').value = t.maxMinutes ?? 30;
   $(t.type === 'once' ? 'sg-type-once' : 'sg-type-repeat').checked = true; $('sg-dayswrap').hidden = t.type === 'once';
   DAYS.forEach((_, i) => $('sg-day-'+i).checked = (t.days || []).includes(i) || t.type === 'once');
@@ -340,9 +353,9 @@ function openTaskEdit(t){
 }
 function resetSgEdit(){
   S.editSg = null; $('sgHead').textContent = 'משימה חדשה'; $('sg-save').textContent = 'הוספה';
-  $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed');
+  $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); fillQty('sg');
 }
-function setSgMode(m){ $(m === 'timed' ? 'sg-mode-timed' : 'sg-mode-fixed').checked = true; $('sg-fixed-row').hidden = m === 'timed'; $('sg-timed-row').hidden = m !== 'timed'; }
+function setSgMode(m){ $('sg-mode-' + m).checked = true; $('sg-fixed-row').hidden = m !== 'fixed'; $('sg-timed-row').hidden = m !== 'timed'; $('sg-qty-row').hidden = m !== 'qty'; }
 // Anyone can add a task with its own points or time. It is live at once; the admin sees it marked "new" and can edit or delete it.
 async function saveSuggestion(){
   const title = $('sg-title').value.trim();
@@ -353,7 +366,8 @@ async function saveSuggestion(){
   const ratePerMin = Math.round(Number($('sg-rate').value)), maxMinutes = Math.round(Number($('sg-max').value));
   if (!title){ toast('כתבו מה צריך לעשות'); $('sg-title').focus(); return; }
   if (type === 'repeat' && !days.length){ toast('בחרו לפחות יום אחד'); return; }
-  if (!timed && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
+  const q = radioMode('sg') === 'qty' ? readQty('sg') : null; if (typeof q === 'string'){ toast(q); return; }
+  if (!timed && !q && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
   if (timed && (!(ratePerMin >= 1) || ratePerMin > 100)){ toast('נקודות לדקה: מספר בין 1 ל-100'); return; }
   if (timed && (!(maxMinutes >= 1) || maxMinutes > 240)){ toast('תקרה: בין 1 ל-240 דקות'); return; }
   const assignee = $('sg-assignee').value || 'all';
@@ -366,7 +380,8 @@ async function saveSuggestion(){
     try{
       await updateDoc(doc(db,'tasks',old.id), { title, assignee, type, days, timed, check: $('sg-check').checked,
         rotation: assignee === 'rotate' ? rotation : deleteField(),
-        points: timed ? deleteField() : points, ratePerMin: timed ? ratePerMin : deleteField(), maxMinutes: timed ? maxMinutes : deleteField(),
+        points: timed ? deleteField() : (q ? q.points : points), ratePerMin: timed ? ratePerMin : deleteField(), maxMinutes: timed ? maxMinutes : deleteField(),
+        qtyPer: q ? q.qtyPer : deleteField(), qtyUnit: q ? q.qtyUnit : deleteField(), qtyMax: q ? q.qtyMax : deleteField(),
         reviewed:false, editedBy: S.boundId });
       toast('המשימה עודכנה'); toggleSuggest(false);
     }catch(e){ fail(e); } finally{ btn.disabled = false; }
@@ -375,10 +390,10 @@ async function saveSuggestion(){
   try{
     await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked,
       ...(assignee === 'rotate' ? { rotation } : {}),
-      ...(timed ? { ratePerMin, maxMinutes } : { points }), reviewed:false,
+      ...(timed ? { ratePerMin, maxMinutes } : q ? q : { points }), reviewed:false,
       suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
     toast('המשימה נוספה');
-    $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); toggleSuggest(false);
+    $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); fillQty('sg'); toggleSuggest(false);
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function markSeen(t){ try{ await updateDoc(doc(db,'tasks',t.id), { reviewed:true }); }catch(e){ fail(e); } }
@@ -446,7 +461,7 @@ function renderProfileSheet(){
     own ? notifPanel(m.id) : null,
     h('section', { class:'panel' }, h('h2', null, 'מה נעשה לאחרונה'),
       st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
-        return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
+        return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
           h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p)); }))
       : h('p', { class:'sub' }, 'עוד לא בוצעו משימות.'))].filter(Boolean));
 }
@@ -594,7 +609,7 @@ function renderToday(){
   const D = $('doneList'); D.replaceChildren();
   done.forEach(l => D.append(h('div', { class:'done' + (counted(l) ? '' : ' waiting') },
     h('span', { class:'dot', style:`background:${mColor(l.memberId)}` }),
-    h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '')),
+    h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '') + (l.count ? ` · ${l.count} יח׳` : '')),
     counted(l) ? h('span', { class:'num gold' }, `+${l.points}`) : h('span', { class:'wait-tag' }, 'מחכה לאישור'),
     h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול'))));
 }
@@ -672,9 +687,9 @@ function taskCard(t, canAct){
   const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
   const whoRunning = who && running.some(tm => tm.memberId === who);
   const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
-  const act = timed ? (m => startTimer(t, m)) : (m => complete(t, m));
+  const act = timed ? (m => startTimer(t, m)) : t.qtyPer ? (m => askQty(t, m)) : (m => complete(t, m));
   const go = () => { if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } };
-  const meta = [h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), timed ? `${t.ratePerMin} נקודות לדקה, עד ${t.maxMinutes} דק׳` : `${t.points} נקודות`)];
+  const meta = [h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), timed ? `${t.ratePerMin} נקודות לדקה, עד ${t.maxMinutes} דק׳` : t.qtyPer ? qtyText(t) : `${t.points} נקודות`)];
   const sub = [assigneeLabel(t), recLabel(t)];
   if (t.check) sub.push('צריך אישור');
   if (t.pinned) sub.unshift('נעוצה');
@@ -703,6 +718,17 @@ function taskCard(t, canAct){
       h('button', { type:'button', class:'btn small', disabled:b, onclick:() => finishTimer(t, tm) }, b ? 'שומר…' : 'סיימתי'),
       h('button', { type:'button', class:'btn ghost small', disabled:b, onclick:() => cancelTimer(tm) }, 'ביטול')));
   });
+  if (canAct && S.qtyAsk?.id === t.id){
+    const qa = S.qtyAsk; const out = h('span', { class:'qty-pts' });
+    const upd = () => { const n = Math.round(Number(qa.val)) || 0; out.textContent = n >= t.qtyPer ? `= ${qtyPoints(t, Math.min(n, t.qtyMax))} נקודות` : `לפחות ${t.qtyPer}`; };
+    const inp = h('input', { type:'number', id:'qtyIn', min:String(t.qtyPer), max:String(t.qtyMax), inputmode:'numeric', value: qa.val, 'aria-label':`כמה ${t.qtyUnit}` });
+    inp.addEventListener('input', () => { qa.val = inp.value; upd(); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') completeQty(t, qa.m, qa.val); });
+    upd();
+    card.append(h('div', { class:'qtyask' }, h('span', { class:'lbl' }, `כמה ${t.qtyUnit}${S.members.length > 1 ? ` (${mName(qa.m)})` : ''}?`), inp, out,
+      h('button', { type:'button', class:'btn small', disabled: S.busy.has(t.id), onclick:() => completeQty(t, qa.m, qa.val) }, 'שמירה'),
+      h('button', { type:'button', class:'btn ghost small', onclick:() => { S.qtyAsk = null; render(); } }, 'ביטול')));
+  }
   if (canAct && S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
     S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
       h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
@@ -791,7 +817,7 @@ function renderReview(){
   const by = S.isAdmin ? {} : { approvedBy: S.boundId };
   wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
     R.append(h('div', { class:'arow wrap' },
-      h('div', { class:'t' }, h('strong', null, `${l.title} · ${mName(l.memberId)}`), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
+      h('div', { class:'t' }, h('strong', null, `${l.title} · ${mName(l.memberId)}`), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
       h('span', { class:'num gold' }, `+${l.points}`),
       h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); toast(`אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
       armedBtn('rv' + l.id, 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); toast('סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
@@ -805,14 +831,15 @@ const PRESETS = [
   ['לתלות כביסה', 15, [1,4]], ['לקפל ולסדר כביסה', 15, [1,4]], ['לשאוב אבק', 20, [5]], ['לשטוף רצפה', 25, [5]],
   ['לנקות שירותים', 25, [5]], ['להשקות עציצים', 5, [1,4]], ['להאכיל את הכלב', 5, [0,1,2,3,4,5,6]], ['לצחצח שיניים בוקר וערב', 5, [0,1,2,3,4,5,6]],
   ['להכין שיעורי בית', 15, [0,1,2,3,4]], ['לסדר את התיק למחר', 5, [0,1,2,3,4]], ['להחליף מצעים', 20, [5]], ['לעזור בקניות', 15, 'once'],
+  ['לסדר גרביים בזוגות', { per: 5, unit: 'גרביים', pts: 3, max: 60 }, [0,1,2,3,4,5,6]], ['לאסוף צעצועים', { per: 10, unit: 'צעצועים', pts: 2, max: 100 }, [0,1,2,3,4,5,6]],
   ['לקרוא ספר', { rate: 1, max: 30 }, [0,1,2,3,4,5,6]], ['להתאמן או לשחק בחוץ', { rate: 1, max: 45 }, [0,1,2,3,4,5,6]]];
 function renderPresets(){
   for (const id of ['presets','presetsFam']){
   const box = $(id); if (box.dataset.built) continue; box.dataset.built = '1';
   PRESETS.forEach(([title, pts, days]) => {
-    const timed = typeof pts === 'object';
+    const timed = typeof pts === 'object' && !pts.per;
     box.append(h('button', { type:'button', class:'chip preset', 'data-title':title, onclick: () => addPreset(title, pts, days) },
-      taskIcon({ title }) + ' ' + title, h('span', { class:'preset-pts' }, timed ? `${pts.rate}/דק׳` : `+${pts}`)));
+      taskIcon({ title }) + ' ' + title, h('span', { class:'preset-pts' }, pts.per ? `${pts.pts}/${pts.per}` : timed ? `${pts.rate}/דק׳` : `+${pts}`)));
   });
   }
   markPresets();
@@ -820,9 +847,9 @@ function renderPresets(){
 function markPresets(){ const have = new Set(S.tasks.map(t => t.title)); document.querySelectorAll('.preset').forEach(b => b.classList.toggle('added', have.has(b.dataset.title))); }
 async function addPreset(title, pts, days){
   if (S.tasks.some(t => t.title === title)){ toast('המשימה הזו כבר קיימת'); return; }
-  const timed = typeof pts === 'object'; const once = days === 'once';
+  const timed = typeof pts === 'object' && !pts.per; const once = days === 'once';
   const data = { title, assignee:'all', type: once ? 'once' : 'repeat', days: once ? [] : days, timed, check:false,
-    ...(timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now(),
+    ...(pts.per ? { points: pts.pts, qtyPer: pts.per, qtyUnit: pts.unit, qtyMax: pts.max } : timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now(),
     ...(S.isAdmin ? {} : { reviewed:false, suggestedBy: S.boundId }) };
   if (!S.isAdmin && !S.boundId){ toast('קודם נכנסים עם הקוד שלך'); return; }
   try{ await addDoc(collection(db,'tasks'), data); toast(`נוספה: ${title}. אפשר לשנות אותה ב"כל המשימות".`); }catch(e){ fail(e); }
@@ -945,7 +972,7 @@ function renderAdminLists(){
   if (!hist.length) H.append(h('p', { class:'sub' }, 'כאן יופיע כל מה שבוצע וכל שינוי נקודות.'));
   hist.forEach(l => { const p = (l.kind === 'redeem' ? -1 : 1) * (Number(l.points) || 0); const [, mo, da] = (l.day || '--').split('-');
     H.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.minutes ? ` (${l.minutes} דק׳)` : ''}`)),
+      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
       h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p),
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
@@ -953,7 +980,7 @@ function editTask(t){
   S.editTask = t.id; $('tfHead').textContent = t.pending ? `קביעת ניקוד: ${t.title}` : 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
   $('tf-title').value = t.title; $('tf-assignee').dataset.want = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
   $('tf-rot').dataset.want = JSON.stringify(t.rotation || []); $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-check').checked = !!t.check; syncSelects();
-  setMode(isTimed(t) ? 'timed' : 'fixed');
+  setMode(modeOf(t)); fillQty('tf', t);
   $('tf-points').value = t.points ?? 10; $('tf-rate').value = t.ratePerMin ?? 1; $('tf-max').value = t.maxMinutes ?? 30; updateHint();
   $(t.type === 'once' ? 'tf-type-once' : 'tf-type-repeat').checked = true; $('tf-dayswrap').hidden = t.type === 'once';
   DAYS.forEach((_, i) => $('tf-day-'+i).checked = (t.days || []).includes(i) || t.type === 'once');
@@ -961,11 +988,25 @@ function editTask(t){
 }
 function resetTaskForm(){
   S.editTask = null; $('tfHead').textContent = 'משימה חדשה'; $('tf-save').textContent = 'הוספת משימה'; $('tf-cancel').hidden = true;
-  $('tf-title').value = ''; $('tf-assignee').dataset.want = 'all'; $('tf-check').checked = false; $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); updateHint();
+  $('tf-title').value = ''; $('tf-assignee').dataset.want = 'all'; $('tf-check').checked = false; $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); fillQty('tf'); updateHint();
   $('tf-type-repeat').checked = true; $('tf-dayswrap').hidden = false;
   DAYS.forEach((_, i) => $('tf-day-'+i).checked = true);
 }
-function setMode(m){ $(m === 'timed' ? 'tf-mode-timed' : 'tf-mode-fixed').checked = true; $('tf-fixed-row').hidden = m === 'timed'; $('tf-timed-row').hidden = m !== 'timed'; $('tf-timed-hint').hidden = m !== 'timed'; }
+function setMode(m){ $('tf-mode-' + m).checked = true; $('tf-fixed-row').hidden = m !== 'fixed'; $('tf-timed-row').hidden = m !== 'timed'; $('tf-qty-row').hidden = m !== 'qty'; $('tf-timed-hint').hidden = m !== 'timed'; }
+const modeOf = t => isTimed(t) ? 'timed' : (t.qtyPer ? 'qty' : 'fixed');
+const radioMode = p => $(p + '-mode-timed').checked ? 'timed' : $(p + '-mode-qty').checked ? 'qty' : 'fixed';
+function fillQty(p, t){ $(p+'-qpts').value = t?.qtyPer ? t.points : 3; $(p+'-qper').value = t?.qtyPer ?? 5; $(p+'-qunit').value = t?.qtyUnit ?? ''; $(p+'-qmax').value = t?.qtyMax ?? 50; }
+// Reads the quantity fields; returns { points, qtyPer, qtyUnit, qtyMax } or a Hebrew error string.
+function readQty(p){
+  const points = Math.round(Number($(p+'-qpts').value)), qtyPer = Math.round(Number($(p+'-qper').value)), qtyMax = Math.round(Number($(p+'-qmax').value)), qtyUnit = $(p+'-qunit').value.trim();
+  if (!(points >= 0 && points <= 1000)) return 'נקודות: מספר בין 0 ל-1000';
+  if (!(qtyPer >= 1 && qtyPer <= 1000)) return '"על כל": מספר בין 1 ל-1000';
+  if (!qtyUnit) return 'כתבו מה סופרים, למשל גרבים';
+  if (!(qtyMax >= qtyPer && qtyMax <= 10000)) return 'תקרה ליום: לפחות כמו "על כל", ועד 10000';
+  return { points, qtyPer, qtyUnit, qtyMax };
+}
+const qtyText = t => `${t.points} נקודות על כל ${t.qtyPer} ${t.qtyUnit}`;
+const qtyPoints = (t, n) => Math.floor(n / t.qtyPer) * (Number(t.points) || 0);
 function updateHint(){
   const r = Math.round(Number($('tf-rate').value)) || 0, mx = Math.round(Number($('tf-max').value)) || 0;
   const ils = shekelsFor(r * mx);
@@ -979,16 +1020,17 @@ async function saveTask(){
   const type = $('tf-type-once').checked ? 'once' : 'repeat';
   const days = type === 'repeat' ? DAYS.map((_, i) => i).filter(i => $('tf-day-'+i).checked) : [];
   if (!title){ toast('כתבו מה צריך לעשות'); $('tf-title').focus(); return; }
-  if (!timed && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
+  if (!timed && radioMode('tf') === 'fixed' && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
   if (timed && (!(ratePerMin >= 1) || ratePerMin > 100)){ toast('נקודות לדקה: מספר בין 1 ל-100'); return; }
   if (timed && (!(maxMinutes >= 1) || maxMinutes > 240)){ toast('תקרה: בין 1 ל-240 דקות'); return; }
   if (type === 'repeat' && !days.length){ toast('בחרו לפחות יום אחד'); return; }
   const assignee = $('tf-assignee').value || 'all';
   const rotation = assignee === 'rotate' ? [...$('tf-rot').querySelectorAll('input:checked')].map(i => i.value) : [];
   if (assignee === 'rotate' && rotation.length < 2){ toast('בתורנות צריך לפחות שני בני משפחה'); return; }
+  const q = radioMode('tf') === 'qty' ? readQty('tf') : null; if (typeof q === 'string'){ toast(q); return; }
   const data = { title, assignee, type, days, timed, check: $('tf-check').checked,
     ...(assignee === 'rotate' ? { rotation } : {}),
-    ...(timed ? { ratePerMin, maxMinutes } : { points }) };
+    ...(timed ? { ratePerMin, maxMinutes } : q ? q : { points }) };
   const btn = $('tf-save'); btn.disabled = true;
   try{
     if (S.editTask){
@@ -1089,8 +1131,8 @@ function buildStatic(){
   $('sg-toggle').addEventListener('click', () => toggleSuggest(true));
   $('sg-cancel').addEventListener('click', () => toggleSuggest(false));
   $('sg-save').addEventListener('click', saveSuggestion);
-  document.querySelectorAll('input[name=sg-mode]').forEach(r => r.addEventListener('change', () => setSgMode($('sg-mode-timed').checked ? 'timed' : 'fixed')));
-  document.querySelectorAll('input[name=tf-mode]').forEach(r => r.addEventListener('change', () => setMode($('tf-mode-timed').checked ? 'timed' : 'fixed')));
+  document.querySelectorAll('input[name=sg-mode]').forEach(r => r.addEventListener('change', () => setSgMode(radioMode('sg'))));
+  document.querySelectorAll('input[name=tf-mode]').forEach(r => r.addEventListener('change', () => setMode(radioMode('tf'))));
   ['tf-rate','tf-max'].forEach(id => $(id).addEventListener('input', updateHint));
   updateHint();
 }

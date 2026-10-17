@@ -38,20 +38,30 @@ service cloud.firestore {
     }
 
     // משימה שמסומנת "צריך אישור": הרישום חייב להתחיל כלא מאושר. אחרת אסור לשלוח שדה אישור.
+    function validQty(d) {
+      return (!('qtyPer' in d) && !('qtyUnit' in d) && !('qtyMax' in d))
+        || (d.timed == false && d.qtyPer is int && d.qtyPer >= 1 && d.qtyPer <= 1000
+            && d.qtyMax is int && d.qtyMax >= d.qtyPer && d.qtyMax <= 10000
+            && d.qtyUnit is string && d.qtyUnit.size() > 0 && d.qtyUnit.size() <= 20);
+    }
+
     function approvalOk(d) {
       return (taskDoc(d.taskId).data.get('check', false) == true && d.get('approved', true) == false)
         || (taskDoc(d.taskId).data.get('check', false) != true && !('approved' in d));
     }
 
     function validFixed(d) {
-      return d.keys().hasOnly(['kind','taskId','title','memberId','points','approved','day','at'])
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','count','approved','day','at'])
         && approvalOk(d)
         && d.kind == 'task'
         && exists(/databases/$(database)/documents/tasks/$(d.taskId))
         && taskDoc(d.taskId).data.get('timed', false) == false
         && taskDoc(d.taskId).data.get('pending', false) == false
         && memberExists(d.memberId)
-        && d.points == taskDoc(d.taskId).data.points
+        && ((!('qtyPer' in taskDoc(d.taskId).data) && !('count' in d) && d.points == taskDoc(d.taskId).data.points)
+          || ('qtyPer' in taskDoc(d.taskId).data && d.count is int
+              && d.count >= taskDoc(d.taskId).data.qtyPer && d.count <= taskDoc(d.taskId).data.qtyMax
+              && d.points * taskDoc(d.taskId).data.qtyPer == (d.count - d.count % taskDoc(d.taskId).data.qtyPer) * taskDoc(d.taskId).data.points))
         && freshTime(d);
     }
 
@@ -86,8 +96,9 @@ service cloud.firestore {
     }
 
     function validNewTask(d) {
-      return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','check','rotation','reviewed','suggestedBy','createdAt'])
+      return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','reviewed','suggestedBy','createdAt'])
         && d.reviewed == false
+        && validQty(d)
         && (!('check' in d) || d.check is bool)
         && (d.assignee != 'rotate' || (d.rotation is list && d.rotation.size() >= 2 && d.rotation.size() <= 20))
         && (!('rotation' in d) || d.assignee == 'rotate')
@@ -105,7 +116,8 @@ service cloud.firestore {
     // קודי כניסה: רק המנהל רואה ומשנה.
     // קוד המנהל עצמו: רק מנהל רואה ומשנה. ההגדרה הראשונה נעשית כשנכנסים עם גוגל.
     function validTaskShape(d) {
-      return (!('check' in d) || d.check is bool)
+      return validQty(d)
+        && (!('check' in d) || d.check is bool)
         && (d.assignee != 'rotate' || (d.rotation is list && d.rotation.size() >= 2 && d.rotation.size() <= 20))
         && (!('rotation' in d) || d.assignee == 'rotate')
         && d.title is string && d.title.size() > 0 && d.title.size() <= 80
@@ -194,7 +206,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         resource.data.get('pinned', false) == false
         && resource.data.get('pending', false) == false
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','check','rotation','reviewed','editedBy'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','reviewed','editedBy'])
         && request.resource.data.reviewed == false
         && validTaskShape(request.resource.data)
         && request.resource.data.editedBy is string && boundTo(request.resource.data.editedBy)

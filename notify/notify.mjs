@@ -71,7 +71,7 @@ for (const [taskId, list] of byTask) {
 for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   const turn = whoseTurn(t);
   const to = turn !== 'all' ? [turn] : everyone.filter(id => id !== t.suggestedBy);
-  const pts = t.timed ? `${t.ratePerMin} נקודות לדקה` : `${t.points} נקודות`;
+  const pts = t.timed ? `${t.ratePerMin} נקודות לדקה` : t.qtyPer ? `${t.points} נקודות על כל ${t.qtyPer} ${t.qtyUnit}` : `${t.points} נקודות`;
   outbox.push({ to: to.filter(id => id !== t.suggestedBy), title: 'משימה חדשה', body: `${t.title} · ${pts}`, tag: `task-${t.id}` });
 }
 
