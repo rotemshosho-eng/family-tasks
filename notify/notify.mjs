@@ -42,9 +42,10 @@ const tokensFor = ids => tokens.filter(t => ids.includes(t.memberId)).map(t => t
 const everyone = members.map(m => m.id);
 const outbox = []; // { to: [memberIds], title, body, tag }
 const allLogs = await all('logs');
-const counted = l => l.approved !== false;
+const counted = l => l.approved === undefined || l.approved === true;
+const rejected = l => l.approved === 'rejected';
 // Rotation: same rule as the app; the turn moves on each time the task is done.
-const doneCount = t => allLogs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed')).length;
+const doneCount = t => allLogs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed') && !rejected(l)).length;
 function whoseTurn(t) {
   if (t.assignee !== 'rotate') return t.assignee || 'all';
   const r = (t.rotation || []).filter(id => members.some(m => m.id === id));
@@ -76,9 +77,10 @@ for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
 
 // 2b. points spent on a reward since the last run -> whoever is marked as admin
 const admins = members.filter(m => m.admin === true).map(m => m.id);
-if (admins.length) {
+{
   const fresh = allLogs.filter(l => typeof l.at === 'number' && l.at > since);
-  for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: admins.filter(id => id !== l.memberId), title: 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
+  const approvers = members.filter(m => m.admin === true || m.role === 'admin' || m.role === 'parent').map(m => m.id);
+  for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
   const spent = fresh.filter(l => l.kind === 'redeem');
   for (const l of spent) outbox.push({ to: admins.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
 }
@@ -88,8 +90,8 @@ if (hour >= REMIND_HOUR && state.remindedDay !== today) {
   const logs = allLogs.filter(l => l.day === today);
   const isDue = t => {
     if (t.pending) return false;
-    if (t.type === 'once') return !allLogs.some(l => l.taskId === t.id);
-    return (t.days || []).includes(dow) && !logs.some(l => l.taskId === t.id);
+    if (t.type === 'once') return !allLogs.some(l => l.taskId === t.id && !rejected(l));
+    return (t.days || []).includes(dow) && !logs.some(l => l.taskId === t.id && !rejected(l));
   };
   for (const m of members) {
     const left = tasks.filter(t => { if (!isDue(t)) return false; const w = whoseTurn(t); return w === m.id || w === 'all'; });

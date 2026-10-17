@@ -52,8 +52,12 @@ const mName = id => id === 'all' ? 'כולם' : (member(id)?.name || 'לא מש�
 const mColor = id => member(id)?.color || '#8A9690';
 const isTimed = t => t.timed === true;
 // A log counts toward points only once approved (tasks marked "needs check" start unapproved).
-const counted = l => l.approved !== false;
-const doneCount = t => S.logs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed')).length;
+const counted = l => l.approved === undefined || l.approved === true;
+const waiting = l => l.approved === false;
+const rejected = l => l.approved === 'rejected';
+// Approvers: the admin, or a parent signed in on this device (not for their own tasks).
+const canApprove = l => S.isAdmin || (!!S.boundId && isParentMember(S.boundId) && l.memberId !== S.boundId);
+const doneCount = t => S.logs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed') && !rejected(l)).length;
 // Rotation: the turn moves to the next person each time the task is done.
 function whoseTurn(t){
   if (t.assignee !== 'rotate') return t.assignee || 'all';
@@ -80,8 +84,8 @@ const clock = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 
 function recLabel(t){ if (t.type === 'once') return 'חד-פעמית'; const d = (t.days || []).slice().sort(); return d.length === 7 ? 'כל יום' : 'ימים ' + d.map(i => DAYS[i]).join(' '); }
 function isDue(t){
   if (t.pending) return false;
-  if (t.type === 'once') return !S.logs.some(l => l.taskId === t.id);
-  return (t.days || []).includes(dow()) && !S.logs.some(l => l.taskId === t.id && l.day === today());
+  if (t.type === 'once') return !S.logs.some(l => l.taskId === t.id && !rejected(l));
+  return (t.days || []).includes(dow()) && !S.logs.some(l => l.taskId === t.id && l.day === today() && !rejected(l));
 }
 function arm(key, btn, fn){
   if (S.armed === key){ S.armed = null; fn(); return; }
@@ -161,12 +165,15 @@ function render(){
   $('who').hidden = !S.isAdmin;
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
-  const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length + S.logs.filter(l => !counted(l)).length : 0);
+  const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
+  { const nRev = S.logs.filter(l => waiting(l) && canApprove(l)).length; const tb = $('tabs').querySelector('[data-tab="tasks"]');
+    tb.lastChild.textContent = nRev ? `משימות (${nRev})` : 'משימות';
+    const kid = !S.isAdmin && S.boundId && roleOf(S.boundId) === 'child'; $('sg-checkwrap').hidden = !!kid; $('sg-kidnote').hidden = !kid; }
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderRewards(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
@@ -328,7 +335,8 @@ async function saveSuggestion(){
   if (assignee === 'rotate' && rotation.length < 2){ toast('בתורנות צריך לפחות שני בני משפחה'); return; }
   const btn = $('sg-save'); btn.disabled = true;
   try{
-    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked,
+    const kid = !S.isAdmin && S.boundId && roleOf(S.boundId) === 'child';
+    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: kid ? true : $('sg-check').checked,
       ...(assignee === 'rotate' ? { rotation } : {}),
       ...(timed ? { ratePerMin, maxMinutes } : { points }), reviewed:false,
       suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
@@ -543,7 +551,7 @@ function renderToday(){
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
   due.forEach(t => L.append(taskCard(t, true)));
   const td = today();
-  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && l.day === td && (S.me === 'all' || l.memberId === S.me)).sort((a,b) => b.at - a.at);
+  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td && (S.me === 'all' || l.memberId === S.me)).sort((a,b) => b.at - a.at);
   $('doneSec').hidden = !done.length;
   $('doneCount').textContent = done.length ? `${done.filter(counted).reduce((s,l) => s + (Number(l.points)||0), 0)} נקודות` : '';
   const D = $('doneList'); D.replaceChildren();
@@ -726,6 +734,21 @@ async function saveUse(){
   btn.disabled = false;
 }
 
+
+/* ---------- approvals (admin and parents) ---------- */
+function renderReview(){
+  const R = $('reviewList'); R.replaceChildren();
+  const wait = S.logs.filter(l => waiting(l) && canApprove(l)).sort((a,b) => a.at - b.at);
+  $('reviewPanel').hidden = !wait.length; $('reviewCount').textContent = wait.length ? String(wait.length) : '';
+  const by = S.isAdmin ? {} : { approvedBy: S.boundId };
+  wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
+    R.append(h('div', { class:'arow wrap' },
+      h('div', { class:'t' }, h('strong', null, `${l.title} · ${mName(l.memberId)}`), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
+      h('span', { class:'num gold' }, `+${l.points}`),
+      h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); toast(`אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
+      armedBtn('rv' + l.id, 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); toast('סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
+}
+
 /* ---------- admin ---------- */
 function syncSelects(){
   const fill = (sel, withAll) => { const v = sel.value; sel.replaceChildren();
@@ -748,17 +771,6 @@ function syncSelects(){
   if (!had && S.me !== 'all' && member(S.me)) sg.value = S.me;
 }
 function renderAdminLists(){
-  { // logs waiting for approval
-    const R = $('reviewList'); R.replaceChildren();
-    const wait = S.logs.filter(l => !counted(l)).sort((a,b) => a.at - b.at);
-    $('reviewPanel').hidden = !wait.length; $('reviewCount').textContent = wait.length ? String(wait.length) : '';
-    wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
-      R.append(h('div', { class:'arow' },
-        h('div', { class:'t' }, h('strong', null, `${l.title} · ${mName(l.memberId)}`), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}`)),
-        h('span', { class:'num gold' }, `+${l.points}`),
-        h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true }); toast(`אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
-        armedBtn('rv' + l.id, 'לא בוצע', () => removeLog(l)))); });
-  }
   const A = $('atList'); A.replaceChildren(); $('atCount').textContent = S.tasks.length ? String(S.tasks.length) : '';
   if (!S.tasks.length) A.append(h('p', { class:'sub' }, 'אין משימות עדיין. הוסיפו את הראשונה למעלה.'));
   const isNew = t => t.pending || t.reviewed === false;

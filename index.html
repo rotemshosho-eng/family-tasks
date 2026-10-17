@@ -98,6 +98,12 @@
 
   <!-- ALL TASKS -->
   <main id="view-tasks" class="section stack" hidden>
+    <section class="panel" id="reviewPanel" hidden>
+      <div class="section-head"><h2>מחכה לאישור שלך</h2><span class="count" id="reviewCount"></span></div>
+      <p class="sub">משימות שסומנו כבוצעו וצריכות בדיקה של מנהל או הורה. הנקודות נכנסות רק אחרי אישור.</p>
+      <div id="reviewList"></div>
+    </section>
+
     <section class="section" id="pendSec" hidden>
       <div class="section-head"><h2>מחכות לניקוד</h2><span class="count" id="pendCount"></span></div>
       <div class="list" id="pendList"></div>
@@ -110,7 +116,8 @@
         <div class="field"><label for="sg-assignee">של מי</label><select id="sg-assignee"></select></div>
         <div class="field" id="sg-rotwrap" hidden><span class="lab">מי בתורנות (לפי הסדר)</span><div class="seg" id="sg-rot"></div>
           <p class="sub">כל פעם שמישהו מסיים, התור עובר לבא אחריו.</p></div>
-        <label class="check"><input type="checkbox" id="sg-check"> צריך אישור של מנהל לפני שהנקודות נכנסות</label>
+        <label class="check" id="sg-checkwrap"><input type="checkbox" id="sg-check"> צריך אישור של מנהל או הורה לפני שהנקודות נכנסות</label>
+        <p class="sub" id="sg-kidnote" hidden>משימה שילד מוסיף תמיד צריכה אישור של מנהל או הורה לפני שהנקודות נכנסות.</p>
         <div class="field"><span class="lab">סוג</span>
           <div class="seg">
             <label><input type="radio" name="sg-type" id="sg-type-once" value="once" checked> חד-פעמית</label>
@@ -187,12 +194,6 @@
 
   <!-- ADMIN -->
   <main id="view-admin" class="section stack" hidden>
-    <section class="panel" id="reviewPanel" hidden>
-      <div class="section-head"><h2>מחכה לאישור שלך</h2><span class="count" id="reviewCount"></span></div>
-      <p class="sub">משימות שסומנו כבוצעו וצריכות בדיקה. הנקודות נכנסות רק אחרי אישור.</p>
-      <div id="reviewList"></div>
-    </section>
-
     <section class="panel" id="joinsPanel" hidden>
       <div class="section-head"><h2>מחכים לאישור</h2><span class="count" id="joinsCount"></span></div>
       <p class="sub">אנשים שנרשמו עם חשבון גוגל ורוצים להצטרף ללוח.</p>

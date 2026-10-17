@@ -97,6 +97,8 @@ service cloud.firestore {
         && d.days is list && d.days.size() <= 7
         && d.createdAt is int
         && d.suggestedBy is string && boundTo(d.suggestedBy)
+        // משימה שילד מוסיף תמיד צריכה אישור
+        && (get(/databases/$(database)/documents/members/$(d.suggestedBy)).data.get('role', 'child') != 'child' || d.get('check', false) == true)
         && ((d.timed == true && d.ratePerMin is int && d.ratePerMin >= 1 && d.ratePerMin <= 100
               && d.maxMinutes is int && d.maxMinutes >= 1 && d.maxMinutes <= 240)
          || (d.timed == false && d.points is int && d.points >= 0 && d.points <= 1000));
@@ -234,7 +236,15 @@ service cloud.firestore {
         && request.time.toMillis() - resource.data.at < 43200000
         && boundTo(resource.data.memberId)
       );
-      allow update: if isAdmin();
+      // אישור או דחייה: המנהל, או הורה (לא על משימה של עצמו) שמשנה רק את שדה האישור.
+      allow update: if isAdmin() || (
+        resource.data.get('approved', true) == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved','approvedBy'])
+        && request.resource.data.approved in [true, 'rejected']
+        && request.resource.data.approvedBy is string
+        && request.resource.data.approvedBy != resource.data.memberId
+        && boundTo(request.resource.data.approvedBy)
+        && get(/databases/$(database)/documents/members/$(request.resource.data.approvedBy)).data.get('role', '') == 'parent');
     }
   }
 }
