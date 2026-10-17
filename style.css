@@ -366,3 +366,13 @@ label.check input{width:18px;height:18px;accent-color:var(--good)}
 .goal-card.reached .progress-bar span{background:var(--good)}
 .done.waiting::before{content:"⏳";background:var(--coin);font-size:.75rem}
 .admin-tag.parent{background:var(--good-soft);color:var(--good)}
+
+/* royal gold for the admin */
+body.royal{background:linear-gradient(180deg,#FFF3D6 0%,#FFE7B0 45%,#F9D98A 100%) fixed;--bg:#FFF3D6;--sunk:#FBEACB}
+@media (prefers-color-scheme: dark){body.royal{background:linear-gradient(180deg,#2A2110 0%,#3A2C10 50%,#4A3610 100%) fixed;--bg:#2A2110;--surface:#33280F;--sunk:#3B2F14;--line:#5A4620}}
+body.royal .bottomnav{background:#FFF8E6;box-shadow:0 -1px 0 #F0D79A, 0 -6px 18px rgb(120 80 0 / .12)}
+@media (prefers-color-scheme: dark){body.royal .bottomnav{background:#2E2410;box-shadow:0 -1px 0 #5A4620}}
+body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135deg,#F6C350,#D99A12);color:#3A2400}
+.score.royal,.prof-hero.royal{background:linear-gradient(135deg,#F9D46B 0%,#E7A91E 55%,#C98A0C 100%);color:#3A2400;box-shadow:inset 0 -5px 0 rgb(0 0 0 / .12)}
+.score.royal .ava,.prof-hero.royal .prof-ava{background:rgb(255 255 255 / .45)!important}
+.score.royal .admin-tag,.prof-hero.royal .admin-tag{background:#3A2400;color:#FFD66B}

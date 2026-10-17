@@ -130,6 +130,8 @@ async function removeLog(l){ try{ await deleteDoc(doc(db,'logs',l.id)); toast('�
 
 /* ---------- render ---------- */
 function render(){
+  // The admin's own screen gets a gold background.
+  document.body.classList.toggle('royal', !!S.isAdmin || (!!S.boundId && isAdminMember(S.boundId)));
   const typing = document.activeElement && document.activeElement.id === 'chat-input';
   const d = new Date();
   $('dateline').textContent = `יום ${DAYS[d.getDay()]}׳, ${d.getDate()}.${d.getMonth()+1}`;
@@ -380,7 +382,7 @@ function renderProfileSheet(){
   const ils = v => shekelsFor(v) != null ? fmtILS(shekelsFor(v)) : null;
   const tile = (label, value, sub) => h('div', { class:'stat' }, h('span', { class:'stat-v' }, value), h('span', { class:'stat-l' }, label), sub ? h('span', { class:'stat-s' }, sub) : null);
   const body = $('profileBody'); body.replaceChildren(...[
-    h('div', { class:'prof-hero', style:`--m:${m.color}` },
+    h('div', { class:'prof-hero' + (isAdminMember(m.id) ? ' royal' : ''), style:`--m:${m.color}` },
       h('div', { class:'prof-ava' }, avatarOf(m.id)),
       h('div', { class:'prof-name-wrap' }, h('h2', { class:'prof-name' }, m.name), adminTag(m.id))),
     h('div', { class:'stats' },
@@ -516,7 +518,7 @@ function renderBoard(){
   const top = rows[0].wk;
   rows.forEach(r => { const lead = top > 0 && r.wk === top;
     const wkILS = shekelsFor(r.wk), totILS = shekelsFor(r.tot);
-    b.append(h('button', { type:'button', class:'score' + (lead ? ' lead' : ''), style:`--m:${r.m.color}`, 'aria-label':`הפרופיל של ${r.m.name}`, onclick:() => openProfile(r.m.id) },
+    b.append(h('button', { type:'button', class:'score' + (lead ? ' lead' : '') + (isAdminMember(r.m.id) ? ' royal' : ''), style:`--m:${r.m.color}`, 'aria-label':`הפרופיל של ${r.m.name}`, onclick:() => openProfile(r.m.id) },
       h('div', { class:'ava', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
       h('div', { class:'info' },
         lead ? h('span', { class:'crown' }, 'מוביל/ה השבוע') : null,
