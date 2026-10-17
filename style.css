@@ -463,3 +463,4 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .fab2{bottom:calc(140px + env(safe-area-inset-bottom));background:#39B980}
 #dnText{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);resize:vertical;letter-spacing:normal}
 #dnKinds{display:flex;flex-wrap:wrap;gap:6px}
+.seg.scope{align-self:flex-start;margin-bottom:8px}

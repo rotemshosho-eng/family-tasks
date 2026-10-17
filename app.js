@@ -77,7 +77,19 @@ function assigneeLabel(t){
   if (t.assignee === 'rotate') return w === 'all' ? 'תורנות' : `תורנות · התור של ${mName(w)}`;
   return w === 'all' ? 'מי שרוצה' : mName(w);
 }
-const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || w === S.me || w === 'all'; };
+// Parents can switch between their own tasks and the whole family's (the choice is remembered on the phone).
+const isParentNow = () => !S.isAdmin && !!S.boundId && isParentMember(S.boundId);
+const seeAll = () => isParentNow() && store.get('ft-seeall') !== '0';
+const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all'; };
+// May this phone press "done" on the task? Only for itself (or anyone, for the admin).
+const canDoTask = t => { if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === S.boundId; };
+function renderScope(){
+  const on = isParentNow();
+  document.querySelectorAll('[data-scope]').forEach((el, i) => { el.hidden = !on; el.replaceChildren(); if (!on) return;
+    const all = seeAll();
+    const mk = (v, label) => h('label', null, h('input', { type:'radio', name:'scope' + i, checked: (v === '1') === all, onchange:() => { store.set('ft-seeall', v); render(); } }), ' ' + label);
+    el.append(mk('0', 'רק שלי'), mk('1', 'כל המשפחה')); });
+}
 const pill = t => isTimed(t) ? `${t.ratePerMin} לדקה` : `+${t.points}`;
 const shekelsFor = p => { const m = S.money; if (!m || !(m.shekels > 0) || !(m.points > 0)) return null; return p * m.shekels / m.points; };
 const fmtILS = v => '₪' + (Math.round(v * 100) / 100).toLocaleString('he-IL', { maximumFractionDigits: 2 });
@@ -199,7 +211,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -619,15 +631,15 @@ function renderBoard(){
 function renderToday(){
   const mine = isMine;
   const due = S.tasks.filter(t => isDue(t) && mine(t) && !t.boss).sort((a,b) => (!!b.pinned - !!a.pinned) || (a.type === 'once') - (b.type === 'once') || ((b.points||0) - (a.points||0)));
-  $('todoTitle').textContent = S.me === 'all' ? 'מה נשאר להיום' : `מה נשאר ל${mName(S.me)} היום`;
+  $('todoTitle').textContent = S.me === 'all' || seeAll() ? 'מה נשאר להיום' : `מה נשאר ל${mName(S.me)} היום`;
   $('todoCount').textContent = due.length ? `${due.length} משימות` : '';
   const L = $('todo'); L.replaceChildren();
   if (!S.tasks.length) L.append(h('div', { class:'empty' }, h('strong', null, 'אין עדיין משימות'),
     S.isAdmin ? 'הוסיפו משימה בלשונית ניהול: שם, כמה נקודות, של מי, ובאילו ימים.' : 'עוד לא נוספו משימות ללוח.'));
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
-  due.forEach(t => L.append(taskCard(t, true)));
+  due.forEach(t => L.append(taskCard(t, canDoTask(t))));
   const td = today();
-  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td && (S.me === 'all' || l.memberId === S.me)).sort((a,b) => b.at - a.at);
+  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td && (S.me === 'all' || seeAll() || l.memberId === S.me)).sort((a,b) => b.at - a.at);
   $('doneSec').hidden = !done.length;
   $('doneCount').textContent = done.length ? `${done.filter(counted).reduce((s,l) => s + (Number(l.points)||0), 0)} נקודות` : '';
   const D = $('doneList'); D.replaceChildren();
@@ -636,7 +648,7 @@ function renderToday(){
     h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '') + (l.count ? ` · ${l.count} יח׳` : '')),
     counted(l) ? h('span', { class:'num gold' }, `+${l.points}`) : h('span', { class:'wait-tag' }, 'מחכה לאישור'),
     waiting(l) ? (photoThumb(l) || ((S.isAdmin || l.memberId === S.boundId) ? h('button', { type:'button', class:'btn ghost small', 'aria-label':'צירוף תמונה', onclick:() => attachPhoto(l) }, '📷') : null)) : null,
-    h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול'))));
+    (S.isAdmin || l.memberId === S.boundId) ? h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול') : null)));
 }
 
 
@@ -770,8 +782,8 @@ function renderAllTasks(){
   const dueNow = list.filter(isDue), later = list.filter(t => !isDue(t) && t.type !== 'once'), finished = list.filter(t => !isDue(t) && t.type === 'once');
   const group = (title, items, canAct) => { if (!items.length) return;
     L.append(h('h3', { class:'group-h' }, title));
-    items.sort((a,b) => (!!b.pinned - !!a.pinned) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => L.append(taskCard(t, canAct))); };
-  group('להיום', dueNow, true);
+    items.sort((a,b) => (!!b.pinned - !!a.pinned) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => L.append(taskCard(t, canAct === 'own' ? canDoTask(t) : canAct))); };
+  group('להיום', dueNow, 'own');
   group('בימים אחרים', later, false);
   group('חד-פעמיות שבוצעו', finished, false);
 }
