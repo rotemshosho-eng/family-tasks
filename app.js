@@ -163,7 +163,7 @@ function render(){
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length + S.logs.filter(l => !counted(l)).length : 0);
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  renderChatSheet(); renderProfileSheet();
+  renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderRewards(); renderPending(); renderAuth(); syncSelects();
@@ -846,11 +846,11 @@ async function saveTask(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 function editMember(m){
-  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
+  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-gender').value = m.gender === 'f' ? 'f' : 'm'; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
 function resetMemberForm(){
-  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
+  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-gender').value = 'm'; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
   const used = new Set(S.members.map(m => m.color)); const i = Math.max(0, COLORS.findIndex(c => !used.has(c))); $('mf-color-'+i).checked = true;
 }
 async function saveMember(){
@@ -862,8 +862,8 @@ async function saveMember(){
   try{
     const b = writeBatch(db);
     const ref = S.editMember ? doc(db,'members',S.editMember) : doc(collection(db,'members'));
-    const role = $('mf-role').value || 'child'; const admin = role === 'admin';
-    if (S.editMember) b.update(ref, { name, color, role, admin }); else b.set(ref, { name, color, role, admin, order: Date.now() });
+    const role = $('mf-role').value || 'child'; const admin = role === 'admin'; const gender = $('mf-gender').value === 'f' ? 'f' : 'm';
+    if (S.editMember) b.update(ref, { name, color, role, admin, gender }); else b.set(ref, { name, color, role, admin, gender, order: Date.now() });
     if (pin) b.set(doc(db,'pins',ref.id), { pin });
     await b.commit();
     toast(S.editMember ? 'נשמר' : `${name} נוסף/ה` + (pin ? '' : '. בלי קוד אי אפשר להיכנס בשמו/ה.'));
@@ -936,14 +936,41 @@ function buildStatic(){
 }
 
 /* ---------- opening splash ---------- */
-// Always crowns Rotem.
+// The admin sees "bow to King Rotem". A child sees "good morning, <name>" and a different
+// teasing nickname every time the app opens.
+const ROASTS = {
+  m: ['יא לוזר', 'ראש ביצה סרוחה', 'יא עצלן', 'מלך השינה עד הצהריים', 'יא חמוץ', 'אלוף העולם בלהתחמק ממשימות', 'יא שפן', 'נתין קטן של המלך',
+      'יא גרב מסריחה', 'יא פיתה בלי חומוס', 'שר החדר המבולגן', 'יא תפוח אדמה עם רגליים', 'יא לוזר מקצועי', 'נסיך הכלים המלוכלכים', 'יא חלזון', 'יא קוטלט שרוף'],
+  f: ['יא לוזרית', 'ראש ביצה סרוחה', 'יא עצלנית', 'מלכת השינה עד הצהריים', 'יא חמוצה', 'אלופת העולם בלהתחמק ממשימות', 'יא שפנפנה', 'נתינה קטנה של המלך',
+      'יא גרב מסריחה', 'יא פיתה בלי חומוס', 'שרת החדר המבולגן', 'יא תפוח אדמה עם רגליים', 'יא לוזרית מקצועית', 'נסיכת הכלים המלוכלכים', 'יא חלזונית', 'יא קציצה שרופה'] };
+function pickRoast(g){
+  const list = ROASTS[g === 'f' ? 'f' : 'm'];
+  let last = -1; try{ last = Number(localStorage.getItem('ft-roast')); }catch(e){}
+  let i = Math.floor(Math.random() * list.length); if (i === last) i = (i + 1) % list.length;
+  try{ localStorage.setItem('ft-roast', String(i)); }catch(e){}
+  return list[i];
+}
+const splashState = { gone: false, close: null, personalized: false, timer: null };
+function updateSplash(){
+  if (splashState.gone || splashState.personalized) return;
+  const id = S.boundId; if (!id || S.isAdmin) return;
+  const m = member(id); if (!m || roleOf(id) !== 'child') return;
+  splashState.personalized = true;
+  $('splashKicker').textContent = 'הודעה מהמלך רותם 👑';
+  $('splashTitle').textContent = `${greeting()}, ${m.name}`;
+  const r = $('splashRoast'); r.textContent = `${greeting()} ${m.name}, ${pickRoast(m.gender)}`; r.hidden = false;
+  clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, 3200); // give the new text time on screen
+}
 (function splash(){
   const el = $('splash'); if (!el) return;
   el.hidden = false;
-  let gone = false;
-  const close = () => { if (gone) return; gone = true; el.classList.add('out'); setTimeout(() => { el.hidden = true; }, 450); };
-  el.addEventListener('click', close);
-  setTimeout(close, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1800 : 3200);
+  splashState.close = () => { if (splashState.gone) return; splashState.gone = true; el.classList.add('out'); setTimeout(() => { el.hidden = true; }, 450); };
+  el.addEventListener('click', () => splashState.close());
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // wait (up to 6s) until we know who is signed in, so a child sees the personal line
+  const start = Date.now();
+  const tryClose = () => { if (splashState.personalized) return; if (S.adminChecked && S.bindLoaded || Date.now() - start > 6000) splashState.close(); else splashState.timer = setTimeout(tryClose, 300); };
+  splashState.timer = setTimeout(tryClose, reduce ? 1800 : 3200);
 })();
 
 /* ---------- boot ---------- */
