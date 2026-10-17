@@ -557,6 +557,8 @@ function renderHero(bound){
   const who = bound || (S.me !== 'all' ? S.me : null);
   const m = who ? member(who) : null;
   $('appTitle').textContent = m ? `${greeting()}, ${m.name}!` : `${greeting()}!`;
+  const hr = $('heroRoast'); const showRoast = !!m && !S.isAdmin && roleOf(m.id) === 'child';
+  hr.hidden = !showRoast; if (showRoast) hr.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`;
   const btn = $('heroMe'); btn.hidden = !m;
   if (m){ $('heroAva').textContent = avatarOf(m.id); $('heroAva').style.background = m.color; btn.onclick = () => openProfile(m.id); }
 }
@@ -943,6 +945,8 @@ const ROASTS = {
       'יא גרב מסריחה', 'יא פיתה בלי חומוס', 'שר החדר המבולגן', 'יא תפוח אדמה עם רגליים', 'יא לוזר מקצועי', 'נסיך הכלים המלוכלכים', 'יא חלזון', 'יא קוטלט שרוף'],
   f: ['יא לוזרית', 'ראש ביצה סרוחה', 'יא עצלנית', 'מלכת השינה עד הצהריים', 'יא חמוצה', 'אלופת העולם בלהתחמק ממשימות', 'יא שפנפנה', 'נתינה קטנה של המלך',
       'יא גרב מסריחה', 'יא פיתה בלי חומוס', 'שרת החדר המבולגן', 'יא תפוח אדמה עם רגליים', 'יא לוזרית מקצועית', 'נסיכת הכלים המלוכלכים', 'יא חלזונית', 'יא קציצה שרופה'] };
+const roastFor = {};
+function roastOf(m){ return roastFor[m.id] || (roastFor[m.id] = pickRoast(m.gender)); }
 function pickRoast(g){
   const list = ROASTS[g === 'f' ? 'f' : 'm'];
   let last = -1; try{ last = Number(localStorage.getItem('ft-roast')); }catch(e){}
@@ -958,7 +962,7 @@ function updateSplash(){
   splashState.personalized = true;
   $('splashKicker').textContent = 'הודעה מהמלך רותם 👑';
   $('splashTitle').textContent = `${greeting()}, ${m.name}`;
-  const r = $('splashRoast'); r.textContent = `${greeting()} ${m.name}, ${pickRoast(m.gender)}`; r.hidden = false;
+  const r = $('splashRoast'); r.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`; r.hidden = false;
   clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, 3200); // give the new text time on screen
 }
 (function splash(){
