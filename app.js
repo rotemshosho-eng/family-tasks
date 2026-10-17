@@ -362,7 +362,7 @@ function canEditTask(t){
 function openTaskEdit(t){
   if (S.isAdmin){ S.tab = 'admin'; render(); editTask(t); return; }
   S.editSg = t.id; S.tab = 'tasks'; render();
-  $('sgHead').textContent = 'עריכת משימה'; $('sg-save').textContent = 'שמירת שינויים';
+  $('sgHead').textContent = 'עריכת משימה'; $('sgPresets').hidden = true; $('sg-save').textContent = 'שמירת שינויים';
   $('sg-title').value = t.title;
   const sel = $('sg-assignee'); sel.value = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
   $('sg-rot').querySelectorAll('input').forEach(i => i.checked = (t.rotation || []).includes(i.value)); $('sg-rotwrap').hidden = sel.value !== 'rotate';
@@ -375,7 +375,7 @@ function openTaskEdit(t){
   $('sg-panel').scrollIntoView({ behavior:'smooth', block:'start' }); $('sg-title').focus({ preventScroll:true });
 }
 function resetSgEdit(){
-  S.editSg = null; $('sgHead').textContent = 'משימה חדשה'; $('sg-save').textContent = 'הוספה';
+  S.editSg = null; $('sgHead').textContent = 'או משימה משלך'; $('sgPresets').hidden = false; $('sg-save').textContent = 'הוספה';
   $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); fillQty('sg');
 }
 function setSgMode(m){ $('sg-mode-' + m).checked = true; $('sg-fixed-row').hidden = m !== 'fixed'; $('sg-timed-row').hidden = m !== 'timed'; $('sg-qty-row').hidden = m !== 'qty'; }

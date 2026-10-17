@@ -114,14 +114,10 @@
       <div class="list" id="pendList"></div>
     </section>
     <section class="section" id="sgSec" hidden>
-      <div class="panel">
-        <h2>משימות מוכנות</h2>
-        <p class="sub">לחיצה מוסיפה את המשימה לכולם. אחר כך אפשר לערוך אותה ב"כל המשימות".</p>
-        <div class="presets" id="presetsFam"></div>
-      </div>
-      <div><button type="button" class="btn ghost" id="sg-toggle" aria-expanded="false">+ משימה משלי</button></div>
+      <div><button type="button" class="btn ghost" id="sg-toggle" aria-expanded="false">+ הוספת משימה</button></div>
       <div class="panel" id="sg-panel" hidden>
-        <h2 id="sgHead">משימה חדשה</h2>
+        <div class="field" id="sgPresets"><span class="lab">משימות מוכנות: לחיצה מוסיפה לכולם, ואחר כך אפשר לערוך</span><div class="presets" id="presetsFam"></div></div>
+        <h2 id="sgHead">או משימה משלך</h2>
         <div class="field"><label for="sg-title">מה צריך לעשות</label><input type="text" id="sg-title" maxlength="80" placeholder="למשל: לסדר את המדפים בחדר"></div>
         <div class="field"><label for="sg-assignee">של מי</label><select id="sg-assignee"></select></div>
         <div class="field" id="sg-rotwrap" hidden><span class="lab">מי בתורנות (לפי הסדר)</span><div class="seg" id="sg-rot"></div>
