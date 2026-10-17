@@ -404,3 +404,6 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .qtyask input{width:5.5em;font:inherit;padding:8px 10px;border:1px solid var(--line, #D5DCE6);border-radius:10px;text-align:center}
 .qtyask .qty-pts{font-weight:600;color:var(--gold-ink, #B7791F);min-width:6em}
 .qtyask .lbl{font-weight:500}
+.viewas-bar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:#172B4D;color:#fff;font-weight:500;box-shadow:0 2px 8px rgb(23 43 77 / .25)}
+.viewas-bar .btn{background:#FFB84D;color:#172B4D}
+#viewAsPick{display:flex;flex-wrap:wrap;gap:8px}

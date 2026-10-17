@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="viewas-bar" id="viewAsBar" hidden><span>👁️ <span id="viewAsName"></span></span><button type="button" class="btn small" id="viewAsExit">חזרה לניהול</button></div>
 <!-- opening splash: every load, tap to skip -->
 <div class="splash" id="splash" hidden aria-live="polite">
   <div class="splash-rays" aria-hidden="true"></div>
@@ -328,6 +329,12 @@
         <div class="field"><label for="ac-code">קוד חדש (6 עד 12 ספרות)</label><input type="password" id="ac-code" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="new-password"></div>
       </div>
       <div><button type="button" class="btn" id="ac-save">שמירת הקוד</button></div>
+    </section>
+
+    <section class="panel">
+      <h2>תצוגה כמו…</h2>
+      <p class="sub">רואים את האפליקציה בדיוק כמו שבן המשפחה רואה אותה. רק לצפייה: אי אפשר לסמן משימות או לשנות כלום. חוזרים עם הכפתור בפס העליון.</p>
+      <div class="chips" id="viewAsPick"></div>
     </section>
 
     <section class="panel">

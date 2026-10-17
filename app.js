@@ -2,13 +2,21 @@ import * as cfg from './firebase-config.js';
 const firebaseConfig = cfg.firebaseConfig;
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { deleteField, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  collection, doc, onSnapshot, addDoc as _addDoc, updateDoc as _updateDoc, deleteDoc as _deleteDoc, setDoc as _setDoc, getDoc, writeBatch as _writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
+// "View as" (admin only) is look-only: every write is refused while it is on.
+const previewErr = () => Object.assign(new Error('preview'), { code:'preview' });
+const addDoc = (...a) => S.viewAs ? Promise.reject(previewErr()) : _addDoc(...a);
+const updateDoc = (...a) => S.viewAs ? Promise.reject(previewErr()) : _updateDoc(...a);
+const deleteDoc = (...a) => S.viewAs ? Promise.reject(previewErr()) : _deleteDoc(...a);
+const setDoc = (...a) => S.viewAs ? Promise.reject(previewErr()) : _setDoc(...a);
+const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); b.commit = () => S.viewAs ? Promise.reject(previewErr()) : c(); return b; };
+
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -33,7 +41,7 @@ S.seen = (() => { try{ return JSON.parse(store.get('ft-seen') || '{}') || {}; }c
 
 let toastT;
 function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
-function fail(e){ console.error(e); const c = e && e.code;
+function fail(e){ const c = e && e.code; if (c === 'preview'){ toast('זו רק תצוגה. כדי לשנות, חוזרים לניהול.'); return; } console.error(e);
   toast(c === 'permission-denied' ? (S.isAdmin ? 'אין הרשאה. בדקו שהמייל בחוקי האבטחה נכון.' : 'אין הרשאה לפעולה הזו.')
       : c === 'unavailable' ? 'אין חיבור. זה יישמר כשהאינטרנט יחזור.' : 'השמירה לא הצליחה. נסו שוב.'); }
 function status(msg){ const s = $('status'); s.textContent = msg || ''; s.hidden = !msg; }
@@ -147,6 +155,10 @@ async function removeLog(l){ try{ await deleteDoc(doc(db,'logs',l.id)); toast('�
 
 /* ---------- render ---------- */
 function render(){
+  // "View as": the admin sees the app exactly as that member does, look-only.
+  if (S.viewAs && (!S.realAdmin || !member(S.viewAs))) S.viewAs = null;
+  if (S.adminChecked) S.isAdmin = S.realAdmin && !S.viewAs;
+  renderViewAs();
   // The admin's own screen gets a gold background.
   document.body.classList.toggle('royal', !!S.isAdmin || (!!S.boundId && isAdminMember(S.boundId)));
   const typing = document.activeElement && document.activeElement.id === 'chat-input';
@@ -164,7 +176,7 @@ function render(){
   // Who this device belongs to: a Google account linked to a member, or a member's code.
   const isGoogle = !!S.user && !S.user.isAnonymous;
   const gMember = isGoogle ? S.members.find(m => m.uid && m.uid === S.user.uid) : null;
-  const bound = S.isAdmin ? null : (gMember ? gMember.id : (S.binding && member(S.binding.memberId) ? S.binding.memberId : null));
+  const bound = S.viewAs ? S.viewAs : S.isAdmin ? null : (gMember ? gMember.id : (S.binding && member(S.binding.memberId) ? S.binding.memberId : null));
   S.boundId = bound;
   const ready = S.bindLoaded && S.adminChecked;
   const needLogin = !!S.user && !S.isAdmin && ready && !bound;
@@ -191,6 +203,15 @@ function render(){
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
 }
+function renderViewAs(){
+  const bar = $('viewAsBar'); bar.hidden = !S.viewAs;
+  if (S.viewAs) $('viewAsName').textContent = `תצוגה כמו ${mName(S.viewAs)} · רק לצפייה`;
+  const box = $('viewAsPick'); if (!box || !S.realAdmin) return; box.replaceChildren();
+  S.members.filter(m => roleOf(m.id) !== 'admin').forEach(m => box.append(h('button', { type:'button', class:'chip', onclick:() => startViewAs(m.id) },
+    h('span', { class:'dot', style:`background:${m.color}` }), m.name)));
+}
+function startViewAs(id){ S.viewAs = id; S.tab = 'today'; S.openPick = null; S.qtyAsk = null; S.chatOpen = null; S.profileOpen = null; render(); window.scrollTo({ top:0 }); }
+function stopViewAs(){ S.viewAs = null; S.tab = 'admin'; render(); window.scrollTo({ top:0 }); }
 // Nothing on screen says who manages the board: the admin entry is a hidden gesture (5 quick taps on the title).
 function renderAuth(){}
 
@@ -1107,6 +1128,7 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  $('viewAsExit').addEventListener('click', stopViewAs);
   $('ex-save').addEventListener('click', saveExchange);
   $('ex-cancel').addEventListener('click', resetExchange);
   $('ex-starter').addEventListener('click', addStarterExchanges);
@@ -1274,7 +1296,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   onAuthStateChanged(auth, user => {
     unsubs.forEach(u => u()); unsubs = [];
     // Admin = allowed to read private/admin (Google account of the admin, or this device's admin code).
-    S.user = user; S.isAdmin = false; S.adminChecked = false; S.joins = []; S.myJoin = null;
+    S.user = user; S.isAdmin = false; S.realAdmin = false; S.viewAs = null; S.adminChecked = false; S.joins = []; S.myJoin = null;
     if (!user){ signInAnonymously(auth).catch(e => { console.error(e); status('לא הצלחנו להתחבר. בדקו שכניסה אנונימית מופעלת ב-Firebase.'); }); render(); return; }
     status('');
     const sub = (name, fn) => unsubs.push(onSnapshot(collection(db, name),
@@ -1302,7 +1324,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     const checkAdmin = async hasSession => {
       let ok = false;
       if (hasSession || !user.isAnonymous){ try{ await getDoc(doc(db,'private','admin')); ok = true; }catch(e){ ok = false; } }
-      S.isAdmin = ok; S.adminChecked = true;
+      S.isAdmin = ok; S.realAdmin = ok; if (!ok) S.viewAs = null; S.adminChecked = true;
       if (ok){ startAdminSubs(); startJoinsSub(); } else { S.pins = {}; S.joins = []; }
       render();
     };
