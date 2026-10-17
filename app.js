@@ -863,6 +863,20 @@ function buildStatic(){
   updateHint();
 }
 
+/* ---------- opening splash ---------- */
+// Shows once a day on each device (tap to skip), so it stays fun instead of getting in the way.
+(function splash(){
+  const el = $('splash'); if (!el) return;
+  const key = 'ft-splash-day';
+  if (store.get(key) === today()) return;
+  store.set(key, today());
+  el.hidden = false;
+  let gone = false;
+  const close = () => { if (gone) return; gone = true; el.classList.add('out'); setTimeout(() => { el.hidden = true; }, 450); };
+  el.addEventListener('click', close);
+  setTimeout(close, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1800 : 3200);
+})();
+
 /* ---------- boot ---------- */
 buildStatic(); render();
 let lastDay = today();
