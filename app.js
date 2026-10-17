@@ -41,8 +41,12 @@ function status(msg){ const s = $('status'); s.textContent = msg || ''; s.hidden
 const member = id => S.members.find(m => m.id === id);
 const avatarOf = id => S.profiles[id]?.avatar || (member(id)?.name || '?').trim().charAt(0);
 const ADMIN_AVATARS = ['👑','🏆','💎','🐉','🦅','🔥'];
-const isAdminMember = id => member(id)?.admin === true;
-const adminTag = id => isAdminMember(id) ? h('span', { class:'admin-tag' }, '👑 מנהל') : null;
+const roleOf = id => { const m = member(id); return m?.role || (m?.admin === true ? 'admin' : 'child'); };
+const isAdminMember = id => roleOf(id) === 'admin';
+const isParentMember = id => roleOf(id) === 'parent';
+// Who may edit the family goal: the admin, or a parent signed in on this device.
+const canEditGoal = () => S.isAdmin || (S.boundId && isParentMember(S.boundId));
+const adminTag = id => isAdminMember(id) ? h('span', { class:'admin-tag' }, '👑 מנהל') : (isParentMember(id) ? h('span', { class:'admin-tag parent' }, 'הורה') : null);
 const AVATARS = ['🦊','🐼','🐯','🦁','🐸','🐙','🦄','🐶','🐱','🐵','🐨','🦖','🚀','⚽','🎸','🌟','🍕','🎮','🌈','🐬'];
 const mName = id => id === 'all' ? 'כולם' : (member(id)?.name || 'לא משויך');
 const mColor = id => member(id)?.color || '#8A9690';
@@ -157,7 +161,7 @@ function render(){
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length + S.logs.filter(l => !counted(l)).length : 0);
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  renderChatSheet(); renderProfileSheet(); updateSplash();
+  renderChatSheet(); renderProfileSheet();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderRewards(); renderPending(); renderAuth(); syncSelects();
@@ -558,6 +562,7 @@ function renderHero(bound){
 // Family goal for the month: everyone's task points together.
 const monthStart = () => { const d = new Date(); return dstr(new Date(d.getFullYear(), d.getMonth(), 1)); };
 function renderGoal(){
+  $('goalEditor').hidden = !canEditGoal();
   const g = S.goal; const on = g && g.target > 0;
   document.querySelectorAll('[data-goal]').forEach(el => {
     el.hidden = !on; el.replaceChildren(); if (!on) return;
@@ -577,7 +582,9 @@ function renderGoal(){
 async function saveGoal(){
   const target = Math.round(Number($('gl-target').value)); const prize = $('gl-prize').value.trim();
   if (!(target >= 0)){ toast('יעד: מספר נקודות'); return; }
-  try{ await setDoc(doc(db,'settings','goal'), { target, prize }); toast(target ? 'היעד נשמר' : 'היעד בוטל'); }catch(e){ fail(e); }
+  if (!canEditGoal()){ toast('רק הורה או מנהל יכולים לשנות את היעד'); return; }
+  const data = { target, prize, ...(S.isAdmin ? {} : { by: S.boundId }) };
+  try{ await setDoc(doc(db,'settings','goal'), data); toast(target ? 'היעד נשמר' : 'היעד בוטל'); }catch(e){ fail(e); }
 }
 function renderProgress(){
   const mine = isMine;
@@ -770,7 +777,7 @@ function renderAdminLists(){
     M.append(h('div', { class:'arow' },
       h('div', { class:'ava sm', style:`background:${m.color}` }, avatarOf(m.id)),
       h('div', { class:'t' }, h('strong', null, m.name),
-        h('small', { class: (pin || m.uid) ? '' : 'err' }, [m.admin ? 'מנהל' : null, m.uid ? `גוגל: ${m.email || 'מחובר'}` : null, pin ? `קוד כניסה: ${pin}` : (m.uid ? null : 'אין קוד ואין גוגל: לא יכול/ה להיכנס')].filter(Boolean).join(' · '))),
+        h('small', { class: (pin || m.uid) ? '' : 'err' }, [isAdminMember(m.id) ? 'מנהל' : (isParentMember(m.id) ? 'הורה' : 'ילד'), m.uid ? `גוגל: ${m.email || 'מחובר'}` : null, pin ? `קוד כניסה: ${pin}` : (m.uid ? null : 'אין קוד ואין גוגל: לא יכול/ה להיכנס')].filter(Boolean).join(' · '))),
       h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
       armedBtn('m'+m.id, 'הסרה', async () => { try{
         const b = writeBatch(db); b.delete(doc(db,'members',m.id)); b.delete(doc(db,'pins',m.id)); await b.commit(); toast(`${m.name} הוסר/ה`);
@@ -837,11 +844,11 @@ async function saveTask(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 function editMember(m){
-  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-admin').checked = m.admin === true; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
+  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
 function resetMemberForm(){
-  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-admin').checked = false; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
+  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
   const used = new Set(S.members.map(m => m.color)); const i = Math.max(0, COLORS.findIndex(c => !used.has(c))); $('mf-color-'+i).checked = true;
 }
 async function saveMember(){
@@ -853,8 +860,8 @@ async function saveMember(){
   try{
     const b = writeBatch(db);
     const ref = S.editMember ? doc(db,'members',S.editMember) : doc(collection(db,'members'));
-    const admin = $('mf-admin').checked;
-    if (S.editMember) b.update(ref, { name, color, admin }); else b.set(ref, { name, color, admin, order: Date.now() });
+    const role = $('mf-role').value || 'child'; const admin = role === 'admin';
+    if (S.editMember) b.update(ref, { name, color, role, admin }); else b.set(ref, { name, color, role, admin, order: Date.now() });
     if (pin) b.set(doc(db,'pins',ref.id), { pin });
     await b.commit();
     toast(S.editMember ? 'נשמר' : `${name} נוסף/ה` + (pin ? '' : '. בלי קוד אי אפשר להיכנס בשמו/ה.'));
@@ -927,23 +934,7 @@ function buildStatic(){
 }
 
 /* ---------- opening splash ---------- */
-// Last week's winner (Sunday to Saturday) takes the crown; with no winner it stays "Rotem the King".
-function lastWeekWinner(){
-  const d = new Date(); d.setDate(d.getDate() - d.getDay() - 7); const from = dstr(d); const to = weekStart();
-  let best = null, bestPts = 0, tie = false;
-  for (const m of S.members){
-    const pts = S.logs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= from && l.day < to).reduce((s, l) => s + (Number(l.points) || 0), 0);
-    if (pts > bestPts){ best = m; bestPts = pts; tie = false; } else if (pts === bestPts && pts > 0) tie = true;
-  }
-  return best && !tie ? { m: best, pts: bestPts } : null;
-}
-function updateSplash(){
-  if ($('splash').hidden || !S.logs.length) return;
-  const w = lastWeekWinner(); if (!w) return;
-  $('splashKicker').textContent = `האלוף של השבוע שעבר · ${w.pts} נקודות`;
-  $('splashTitle').textContent = `השתחוו ל${w.m.name}`;
-}
-// Shows every time the app loads; a tap skips it.
+// Always crowns Rotem.
 (function splash(){
   const el = $('splash'); if (!el) return;
   el.hidden = false;

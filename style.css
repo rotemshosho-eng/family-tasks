@@ -365,3 +365,4 @@ label.check input{width:18px;height:18px;accent-color:var(--good)}
 .goal-card.reached{box-shadow:0 0 0 2px var(--good)}
 .goal-card.reached .progress-bar span{background:var(--good)}
 .done.waiting::before{content:"⏳";background:var(--coin);font-size:.75rem}
+.admin-tag.parent{background:var(--good-soft);color:var(--good)}

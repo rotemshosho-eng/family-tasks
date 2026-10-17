@@ -191,9 +191,16 @@ service cloud.firestore {
         && (isAdmin() || boundTo(request.resource.data.memberId));
       allow delete: if isAdmin();
     }
+    // הגדרות: רק המנהל. את היעד המשפחתי יכול לשנות גם הורה (בן משפחה בדרגת "הורה" שמחובר במכשיר הזה).
     match /settings/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || (id == 'goal'
+        && request.resource.data.keys().hasOnly(['target','prize','by'])
+        && request.resource.data.target is int && request.resource.data.target >= 0 && request.resource.data.target <= 1000000
+        && request.resource.data.prize is string && request.resource.data.prize.size() <= 40
+        && request.resource.data.by is string
+        && boundTo(request.resource.data.by)
+        && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent');
     }
     match /timers/{id} {
       allow read: if signedIn();
