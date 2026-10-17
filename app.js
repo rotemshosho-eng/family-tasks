@@ -606,8 +606,9 @@ function renderHero(bound){
   const who = bound || (S.me !== 'all' ? S.me : null);
   const m = who ? member(who) : null;
   $('appTitle').textContent = m ? `${greeting()}, ${m.name}!` : `${greeting()}!`;
-  const hr = $('heroRoast'); const showRoast = !!m && !S.isAdmin && roleOf(m.id) !== 'admin';
-  hr.hidden = !showRoast; if (showRoast) hr.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`;
+  const hr = $('heroRoast'); const king = S.isAdmin || (!!m && roleOf(m.id) === 'admin');
+  hr.hidden = !m && !king;
+  if (king) hr.textContent = `👑 ${praiseOf()}`; else if (m) hr.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`;
   const btn = $('heroMe'); btn.hidden = !m;
   if (m){ $('heroAva').textContent = avatarOf(m.id); $('heroAva').style.background = m.color; btn.onclick = () => openProfile(m.id); }
 }
@@ -1102,6 +1103,19 @@ const ROASTS = {
       'יא גרב מסריחה', 'יא פיתה בלי חומוס', 'שר החדר המבולגן', 'יא תפוח אדמה עם רגליים', 'יא לוזר מקצועי', 'נסיך הכלים המלוכלכים', 'יא חלזון', 'יא קוטלט שרוף'],
   f: ['יא לוזרית', 'ראש ביצה סרוחה', 'יא עצלנית', 'מלכת השינה עד הצהריים', 'יא חמוצה', 'אלופת העולם בלהתחמק ממשימות', 'יא שפנפנה', 'נתינה קטנה של המלך',
       'יא גרב מסריחה', 'יא פיתה בלי חומוס', 'שרת החדר המבולגן', 'יא תפוח אדמה עם רגליים', 'יא לוזרית מקצועית', 'נסיכת הכלים המלוכלכים', 'יא חלזונית', 'יא קציצה שרופה'] };
+// The admin gets the opposite: a different line about how much better he is, every time the app opens.
+const PRAISE = ['המשפחה הזאת הייתה מתפרקת בלעדיך', 'אתה עושה בשעה מה שהם עושים בשבוע', 'גאון, מנהיג, ועדיין צנוע', 'הם מנסים, אתה פשוט מצליח',
+  'מלך אמיתי לא צריך להוכיח כלום, אבל אתה מוכיח בכל זאת', 'אף אחד לא מסדר את הבית כמוך', 'הנתינים שלך לא ראויים לך', 'אתה הסיבה שיש פה סדר',
+  'היום עוד יום שבו אתה הכי טוב בבית', 'אגדה חיה', 'גם בשבוע גרוע אתה במקום הראשון', 'השם שלך כבר חקוק בהיכל התהילה',
+  'אתה לא משחק את המשחק, אתה המשחק', 'כולם רוצים להיות אתה כשיגדלו', 'כל הכבוד, שוב', 'המלך נכנס, כולם לעמוד'];
+let praiseNow = null;
+function praiseOf(){
+  if (praiseNow) return praiseNow;
+  let last = -1; try{ last = Number(localStorage.getItem('ft-praise')); }catch(e){}
+  let i = Math.floor(Math.random() * PRAISE.length); if (i === last) i = (i + 1) % PRAISE.length;
+  try{ localStorage.setItem('ft-praise', String(i)); }catch(e){}
+  return praiseNow = PRAISE[i];
+}
 const roastFor = {};
 function roastOf(m){ return roastFor[m.id] || (roastFor[m.id] = pickRoast(m.gender)); }
 function pickRoast(g){
@@ -1114,8 +1128,14 @@ function pickRoast(g){
 const splashState = { gone: false, close: null, personalized: false, timer: null };
 function updateSplash(){
   if (splashState.gone || splashState.personalized) return;
-  const id = S.boundId; if (!id || S.isAdmin) return;
-  const m = member(id); if (!m || roleOf(id) === 'admin') return;
+  const id = S.boundId; const m = id ? member(id) : null;
+  if (S.isAdmin || (m && roleOf(id) === 'admin')){
+    splashState.personalized = true;
+    const r = $('splashRoast'); r.textContent = praiseOf(); r.hidden = false;
+    clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, 3200);
+    return;
+  }
+  if (!m) return;
   splashState.personalized = true;
   $('splashKicker').textContent = 'הודעה מהמלך רותם 👑';
   $('splashTitle').textContent = `${greeting()}, ${m.name}`;
