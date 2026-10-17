@@ -81,6 +81,11 @@
   <!-- TODAY -->
   <main id="view-today" class="section stack">
     <div class="who" id="who"></div>
+    <section class="section" id="bossSec" hidden>
+      <div class="section-head"><h2>🐉 משימת בוס</h2><span class="sub">הראשון שעושה מקבל פי 3</span></div>
+      <div class="list" id="bossList"></div>
+    </section>
+    <section class="goal-card challenge" data-challenge hidden></section>
     <section class="standings" id="progress" aria-label="טבלת המקומות השבוע">
       <div class="progress-head"><strong>טבלת המקומות</strong><span class="sub">השבוע</span></div>
       <ol class="rank-list" id="rankList"></ol>
@@ -204,7 +209,21 @@
     <span class="grow"></span>
     <button type="button" class="btn ghost small" id="switchUser">החלפת משתמש</button>
   </div>
+    <section class="goal-card challenge" data-challenge hidden></section>
     <section class="goal-card" data-goal hidden></section>
+    <section class="panel" id="chEditor" hidden>
+      <h2>⚡ אתגר משפחתי</h2>
+      <p class="sub">כל המשפחה ביחד, מול השעון: כמה משימות עד תאריך מסוים. כדי לבטל, שומרים 0.</p>
+      <div class="row">
+        <div class="field"><label for="ch-title">שם האתגר</label><input type="text" id="ch-title" maxlength="40" placeholder="למשל: מסדרים את הבית לחג"></div>
+        <div class="field"><label for="ch-target">כמה משימות</label><input type="number" id="ch-target" min="0" inputmode="numeric" placeholder="למשל 40"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="ch-until">עד מתי</label><input type="date" id="ch-until"></div>
+        <div class="field"><label for="ch-prize">הפרס</label><input type="text" id="ch-prize" maxlength="40" placeholder="למשל: גלידה לכולם"></div>
+      </div>
+      <div><button type="button" class="btn" id="ch-save">שמירת האתגר</button></div>
+    </section>
     <section class="panel" id="goalEditor" hidden>
       <h2>יעד משפחתי לחודש</h2>
       <p class="sub">כל המשפחה צוברת ביחד. כשמגיעים ליעד, מקבלים את הפרס. מתאפס בתחילת כל חודש. כדי לבטל, שומרים 0.</p>
@@ -242,6 +261,7 @@
       <div class="field" id="tf-rotwrap" hidden><span class="lab">מי בתורנות (לפי הסדר)</span><div class="seg" id="tf-rot"></div>
         <p class="sub">כל פעם שמישהו מסיים, התור עובר לבא אחריו.</p></div>
       <label class="check"><input type="checkbox" id="tf-check"> צריך אישור שלי לפני שהנקודות נכנסות</label>
+      <label class="check"><input type="checkbox" id="tf-boss"> 🐉 משימת בוס: חד-פעמית, מופיעה למעלה לכולם, והראשון שעושה מקבל פי 3 נקודות</label>
       <div class="field"><span class="lab">איך מחשבים נקודות</span>
         <div class="seg">
           <label><input type="radio" name="tf-mode" id="tf-mode-fixed" value="fixed" checked> מספר קבוע</label>

@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -111,8 +111,10 @@ function armedBtn(key, label, fn){
 async function complete(t, memberId){
   if (!db || S.busy.has(t.id)) return; S.busy.add(t.id); S.openPick = null; render();
   try{
-    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points:Number(t.points)||0, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
-    toast(t.check ? `נשלח לאישור: ${t.points} נקודות יתווספו אחרי בדיקה` : `${mName(memberId)} קיבל/ה ${t.points} נקודות`);
+    const pts = ptsOf(t);
+    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points:pts, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
+    toast(t.check ? `נשלח לאישור: ${pts} נקודות יתווספו אחרי בדיקה. אפשר לצרף תמונה ב"בוצע היום" 📷` : t.boss ? `🐉 ${mName(memberId)} ניצח/ה את הבוס! ${pts} נקודות` : `${mName(memberId)} קיבל/ה ${pts} נקודות`);
+    confetti(t.boss ? 200 : t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
 }
 // Quantity tasks: the child types how many (e.g. 7 socks); points = full bundles x points per bundle.
@@ -124,7 +126,7 @@ async function completeQty(t, memberId, n){
   const points = qtyPoints(t, n);
   try{
     await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points, count:n, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
-    toast(t.check ? `נשלח לאישור: ${n} ${t.qtyUnit} = ${points} נקודות` : `${mName(memberId)}: ${n} ${t.qtyUnit} = ${points} נקודות`);
+    toast(t.check ? `נשלח לאישור: ${n} ${t.qtyUnit} = ${points} נקודות` : `${mName(memberId)}: ${n} ${t.qtyUnit} = ${points} נקודות`); confetti(t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
 }
 function askQty(t, memberId){ S.qtyAsk = { id:t.id, m:memberId, val:'' }; S.openPick = null; render(); setTimeout(() => $('qtyIn')?.focus(), 0); }
@@ -147,11 +149,11 @@ async function finishTimer(t, tm){
       minutes:r.minutes, points:r.points, timerId:tm.id, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
     b.delete(doc(db,'timers',tm.id));
     await b.commit();
-    toast(`${mName(tm.memberId)}: ${r.minutes} דקות, ${r.points} נקודות`);
+    toast(`${mName(tm.memberId)}: ${r.minutes} דקות, ${r.points} נקודות`); confetti(t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(tm.id); render(); }
 }
 async function cancelTimer(tm){ try{ await deleteDoc(doc(db,'timers',tm.id)); toast('הטיימר בוטל'); }catch(e){ fail(e); } }
-async function removeLog(l){ try{ await deleteDoc(doc(db,'logs',l.id)); toast('בוטל'); }catch(e){ fail(e); } }
+async function removeLog(l){ try{ await deleteDoc(doc(db,'logs',l.id)); dropPhoto(l.id); toast('בוטל'); }catch(e){ fail(e); } }
 
 /* ---------- render ---------- */
 function render(){
@@ -197,7 +199,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderBoss(); renderChallenge(); checkNewBadges(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -475,6 +477,7 @@ function renderProfileSheet(){
       tile('סה״כ נקודות', st.total, ils(st.total)),
       tile('משימות שבוצעו', st.done),
       tile('ימים ברצף', st.streak)),
+    badgePanel(m.id),
     own ? h('section', { class:'panel' }, h('h2', null, 'בחירת תמונה'),
       h('div', { class:'ava-grid' },
         (isAdminMember(m.id) ? ADMIN_AVATARS : []).map(a => h('button', { type:'button', class:'ava-pick special', title:'תמונה של מנהל', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)),
@@ -615,7 +618,7 @@ function renderBoard(){
 }
 function renderToday(){
   const mine = isMine;
-  const due = S.tasks.filter(t => isDue(t) && mine(t)).sort((a,b) => (!!b.pinned - !!a.pinned) || (a.type === 'once') - (b.type === 'once') || ((b.points||0) - (a.points||0)));
+  const due = S.tasks.filter(t => isDue(t) && mine(t) && !t.boss).sort((a,b) => (!!b.pinned - !!a.pinned) || (a.type === 'once') - (b.type === 'once') || ((b.points||0) - (a.points||0)));
   $('todoTitle').textContent = S.me === 'all' ? 'מה נשאר להיום' : `מה נשאר ל${mName(S.me)} היום`;
   $('todoCount').textContent = due.length ? `${due.length} משימות` : '';
   const L = $('todo'); L.replaceChildren();
@@ -632,6 +635,7 @@ function renderToday(){
     h('span', { class:'dot', style:`background:${mColor(l.memberId)}` }),
     h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '') + (l.count ? ` · ${l.count} יח׳` : '')),
     counted(l) ? h('span', { class:'num gold' }, `+${l.points}`) : h('span', { class:'wait-tag' }, 'מחכה לאישור'),
+    waiting(l) ? (photoThumb(l) || ((S.isAdmin || l.memberId === S.boundId) ? h('button', { type:'button', class:'btn ghost small', 'aria-label':'צירוף תמונה', onclick:() => attachPhoto(l) }, '📷') : null)) : null,
     h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול'))));
 }
 
@@ -710,7 +714,7 @@ function taskCard(t, canAct){
   const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
   const act = timed ? (m => startTimer(t, m)) : t.qtyPer ? (m => askQty(t, m)) : (m => complete(t, m));
   const go = () => { if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } };
-  const meta = [h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), timed ? `${t.ratePerMin} נקודות לדקה, עד ${t.maxMinutes} דק׳` : t.qtyPer ? qtyText(t) : `${t.points} נקודות`)];
+  const meta = [h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), timed ? `${t.ratePerMin} נקודות לדקה, עד ${t.maxMinutes} דק׳` : t.qtyPer ? qtyText(t) : t.boss ? `${ptsOf(t)} נקודות (פי 3)` : `${t.points} נקודות`)];
   const sub = [assigneeLabel(t), recLabel(t)];
   if (t.check) sub.push('צריך אישור');
   if (t.pinned) sub.unshift('נעוצה');
@@ -720,7 +724,8 @@ function taskCard(t, canAct){
       ? h('button', { type:'button', class:'btn small start', disabled: busy || !S.members.length, onclick: go }, busy ? 'שומר…' : 'התחלתי')
       : h('button', { type:'button', class:'donecheck', 'aria-label':`סיימתי: ${t.title}`, disabled: busy || !S.members.length, onclick: go }, busy ? '…' : '');
   }
-  const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
+  if (t.boss) sub.unshift('🐉 משימת בוס · הראשון שעושה מנצח');
+  const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') + (t.boss ? ' boss' : '') },
     h('div', { class:'ticon', 'aria-hidden':'true' }, taskIcon(t)),
     h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta),
       h('span', { class:'task-sub' }, sub.join(' · '))),
@@ -779,12 +784,12 @@ function walletOf(id){
   return { earned, used, balance: earned - used };
 }
 function rewardsWho(){ return S.boundId || (S.me !== 'all' && member(S.me) ? S.me : null); }
-async function redeem(memberId, title, cost, rewardId){
+async function redeem(memberId, title, cost, rewardId, force){
   const w = walletOf(memberId);
   if (!(cost >= 1)){ toast('כמות נקודות: לפחות 1'); return false; }
-  if (cost > w.balance){ toast(`אין מספיק נקודות: יש ${w.balance}, צריך ${cost}`); return false; }
+  if (cost > w.balance && !force){ toast(`אין מספיק נקודות: יש ${w.balance}, צריך ${cost}`); return false; }
   try{
-    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, ...(rewardId ? { rewardId } : {}), day:today(), at:Date.now() });
+    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, ...(rewardId ? { rewardId } : {}), day:today(), at:Date.now() }); confetti(70);
     toast(`${mName(memberId)}: ירדו ${cost} נקודות`); return true;
   }catch(e){ fail(e); return false; }
 }
@@ -817,7 +822,7 @@ function renderRewards(){
   hist.forEach(l => { const [, mo, da] = (l.day || '--').split('-'); const v = shekelsFor(l.points);
     H.append(h('div', { class:'arow' },
       h('div', { class:'t' }, h('strong', null, l.title), h('small', null, `${+da}.${+mo}${who ? '' : ` · ${mName(l.memberId)}`}`)),
-      h('span', { class:'num neg' }, `-${l.points}` + (v != null ? ` (${fmtILS(v)})` : '')),
+      waiting(l) ? h('span', { class:'wait-tag' }, 'הלוואה מחכה לאישור') : rejected(l) ? h('span', { class:'wait-tag' }, 'לא אושר') : h('span', { class:'num neg' }, `-${l.points}` + (v != null ? ` (${fmtILS(v)})` : '')),
       S.isAdmin ? armedBtn('rh' + l.id, 'ביטול', () => removeLog(l)) : null)); });
 }
 async function saveUse(){
@@ -836,12 +841,14 @@ function renderReview(){
   const wait = S.logs.filter(l => waiting(l) && canApprove(l)).sort((a,b) => a.at - b.at);
   $('reviewPanel').hidden = !wait.length; $('reviewCount').textContent = wait.length ? String(wait.length) : '';
   const by = S.isAdmin ? {} : { approvedBy: S.boundId };
-  wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
+  wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-'); const loan = l.kind === 'redeem';
     R.append(h('div', { class:'arow wrap' },
-      h('div', { class:'t' }, h('strong', null, `${l.title} · ${mName(l.memberId)}`), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
-      h('span', { class:'num gold' }, `+${l.points}`),
-      h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); toast(`אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
-      armedBtn('rv' + l.id, 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); toast('סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
+      photoThumb(l),
+      h('div', { class:'t' }, h('strong', null, loan ? `🤝 הלוואה: ${l.title} · ${mName(l.memberId)}` : `${l.title} · ${mName(l.memberId)}`),
+        h('small', null, loan ? `יתרה עכשיו: ${walletOf(l.memberId).balance} · אחרי: ${walletOf(l.memberId).balance - l.points}` : `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
+      h('span', { class:'num ' + (loan ? 'neg' : 'gold') }, loan ? `-${l.points}` : `+${l.points}`),
+      h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה אושרה' : `אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
+      armedBtn('rv' + l.id, loan ? 'לא מאשר' : 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה לא אושרה' : 'סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
 }
 
 /* ---------- ready-made household tasks ---------- */
@@ -891,8 +898,11 @@ function renderExchanges(){
     canEditRewards() ? 'הוסיפו למטה, או לחצו "הוספת רשימה מוכנה".' : 'מנהל או הורה יוסיפו בקרוב.'));
   list.forEach(r => {
     const key = 'ex' + r.id; const can = !!who && bal >= r.cost;
-    const btn = h('button', { type:'button', class:'btn small', disabled: !can }, can ? 'להחליף' : (who ? `חסרות ${r.cost - bal}` : 'להחליף'));
-    btn.addEventListener('click', () => arm(key, btn, () => redeem(who, r.title, r.cost, r.id)));
+    const pend = !!who && S.logs.some(l => l.kind === 'redeem' && waiting(l) && l.memberId === who && l.rewardId === r.id);
+    const loanable = !!who && !can && !pend;
+    const btn = h('button', { type:'button', class:'btn small' + (loanable ? ' ghost' : ''), disabled: !can && !loanable },
+      can ? 'להחליף' : pend ? 'מחכה לאישור' : loanable ? (S.isAdmin ? `לתת בהלוואה (חסרות ${r.cost - bal})` : `הלוואה? חסרות ${r.cost - bal}`) : 'להחליף');
+    btn.addEventListener('click', () => arm(key, btn, () => can ? redeem(who, r.title, r.cost, r.id) : S.isAdmin ? redeem(who, r.title, r.cost, r.id, true) : requestLoan(who, r)));
     if (S.armed === key){ btn.classList.add('armed'); btn.textContent = 'בטוח? שוב'; }
     G.append(h('div', { class:'reward' + (can ? '' : ' locked') },
       h('span', { class:'reward-e', 'aria-hidden':'true' }, r.emoji || '🎁'),
@@ -927,6 +937,145 @@ async function addStarterExchanges(){
   if (!n){ toast('כל הרשימה כבר קיימת'); return; }
   try{ await b.commit(); toast(`נוספו ${n}. אפשר לערוך מחירים ולהסיר מה שלא מתאים.`); }catch(e){ fail(e); }
 }
+
+
+/* ---------- confetti ---------- */
+function confetti(n = 90){
+  try{ if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  const c = document.createElement('canvas'); c.className = 'confetti'; document.body.append(c);
+  const k = devicePixelRatio || 1, W = c.width = innerWidth * k, H = c.height = innerHeight * k, x = c.getContext('2d');
+  const cols = ['#FFB84D','#39B980','#172B4D','#FF6B6B','#4DA3FF','#B57BFF'];
+  const ps = Array.from({ length:n }, () => ({ x: W/2 + (Math.random() - .5) * W * .4, y: H * .4, vx: (Math.random() - .5) * 16 * k, vy: (-Math.random() * 17 - 6) * k,
+    r: (4 + Math.random() * 5) * k, c: cols[Math.random() * cols.length | 0], a: Math.random() * 6, s: (Math.random() - .5) * .35 }));
+  const t0 = performance.now();
+  (function f(t){ x.clearRect(0, 0, W, H);
+    for (const p of ps){ p.vy += .55 * k; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.s; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.fillStyle = p.c; x.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); x.restore(); }
+    if (t - t0 < 2300) requestAnimationFrame(f); else c.remove(); })(t0);
+}
+
+/* ---------- badges (computed from the logs, nothing stored) ---------- */
+const BADGES = [
+  { id:'first', e:'🌱', t:'צעד ראשון', d:'משימה ראשונה', ok: s => s.tasks >= 1 },
+  { id:'ten', e:'🔟', t:'עשירייה', d:'10 משימות', ok: s => s.tasks >= 10 },
+  { id:'fifty', e:'🏅', t:'חמישים', d:'50 משימות', ok: s => s.tasks >= 50 },
+  { id:'hundred', e:'💯', t:'מאה!', d:'100 משימות', ok: s => s.tasks >= 100 },
+  { id:'streak3', e:'🔥', t:'על הגל', d:'3 ימים ברצף', ok: s => s.best >= 3 },
+  { id:'streak7', e:'⚡', t:'שבוע מושלם', d:'7 ימים ברצף', ok: s => s.best >= 7 },
+  { id:'early', e:'🌅', t:'ציפור מוקדמת', d:'משימה לפני 8:00', ok: s => s.early },
+  { id:'night', e:'🦉', t:'ינשוף לילה', d:'משימה אחרי 21:00', ok: s => s.night },
+  { id:'count', e:'🧦', t:'שיא הספירה', d:'100 פריטים במשימות כמות', ok: s => s.units >= 100 },
+  { id:'marathon', e:'⏱️', t:'מרתון', d:'30 דקות במשימת זמן אחת', ok: s => s.longest >= 30 },
+  { id:'boss', e:'🐉', t:'קוטל בוסים', d:'ניצחון במשימת בוס', ok: s => s.boss >= 1 },
+  { id:'champ', e:'👑', t:'אלוף השבוע', d:'מקום ראשון בשבוע', ok: s => s.wins >= 1 },
+  { id:'saver', e:'🐷', t:'חסכן', d:'200 נקודות בארנק', ok: s => s.balance >= 200 },
+  { id:'shop', e:'🛍️', t:'קנייה ראשונה', d:'החלפת נקודות ראשונה', ok: s => s.redeems >= 1 }];
+const weekOf = day => { const d = new Date(day + 'T12:00:00'); d.setDate(d.getDate() - d.getDay()); return dstr(d); };
+const dayGap = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
+function weeklyWins(){
+  const cur = weekStart(); const by = {};
+  for (const l of S.logs){ if (l.kind === 'redeem' || !counted(l) || !l.day) continue; const w = weekOf(l.day); if (w >= cur) continue;
+    (by[w] ||= {})[l.memberId] = (by[w][l.memberId] || 0) + (Number(l.points) || 0); }
+  const wins = {};
+  for (const w of Object.values(by)){ const max = Math.max(...Object.values(w)); if (max > 0) for (const [m, p] of Object.entries(w)) if (p === max) wins[m] = (wins[m] || 0) + 1; }
+  return wins;
+}
+function badgeStats(id){
+  const L = S.logs.filter(l => l.memberId === id && counted(l)); const work = L.filter(l => l.kind === 'task' || l.kind === 'timed');
+  const hr = l => new Date(l.at).getHours();
+  let best = 0, run = 0, prev = null;
+  for (const d of [...new Set(work.map(l => l.day))].sort()){ run = prev && dayGap(prev, d) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; }
+  const bossIds = new Set(S.tasks.filter(t => t.boss).map(t => t.id));
+  return { tasks: work.length, best, early: work.some(l => hr(l) < 8), night: work.some(l => hr(l) >= 21),
+    units: work.reduce((s, l) => s + (Number(l.count) || 0), 0), longest: Math.max(0, ...work.map(l => Number(l.minutes) || 0)),
+    boss: work.filter(l => bossIds.has(l.taskId)).length, wins: weeklyWins()[id] || 0, balance: walletOf(id).balance, redeems: L.filter(l => l.kind === 'redeem').length };
+}
+const badgesOf = id => { const s = badgeStats(id); return BADGES.filter(b => b.ok(s)).map(b => b.id); };
+function badgePanel(id){
+  const got = new Set(badgesOf(id));
+  return h('section', { class:'panel' }, h('div', { class:'section-head' }, h('h2', null, 'תגים'), h('span', { class:'count' }, `${got.size}/${BADGES.length}`)),
+    h('div', { class:'badges' }, BADGES.map(b => h('div', { class:'badge' + (got.has(b.id) ? ' got' : ''), title:b.d },
+      h('span', { class:'badge-e', 'aria-hidden':'true' }, got.has(b.id) ? b.e : '🔒'), h('span', { class:'badge-t' }, b.t), h('span', { class:'badge-d' }, b.d)))));
+}
+// A new badge for whoever owns this phone: a toast and confetti, once.
+function checkNewBadges(){
+  const id = S.boundId; if (!id || S.viewAs || !S.logsLoaded) return;
+  const key = 'ft-badges-' + id; const now = badgesOf(id);
+  let had = null; try{ had = JSON.parse(localStorage.getItem(key)); }catch(e){}
+  try{ localStorage.setItem(key, JSON.stringify(now)); }catch(e){}
+  if (!Array.isArray(had)) return; // first time on this phone: no fireworks for old badges
+  const fresh = now.filter(b => !had.includes(b)); if (!fresh.length) return;
+  const b = BADGES.find(x => x.id === fresh[0]); setTimeout(() => { toast(`${b.e} תג חדש: ${b.t}!`); confetti(140); }, 600);
+}
+
+/* ---------- boss task: one-time, first to do it gets triple points ---------- */
+const ptsOf = t => (Number(t.points) || 0) * (t.boss ? 3 : 1);
+function renderBoss(){
+  const list = S.tasks.filter(t => t.boss && isDue(t));
+  const B = $('bossSec'); B.hidden = !list.length; const L = $('bossList'); L.replaceChildren();
+  list.forEach(t => L.append(taskCard(t, true)));
+}
+
+/* ---------- family challenge with a deadline ---------- */
+function challengeCount(c){ return S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until).length; }
+function renderChallenge(){
+  $('chEditor').hidden = !canEditGoal();
+  const c = S.challenge; const td = today();
+  const on = !!c && c.target > 0 && c.until && dayGap(c.until, td) <= 2;
+  document.querySelectorAll('[data-challenge]').forEach(el => {
+    el.hidden = !on; el.replaceChildren(); if (!on) return;
+    const n = challengeCount(c); const pct = Math.min(100, Math.round(n / c.target * 100)); const done = n >= c.target; const left = dayGap(td, c.until); const over = left < 0;
+    el.classList.toggle('reached', done);
+    el.append(h('div', { class:'goal-head' }, h('span', { class:'goal-e', 'aria-hidden':'true' }, done ? '🎉' : over ? '⌛' : '⚡'),
+        h('div', { class:'goal-t' }, h('strong', null, done ? `ניצחתם באתגר! ${c.prize || ''}`.trim() : `אתגר: ${c.title}`),
+          h('span', { class:'sub' }, done ? 'כל הכבוד לכולם!' : over ? `האתגר נגמר. הגעתם ל-${n} מתוך ${c.target}.` :
+            `עוד ${c.target - n} משימות ביחד · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}`)),
+        h('span', { class:'progress-pct' }, `${pct}%`)),
+      h('div', { class:'progress-bar' }, h('span', { style:`width:${pct}%` })),
+      h('p', { class:'sub' }, `${n} מתוך ${c.target} משימות`));
+  });
+}
+async function saveChallenge(){
+  const title = $('ch-title').value.trim(); const target = Math.round(Number($('ch-target').value)); const until = $('ch-until').value; const prize = $('ch-prize').value.trim();
+  if (!canEditGoal()){ toast('רק הורה או מנהל'); return; }
+  if (target > 0){
+    if (!title){ toast('כתבו שם לאתגר'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today()){ toast('בחרו תאריך סיום מהיום והלאה'); return; }
+  }
+  const old = S.challenge; const start = old && old.target > 0 && old.until >= today() && old.title === title ? old.start : today();
+  const data = { title, target: Math.max(0, target || 0), start, until: until || today(), prize, ...(S.isAdmin ? {} : { by: S.boundId }) };
+  try{ await setDoc(doc(db,'settings','challenge'), data); toast(data.target ? 'האתגר נשמר. בהצלחה!' : 'האתגר בוטל'); }catch(e){ fail(e); }
+}
+
+/* ---------- loans: ask for a reward before having enough points; a parent approves ---------- */
+async function requestLoan(memberId, r){
+  try{ await addDoc(collection(db,'logs'), { kind:'redeem', title:r.title, memberId, points:r.cost, rewardId:r.id, approved:false, loan:true, day:today(), at:Date.now() });
+    toast('הבקשה נשלחה להורים. אחרי אישור, הנקודות יירדו והיתרה תהיה במינוס עד שתחזיר/י אותן.'); }catch(e){ fail(e); }
+}
+
+/* ---------- photo proof (free: a small JPEG kept inside the database until the task is reviewed) ---------- */
+function shrinkImage(file){
+  return new Promise((res, rej) => { const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); let w = img.naturalWidth, hgt = img.naturalHeight; const m = 720; if (Math.max(w, hgt) > m){ const k = m / Math.max(w, hgt); w = Math.round(w * k); hgt = Math.round(hgt * k); }
+      const c = document.createElement('canvas'); c.width = w; c.height = hgt; c.getContext('2d').drawImage(img, 0, 0, w, hgt);
+      let q = .7, d = c.toDataURL('image/jpeg', q); while (d.length > 450000 && q > .3){ q -= .1; d = c.toDataURL('image/jpeg', q); } res(d); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('image')); }; img.src = url; });
+}
+function attachPhoto(l){
+  const inp = h('input', { type:'file', accept:'image/*', capture:'environment', style:'display:none' }); document.body.append(inp);
+  inp.addEventListener('change', async () => { const f = inp.files && inp.files[0]; inp.remove(); if (!f) return;
+    try{ toast('מעלה תמונה…'); const data = await shrinkImage(f); await setDoc(doc(db,'photos',l.id), { data, memberId:l.memberId, at:Date.now() }); toast('התמונה נשלחה לאישור'); }
+    catch(e){ if (e && e.message === 'image') toast('לא הצלחנו לקרוא את התמונה'); else fail(e); } });
+  inp.click();
+}
+function photoThumb(l){
+  const p = S.photos[l.id]; if (!p) return null;
+  return h('button', { type:'button', class:'thumb', 'aria-label':'הצגת התמונה', onclick:() => showPhoto(p.data) }, h('img', { src:p.data, alt:'' }));
+}
+function showPhoto(src){
+  const o = h('div', { class:'lightbox', role:'dialog', 'aria-label':'תמונה', onclick:() => o.remove() }, h('img', { src, alt:'הוכחה' }));
+  document.body.append(o);
+}
+const dropPhoto = id => { if (S.photos[id]) _deleteDoc(doc(db,'photos',id)).catch(() => {}); };
 
 /* ---------- admin ---------- */
 function syncSelects(){
@@ -1000,7 +1149,7 @@ function renderAdminLists(){
 function editTask(t){
   S.editTask = t.id; $('tfHead').textContent = t.pending ? `קביעת ניקוד: ${t.title}` : 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
   $('tf-title').value = t.title; $('tf-assignee').dataset.want = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
-  $('tf-rot').dataset.want = JSON.stringify(t.rotation || []); $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-check').checked = !!t.check; syncSelects();
+  $('tf-rot').dataset.want = JSON.stringify(t.rotation || []); $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-check').checked = !!t.check; $('tf-boss').checked = !!t.boss; syncSelects();
   setMode(modeOf(t)); fillQty('tf', t);
   $('tf-points').value = t.points ?? 10; $('tf-rate').value = t.ratePerMin ?? 1; $('tf-max').value = t.maxMinutes ?? 30; updateHint();
   $(t.type === 'once' ? 'tf-type-once' : 'tf-type-repeat').checked = true; $('tf-dayswrap').hidden = t.type === 'once';
@@ -1009,7 +1158,7 @@ function editTask(t){
 }
 function resetTaskForm(){
   S.editTask = null; $('tfHead').textContent = 'משימה חדשה'; $('tf-save').textContent = 'הוספת משימה'; $('tf-cancel').hidden = true;
-  $('tf-title').value = ''; $('tf-assignee').dataset.want = 'all'; $('tf-check').checked = false; $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); fillQty('tf'); updateHint();
+  $('tf-title').value = ''; $('tf-assignee').dataset.want = 'all'; $('tf-check').checked = false; $('tf-boss').checked = false; $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); fillQty('tf'); updateHint();
   $('tf-type-repeat').checked = true; $('tf-dayswrap').hidden = false;
   DAYS.forEach((_, i) => $('tf-day-'+i).checked = true);
 }
@@ -1051,6 +1200,7 @@ async function saveTask(){
   const data = { title, assignee, type, days, timed, check: $('tf-check').checked,
     ...(assignee === 'rotate' ? { rotation } : {}),
     ...(timed ? { ratePerMin, maxMinutes } : q ? q : { points }) };
+  if ($('tf-boss').checked){ if (timed || q){ toast('משימת בוס עובדת רק עם מספר נקודות קבוע'); return; } data.boss = true; data.type = 'once'; data.days = []; }
   const btn = $('tf-save'); btn.disabled = true;
   try{
     if (S.editTask){
@@ -1135,6 +1285,7 @@ function buildStatic(){
   EX_EMOJI.forEach(e => $('ex-emoji').append(h('option', { value:e }, e)));
   $('sg-assignee').addEventListener('change', () => { $('sg-rotwrap').hidden = $('sg-assignee').value !== 'rotate'; });
   $('gl-save').addEventListener('click', saveGoal);
+  $('ch-save').addEventListener('click', saveChallenge);
   $('tf-assignee').addEventListener('change', () => { $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate'; });
   $('ru-save').addEventListener('click', saveUse);
   $('chatBack').addEventListener('click', closeChat);
@@ -1304,7 +1455,8 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
       e => { console.error(e); status(e.code === 'permission-denied' ? 'אין הרשאה לקרוא את הנתונים. בדקו את חוקי האבטחה ב-Firebase.' : 'בעיה בחיבור לנתונים.'); }));
     sub('members', a => { S.members = a.sort((x,y) => (x.order||0) - (y.order||0)); if (!S.memInit){ S.memInit = true; resetMemberForm(); } });
     sub('tasks', a => { S.tasks = a; });
-    sub('logs', a => { S.logs = a; });
+    sub('logs', a => { S.logs = a; S.logsLoaded = true; });
+    sub('photos', a => { S.photos = Object.fromEntries(a.map(p => [p.id, p])); });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });
     sub('profiles', a => { S.profiles = Object.fromEntries(a.map(p => [p.id, p])); });
@@ -1335,6 +1487,11 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     unsubs.push(onSnapshot(doc(db,'settings','goal'), s => {
       S.goal = s.exists() ? s.data() : null;
       if (S.goal && document.activeElement !== $('gl-target') && document.activeElement !== $('gl-prize')){ $('gl-target').value = S.goal.target || ''; $('gl-prize').value = S.goal.prize || ''; }
+      render();
+    }, e => console.error(e)));
+    unsubs.push(onSnapshot(doc(db,'settings','challenge'), s => {
+      S.challenge = s.exists() ? s.data() : null; const c = S.challenge;
+      if (c && !['ch-title','ch-target','ch-until','ch-prize'].includes(document.activeElement?.id)){ $('ch-title').value = c.title || ''; $('ch-target').value = c.target || ''; $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
       render();
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {

@@ -72,6 +72,7 @@ for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   const turn = whoseTurn(t);
   const to = turn !== 'all' ? [turn] : everyone.filter(id => id !== t.suggestedBy);
   const pts = t.timed ? `${t.ratePerMin} נקודות לדקה` : t.qtyPer ? `${t.points} נקודות על כל ${t.qtyPer} ${t.qtyUnit}` : `${t.points} נקודות`;
+  if (t.boss) { outbox.push({ to: everyone, title: '🐉 משימת בוס חדשה!', body: `${t.title} · ${t.points * 3} נקודות למי שעושה ראשון`, tag: `task-${t.id}` }); continue; }
   outbox.push({ to: to.filter(id => id !== t.suggestedBy), title: 'משימה חדשה', body: `${t.title} · ${pts}`, tag: `task-${t.id}` });
 }
 
@@ -80,8 +81,9 @@ const admins = members.filter(m => m.admin === true).map(m => m.id);
 {
   const fresh = allLogs.filter(l => typeof l.at === 'number' && l.at > since);
   const approvers = members.filter(m => m.admin === true || m.role === 'admin' || m.role === 'parent').map(m => m.id);
-  for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
-  const spent = fresh.filter(l => l.kind === 'redeem');
+  for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: approvers.filter(id => id !== l.memberId),
+    title: l.kind === 'redeem' ? '🤝 בקשת הלוואה' : 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
+  const spent = fresh.filter(l => l.kind === 'redeem' && l.approved !== false);
   for (const l of spent) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
 }
 
@@ -125,6 +127,18 @@ if (dow === 6 && hour >= 20 && state.ceremonyDay !== today) {
     const top = totals.filter(x => x.pts === totals[0].pts).map(x => x.m.name);
     const who = top.length === 1 ? top[0] : top.join(' ו');
     outbox.push({ to: everyone, title: `👑 ${top.length === 1 ? 'האלוף' : 'האלופים'} של השבוע: ${who}`, body: `${totals[0].pts} נקודות השבוע. שבוע חדש מתחיל מחר, בהצלחה לכולם!`, tag: 'weekly-winner' });
+  }
+  // personal weekly summary, compared with last week
+  const prevStart = daysAgo(13), prevEnd = daysAgo(7);
+  const work = l => (l.kind === 'task' || l.kind === 'timed') && counted(l);
+  for (const m of members) {
+    const mine = allLogs.filter(l => l.memberId === m.id && work(l));
+    const now = mine.filter(l => l.day >= weekStart && l.day <= today), prev = mine.filter(l => l.day >= prevStart && l.day <= prevEnd);
+    if (!now.length && !prev.length) continue;
+    const pts = now.reduce((s, l) => s + (Number(l.points) || 0), 0);
+    const diff = prev.length ? Math.round((now.length - prev.length) / prev.length * 100) : null;
+    const cmp = diff === null ? '' : diff > 0 ? ` · ${diff}% יותר משבוע שעבר 💪` : diff < 0 ? ` · ${-diff}% פחות משבוע שעבר` : ' · בדיוק כמו שבוע שעבר';
+    outbox.push({ to: [m.id], title: '📊 השבוע שלך', body: `${now.length} משימות, ${pts} נקודות${cmp}`, tag: `summary-${m.id}` });
   }
   state.ceremonyDay = today;
 }

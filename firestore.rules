@@ -58,7 +58,8 @@ service cloud.firestore {
         && taskDoc(d.taskId).data.get('timed', false) == false
         && taskDoc(d.taskId).data.get('pending', false) == false
         && memberExists(d.memberId)
-        && ((!('qtyPer' in taskDoc(d.taskId).data) && !('count' in d) && d.points == taskDoc(d.taskId).data.points)
+        && ((!('qtyPer' in taskDoc(d.taskId).data) && !('count' in d)
+              && d.points == taskDoc(d.taskId).data.points * (taskDoc(d.taskId).data.get('boss', false) == true ? 3 : 1))
           || ('qtyPer' in taskDoc(d.taskId).data && d.count is int
               && d.count >= taskDoc(d.taskId).data.qtyPer && d.count <= taskDoc(d.taskId).data.get('qtyMax', 10000)
               && d.points * taskDoc(d.taskId).data.qtyPer == (d.count - d.count % taskDoc(d.taskId).data.qtyPer) * taskDoc(d.taskId).data.points))
@@ -85,8 +86,10 @@ service cloud.firestore {
 
     // שימוש בנקודות (מימוש פרס): כל אחד מוריד רק מהיתרה של עצמו. ביטול: רק המנהל.
     function validRedeem(d) {
-      return d.keys().hasOnly(['kind','title','memberId','points','rewardId','day','at'])
+      return d.keys().hasOnly(['kind','title','memberId','points','rewardId','approved','loan','day','at'])
         && d.kind == 'redeem'
+        && (!('approved' in d) || (d.approved == false && d.get('loan', false) == true))
+        && (!('loan' in d) || (d.loan == true && d.get('approved', true) == false))
         && d.title is string && d.title.size() > 0 && d.title.size() <= 60
         && d.points is int && d.points >= 1 && d.points <= 100000
         && memberExists(d.memberId)
@@ -232,7 +235,15 @@ service cloud.firestore {
     // הגדרות: רק המנהל. את היעד המשפחתי יכול לשנות גם הורה (בן משפחה בדרגת "הורה" שמחובר במכשיר הזה).
     match /settings/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin() || (id == 'goal'
+      allow write: if isAdmin() || (id == 'challenge'
+        && request.resource.data.keys().hasOnly(['title','target','start','until','prize','by'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 40
+        && request.resource.data.target is int && request.resource.data.target >= 0 && request.resource.data.target <= 100000
+        && request.resource.data.start is string && request.resource.data.start.size() == 10
+        && request.resource.data.until is string && request.resource.data.until.size() == 10
+        && request.resource.data.prize is string && request.resource.data.prize.size() <= 40
+        && request.resource.data.by is string && boundTo(request.resource.data.by)
+        && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent') || (id == 'goal'
         && request.resource.data.keys().hasOnly(['target','prize','by'])
         && request.resource.data.target is int && request.resource.data.target >= 0 && request.resource.data.target <= 1000000
         && request.resource.data.prize is string && request.resource.data.prize.size() <= 40
@@ -263,6 +274,22 @@ service cloud.firestore {
         && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 40
         && (!('emoji' in request.resource.data) || (request.resource.data.emoji is string && request.resource.data.emoji.size() <= 8))
         && (!('archived' in request.resource.data) || request.resource.data.archived is bool);
+    }
+
+    // תמונת הוכחה: קטנה, נשמרת רק עד שהמשימה נבדקת.
+    match /photos/{logId} {
+      allow read: if signedIn();
+      allow create, update: if request.resource.data.keys().hasOnly(['data','memberId','at'])
+        && request.resource.data.data is string && request.resource.data.data.size() < 600000
+        && request.resource.data.at is int
+        && exists(/databases/$(database)/documents/logs/$(logId))
+        && get(/databases/$(database)/documents/logs/$(logId)).data.memberId == request.resource.data.memberId
+        && get(/databases/$(database)/documents/logs/$(logId)).data.get('approved', true) == false
+        && (isAdmin() || boundTo(request.resource.data.memberId));
+      allow delete: if isAdmin() || (signedIn() && (
+        !exists(/databases/$(database)/documents/logs/$(logId))
+        || get(/databases/$(database)/documents/logs/$(logId)).data.get('approved', true) != false
+        || boundTo(resource.data.memberId)));
     }
 
     match /logs/{id} {
