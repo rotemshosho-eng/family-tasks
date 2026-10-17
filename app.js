@@ -1027,22 +1027,23 @@ function renderChallenge(){
     el.classList.toggle('reached', done);
     el.append(h('div', { class:'goal-head' }, h('span', { class:'goal-e', 'aria-hidden':'true' }, done ? '🎉' : over ? '⌛' : '⚡'),
         h('div', { class:'goal-t' }, h('strong', null, done ? `ניצחתם באתגר! ${c.prize || ''}`.trim() : `אתגר: ${c.title}`),
-          h('span', { class:'sub' }, done ? 'כל הכבוד לכולם!' : over ? `האתגר נגמר. הגעתם ל-${n} מתוך ${c.target}.` :
-            `עוד ${c.target - n} משימות ביחד · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}`)),
+          h('span', { class:'sub' }, done ? (c.bonus ? `כל הכבוד! כל אחד מקבל ${c.bonus} נקודות בונוס 🎁` : 'כל הכבוד לכולם!') : over ? `האתגר נגמר. הגעתם ל-${n} מתוך ${c.target}.` :
+            `עוד ${c.target - n} משימות ביחד · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}${c.bonus ? ` · ${c.bonus} נקודות לכל אחד` : ''}`)),
         h('span', { class:'progress-pct' }, `${pct}%`)),
       h('div', { class:'progress-bar' }, h('span', { style:`width:${pct}%` })),
       h('p', { class:'sub' }, `${n} מתוך ${c.target} משימות`));
   });
 }
 async function saveChallenge(){
-  const title = $('ch-title').value.trim(); const target = Math.round(Number($('ch-target').value)); const until = $('ch-until').value; const prize = $('ch-prize').value.trim();
+  const title = $('ch-title').value.trim(); const target = Math.round(Number($('ch-target').value)); const bonus = Math.round(Number($('ch-bonus').value)) || 0; const until = $('ch-until').value; const prize = $('ch-prize').value.trim();
   if (!canEditGoal()){ toast('רק הורה או מנהל'); return; }
   if (target > 0){
     if (!title){ toast('כתבו שם לאתגר'); return; }
+    if (!(bonus >= 0 && bonus <= 1000)){ toast('בונוס: בין 0 ל-1000 נקודות'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today()){ toast('בחרו תאריך סיום מהיום והלאה'); return; }
   }
   const old = S.challenge; const start = old && old.target > 0 && old.until >= today() && old.title === title ? old.start : today();
-  const data = { title, target: Math.max(0, target || 0), start, until: until || today(), prize, ...(S.isAdmin ? {} : { by: S.boundId }) };
+  const data = { title, target: Math.max(0, target || 0), start, until: until || today(), prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
   try{ await setDoc(doc(db,'settings','challenge'), data); toast(data.target ? 'האתגר נשמר. בהצלחה!' : 'האתגר בוטל'); }catch(e){ fail(e); }
 }
 
@@ -1491,7 +1492,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','challenge'), s => {
       S.challenge = s.exists() ? s.data() : null; const c = S.challenge;
-      if (c && !['ch-title','ch-target','ch-until','ch-prize'].includes(document.activeElement?.id)){ $('ch-title').value = c.title || ''; $('ch-target').value = c.target || ''; $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
+      if (c && !['ch-title','ch-target','ch-until','ch-prize','ch-bonus'].includes(document.activeElement?.id)){ $('ch-bonus').value = c.bonus || ''; $('ch-title').value = c.title || ''; $('ch-target').value = c.target || ''; $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
       render();
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {

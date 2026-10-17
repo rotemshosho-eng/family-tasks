@@ -118,6 +118,23 @@ for (const m of members) {
   outbox.push({ to: [m.id], title: `🔥 ${streak} ימים ברצף!`, body: `קיבלת בונוס של ${pts} נקודות`, tag: `streak-${m.id}` });
 }
 
+// 4b. family challenge reached -> everyone gets the bonus (once per challenge)
+{
+  const c = (await db.doc('settings/challenge').get()).data();
+  if (c && c.target > 0 && c.bonus > 0 && c.start && c.until) {
+    const key = `${c.start}|${c.title}`;
+    const n = allLogs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until).length;
+    const paid = allLogs.some(l => l.auto === 'challenge' && l.key === key);
+    if (n >= c.target && !paid) {
+      for (const m of members) {
+        const log = { kind: 'bonus', auto: 'challenge', key, title: `בונוס אתגר: ${c.title}`, memberId: m.id, points: c.bonus, day: today, at: now.getTime() };
+        await db.collection('logs').add(log); allLogs.push(log);
+      }
+      outbox.push({ to: everyone, title: '🎉 ניצחתם באתגר!', body: `${c.title}: כל אחד קיבל ${c.bonus} נקודות בונוס${c.prize ? ` · ${c.prize}` : ''}`, tag: 'challenge' });
+    }
+  }
+}
+
 // 5. Saturday night: who won the week (Sunday to Saturday), once a week
 if (dow === 6 && hour >= 20 && state.ceremonyDay !== today) {
   const weekStart = daysAgo(6);
