@@ -199,10 +199,9 @@ async function saveAdminCode(){
   if (!/^\d{6,12}$/.test(code)){ toast('הקוד הוא 6 עד 12 ספרות'); return; }
   const btn = $('ac-save'); btn.disabled = true;
   try{
-    const b = writeBatch(db);
-    b.set(doc(db,'private','admin'), { code });
-    b.set(doc(db,'adminSessions',S.user.uid), { code }); // keep this device in admin mode
-    await b.commit();
+    // Two separate writes: the session rule checks the saved code, so the code must be saved first.
+    await setDoc(doc(db,'private','admin'), { code });
+    await setDoc(doc(db,'adminSessions',S.user.uid), { code }).catch(e => console.error(e)); // keep this device in admin mode
     $('ac-code').value = ''; toast('קוד המנהל נשמר');
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
