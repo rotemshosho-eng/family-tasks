@@ -173,7 +173,8 @@ function render(){
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderPending(); renderAuth(); syncSelects();
-  if (S.isAdmin){ renderAdminLists(); renderJoins(); renderPresets(); }
+  if (S.isAdmin){ renderAdminLists(); renderJoins(); }
+  renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
 }
@@ -805,20 +806,24 @@ const PRESETS = [
   ['להכין שיעורי בית', 15, [0,1,2,3,4]], ['לסדר את התיק למחר', 5, [0,1,2,3,4]], ['להחליף מצעים', 20, [5]], ['לעזור בקניות', 15, 'once'],
   ['לקרוא ספר', { rate: 1, max: 30 }, [0,1,2,3,4,5,6]], ['להתאמן או לשחק בחוץ', { rate: 1, max: 45 }, [0,1,2,3,4,5,6]]];
 function renderPresets(){
-  const box = $('presets'); if (box.dataset.built) { markPresets(); return; } box.dataset.built = '1';
+  for (const id of ['presets','presetsFam']){
+  const box = $(id); if (box.dataset.built) continue; box.dataset.built = '1';
   PRESETS.forEach(([title, pts, days]) => {
     const timed = typeof pts === 'object';
     box.append(h('button', { type:'button', class:'chip preset', 'data-title':title, onclick: () => addPreset(title, pts, days) },
       taskIcon({ title }) + ' ' + title, h('span', { class:'preset-pts' }, timed ? `${pts.rate}/דק׳` : `+${pts}`)));
   });
+  }
   markPresets();
 }
-function markPresets(){ const have = new Set(S.tasks.map(t => t.title)); $('presets').querySelectorAll('.preset').forEach(b => b.classList.toggle('added', have.has(b.dataset.title))); }
+function markPresets(){ const have = new Set(S.tasks.map(t => t.title)); document.querySelectorAll('.preset').forEach(b => b.classList.toggle('added', have.has(b.dataset.title))); }
 async function addPreset(title, pts, days){
   if (S.tasks.some(t => t.title === title)){ toast('המשימה הזו כבר קיימת'); return; }
   const timed = typeof pts === 'object'; const once = days === 'once';
   const data = { title, assignee:'all', type: once ? 'once' : 'repeat', days: once ? [] : days, timed, check:false,
-    ...(timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now() };
+    ...(timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now(),
+    ...(S.isAdmin ? {} : { reviewed:false, suggestedBy: S.boundId }) };
+  if (!S.isAdmin && !S.boundId){ toast('קודם נכנסים עם הקוד שלך'); return; }
   try{ await addDoc(collection(db,'tasks'), data); toast(`נוספה: ${title}. אפשר לשנות אותה ב"כל המשימות".`); }catch(e){ fail(e); }
 }
 
