@@ -557,7 +557,7 @@ function renderHero(bound){
   const who = bound || (S.me !== 'all' ? S.me : null);
   const m = who ? member(who) : null;
   $('appTitle').textContent = m ? `${greeting()}, ${m.name}!` : `${greeting()}!`;
-  const hr = $('heroRoast'); const showRoast = !!m && !S.isAdmin && roleOf(m.id) === 'child';
+  const hr = $('heroRoast'); const showRoast = !!m && !S.isAdmin && roleOf(m.id) !== 'admin';
   hr.hidden = !showRoast; if (showRoast) hr.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`;
   const btn = $('heroMe'); btn.hidden = !m;
   if (m){ $('heroAva').textContent = avatarOf(m.id); $('heroAva').style.background = m.color; btn.onclick = () => openProfile(m.id); }
@@ -938,7 +938,7 @@ function buildStatic(){
 }
 
 /* ---------- opening splash ---------- */
-// The admin sees "bow to King Rotem". A child sees "good morning, <name>" and a different
+// The admin sees "bow to King Rotem". Children and parents see "good morning, <name>" and a different
 // teasing nickname every time the app opens.
 const ROASTS = {
   m: ['יא לוזר', 'ראש ביצה סרוחה', 'יא עצלן', 'מלך השינה עד הצהריים', 'יא חמוץ', 'אלוף העולם בלהתחמק ממשימות', 'יא שפן', 'נתין קטן של המלך',
@@ -958,7 +958,7 @@ const splashState = { gone: false, close: null, personalized: false, timer: null
 function updateSplash(){
   if (splashState.gone || splashState.personalized) return;
   const id = S.boundId; if (!id || S.isAdmin) return;
-  const m = member(id); if (!m || roleOf(id) !== 'child') return;
+  const m = member(id); if (!m || roleOf(id) === 'admin') return;
   splashState.personalized = true;
   $('splashKicker').textContent = 'הודעה מהמלך רותם 👑';
   $('splashTitle').textContent = `${greeting()}, ${m.name}`;
