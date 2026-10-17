@@ -111,7 +111,7 @@ async function complete(t, memberId){
 async function completeQty(t, memberId, n){
   n = Math.round(Number(n));
   if (!(n >= t.qtyPer)){ toast(`צריך לפחות ${t.qtyPer} ${t.qtyUnit}`); return; }
-  if (n > t.qtyMax){ toast(`התקרה היא ${t.qtyMax} ${t.qtyUnit} ביום`); return; }
+  if (n > (t.qtyMax || 10000)){ toast(`זה יותר מדי ${t.qtyUnit}`); return; }
   if (!db || S.busy.has(t.id)) return; S.busy.add(t.id); S.qtyAsk = null; render();
   const points = qtyPoints(t, n);
   try{
@@ -381,7 +381,7 @@ async function saveSuggestion(){
       await updateDoc(doc(db,'tasks',old.id), { title, assignee, type, days, timed, check: $('sg-check').checked,
         rotation: assignee === 'rotate' ? rotation : deleteField(),
         points: timed ? deleteField() : (q ? q.points : points), ratePerMin: timed ? ratePerMin : deleteField(), maxMinutes: timed ? maxMinutes : deleteField(),
-        qtyPer: q ? q.qtyPer : deleteField(), qtyUnit: q ? q.qtyUnit : deleteField(), qtyMax: q ? q.qtyMax : deleteField(),
+        qtyPer: q ? q.qtyPer : deleteField(), qtyUnit: q ? q.qtyUnit : deleteField(), qtyMax: deleteField(),
         reviewed:false, editedBy: S.boundId });
       toast('המשימה עודכנה'); toggleSuggest(false);
     }catch(e){ fail(e); } finally{ btn.disabled = false; }
@@ -720,8 +720,8 @@ function taskCard(t, canAct){
   });
   if (canAct && S.qtyAsk?.id === t.id){
     const qa = S.qtyAsk; const out = h('span', { class:'qty-pts' });
-    const upd = () => { const n = Math.round(Number(qa.val)) || 0; out.textContent = n >= t.qtyPer ? `= ${qtyPoints(t, Math.min(n, t.qtyMax))} נקודות` : `לפחות ${t.qtyPer}`; };
-    const inp = h('input', { type:'number', id:'qtyIn', min:String(t.qtyPer), max:String(t.qtyMax), inputmode:'numeric', value: qa.val, 'aria-label':`כמה ${t.qtyUnit}` });
+    const upd = () => { const n = Math.round(Number(qa.val)) || 0; out.textContent = n >= t.qtyPer ? `= ${qtyPoints(t, n)} נקודות` : `לפחות ${t.qtyPer}`; };
+    const inp = h('input', { type:'number', id:'qtyIn', min:String(t.qtyPer), inputmode:'numeric', value: qa.val, 'aria-label':`כמה ${t.qtyUnit}` });
     inp.addEventListener('input', () => { qa.val = inp.value; upd(); });
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') completeQty(t, qa.m, qa.val); });
     upd();
@@ -831,7 +831,7 @@ const PRESETS = [
   ['לתלות כביסה', 15, [1,4]], ['לקפל ולסדר כביסה', 15, [1,4]], ['לשאוב אבק', 20, [5]], ['לשטוף רצפה', 25, [5]],
   ['לנקות שירותים', 25, [5]], ['להשקות עציצים', 5, [1,4]], ['להאכיל את הכלב', 5, [0,1,2,3,4,5,6]], ['לצחצח שיניים בוקר וערב', 5, [0,1,2,3,4,5,6]],
   ['להכין שיעורי בית', 15, [0,1,2,3,4]], ['לסדר את התיק למחר', 5, [0,1,2,3,4]], ['להחליף מצעים', 20, [5]], ['לעזור בקניות', 15, 'once'],
-  ['לסדר גרביים בזוגות', { per: 5, unit: 'גרביים', pts: 3, max: 60 }, [0,1,2,3,4,5,6]], ['לאסוף צעצועים', { per: 10, unit: 'צעצועים', pts: 2, max: 100 }, [0,1,2,3,4,5,6]],
+  ['לסדר גרביים בזוגות', { per: 5, unit: 'גרביים', pts: 3 }, [0,1,2,3,4,5,6]], ['לאסוף צעצועים', { per: 10, unit: 'צעצועים', pts: 2 }, [0,1,2,3,4,5,6]],
   ['לקרוא ספר', { rate: 1, max: 30 }, [0,1,2,3,4,5,6]], ['להתאמן או לשחק בחוץ', { rate: 1, max: 45 }, [0,1,2,3,4,5,6]]];
 function renderPresets(){
   for (const id of ['presets','presetsFam']){
@@ -849,7 +849,7 @@ async function addPreset(title, pts, days){
   if (S.tasks.some(t => t.title === title)){ toast('המשימה הזו כבר קיימת'); return; }
   const timed = typeof pts === 'object' && !pts.per; const once = days === 'once';
   const data = { title, assignee:'all', type: once ? 'once' : 'repeat', days: once ? [] : days, timed, check:false,
-    ...(pts.per ? { points: pts.pts, qtyPer: pts.per, qtyUnit: pts.unit, qtyMax: pts.max } : timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now(),
+    ...(pts.per ? { points: pts.pts, qtyPer: pts.per, qtyUnit: pts.unit } : timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now(),
     ...(S.isAdmin ? {} : { reviewed:false, suggestedBy: S.boundId }) };
   if (!S.isAdmin && !S.boundId){ toast('קודם נכנסים עם הקוד שלך'); return; }
   try{ await addDoc(collection(db,'tasks'), data); toast(`נוספה: ${title}. אפשר לשנות אותה ב"כל המשימות".`); }catch(e){ fail(e); }
@@ -995,15 +995,14 @@ function resetTaskForm(){
 function setMode(m){ $('tf-mode-' + m).checked = true; $('tf-fixed-row').hidden = m !== 'fixed'; $('tf-timed-row').hidden = m !== 'timed'; $('tf-qty-row').hidden = m !== 'qty'; $('tf-timed-hint').hidden = m !== 'timed'; }
 const modeOf = t => isTimed(t) ? 'timed' : (t.qtyPer ? 'qty' : 'fixed');
 const radioMode = p => $(p + '-mode-timed').checked ? 'timed' : $(p + '-mode-qty').checked ? 'qty' : 'fixed';
-function fillQty(p, t){ $(p+'-qpts').value = t?.qtyPer ? t.points : 3; $(p+'-qper').value = t?.qtyPer ?? 5; $(p+'-qunit').value = t?.qtyUnit ?? ''; $(p+'-qmax').value = t?.qtyMax ?? 50; }
-// Reads the quantity fields; returns { points, qtyPer, qtyUnit, qtyMax } or a Hebrew error string.
+function fillQty(p, t){ $(p+'-qpts').value = t?.qtyPer ? t.points : 3; $(p+'-qper').value = t?.qtyPer ?? 5; $(p+'-qunit').value = t?.qtyUnit ?? ''; }
+// Reads the quantity fields; returns { points, qtyPer, qtyUnit } or a Hebrew error string. No daily cap: the family trusts the kids.
 function readQty(p){
-  const points = Math.round(Number($(p+'-qpts').value)), qtyPer = Math.round(Number($(p+'-qper').value)), qtyMax = Math.round(Number($(p+'-qmax').value)), qtyUnit = $(p+'-qunit').value.trim();
+  const points = Math.round(Number($(p+'-qpts').value)), qtyPer = Math.round(Number($(p+'-qper').value)), qtyUnit = $(p+'-qunit').value.trim();
   if (!(points >= 0 && points <= 1000)) return 'נקודות: מספר בין 0 ל-1000';
   if (!(qtyPer >= 1 && qtyPer <= 1000)) return '"על כל": מספר בין 1 ל-1000';
   if (!qtyUnit) return 'כתבו מה סופרים, למשל גרבים';
-  if (!(qtyMax >= qtyPer && qtyMax <= 10000)) return 'תקרה ליום: לפחות כמו "על כל", ועד 10000';
-  return { points, qtyPer, qtyUnit, qtyMax };
+  return { points, qtyPer, qtyUnit };
 }
 const qtyText = t => `${t.points} נקודות על כל ${t.qtyPer} ${t.qtyUnit}`;
 const qtyPoints = (t, n) => Math.floor(n / t.qtyPer) * (Number(t.points) || 0);

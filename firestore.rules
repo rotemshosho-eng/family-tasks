@@ -41,7 +41,7 @@ service cloud.firestore {
     function validQty(d) {
       return (!('qtyPer' in d) && !('qtyUnit' in d) && !('qtyMax' in d))
         || (d.timed == false && d.qtyPer is int && d.qtyPer >= 1 && d.qtyPer <= 1000
-            && d.qtyMax is int && d.qtyMax >= d.qtyPer && d.qtyMax <= 10000
+            && (!('qtyMax' in d) || (d.qtyMax is int && d.qtyMax >= d.qtyPer && d.qtyMax <= 10000))
             && d.qtyUnit is string && d.qtyUnit.size() > 0 && d.qtyUnit.size() <= 20);
     }
 
@@ -60,7 +60,7 @@ service cloud.firestore {
         && memberExists(d.memberId)
         && ((!('qtyPer' in taskDoc(d.taskId).data) && !('count' in d) && d.points == taskDoc(d.taskId).data.points)
           || ('qtyPer' in taskDoc(d.taskId).data && d.count is int
-              && d.count >= taskDoc(d.taskId).data.qtyPer && d.count <= taskDoc(d.taskId).data.qtyMax
+              && d.count >= taskDoc(d.taskId).data.qtyPer && d.count <= taskDoc(d.taskId).data.get('qtyMax', 10000)
               && d.points * taskDoc(d.taskId).data.qtyPer == (d.count - d.count % taskDoc(d.taskId).data.qtyPer) * taskDoc(d.taskId).data.points))
         && freshTime(d);
     }
