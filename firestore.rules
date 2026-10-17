@@ -97,8 +97,6 @@ service cloud.firestore {
         && d.days is list && d.days.size() <= 7
         && d.createdAt is int
         && d.suggestedBy is string && boundTo(d.suggestedBy)
-        // משימה שילד מוסיף תמיד צריכה אישור
-        && (get(/databases/$(database)/documents/members/$(d.suggestedBy)).data.get('role', 'child') != 'child' || d.get('check', false) == true)
         && ((d.timed == true && d.ratePerMin is int && d.ratePerMin >= 1 && d.ratePerMin <= 100
               && d.maxMinutes is int && d.maxMinutes >= 1 && d.maxMinutes <= 240)
          || (d.timed == false && d.points is int && d.points >= 0 && d.points <= 1000));

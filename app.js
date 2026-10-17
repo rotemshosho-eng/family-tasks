@@ -167,8 +167,7 @@ function render(){
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
   { const nRev = S.logs.filter(l => waiting(l) && canApprove(l)).length; const tb = $('tabs').querySelector('[data-tab="tasks"]');
-    tb.lastChild.textContent = nRev ? `משימות (${nRev})` : 'משימות';
-    const kid = !S.isAdmin && S.boundId && roleOf(S.boundId) === 'child'; $('sg-checkwrap').hidden = !!kid; $('sg-kidnote').hidden = !kid; }
+    tb.lastChild.textContent = nRev ? `משימות (${nRev})` : 'משימות'; }
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
@@ -335,8 +334,7 @@ async function saveSuggestion(){
   if (assignee === 'rotate' && rotation.length < 2){ toast('בתורנות צריך לפחות שני בני משפחה'); return; }
   const btn = $('sg-save'); btn.disabled = true;
   try{
-    const kid = !S.isAdmin && S.boundId && roleOf(S.boundId) === 'child';
-    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: kid ? true : $('sg-check').checked,
+    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked,
       ...(assignee === 'rotate' ? { rotation } : {}),
       ...(timed ? { ratePerMin, maxMinutes } : { points }), reviewed:false,
       suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
