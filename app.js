@@ -600,17 +600,26 @@ async function saveGoal(){
   const data = { target, prize, ...(S.isAdmin ? {} : { by: S.boundId }) };
   try{ await setDoc(doc(db,'settings','goal'), data); toast(target ? 'היעד נשמר' : 'היעד בוטל'); }catch(e){ fail(e); }
 }
+// Home: this week's standings (task points + bonuses, approved only), with medals for the top three.
 function renderProgress(){
-  const mine = isMine;
-  const left = S.tasks.filter(t => isDue(t) && mine(t)).length;
-  const td = today();
-  const doneIds = new Set(S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && l.day === td && (S.me === 'all' || l.memberId === S.me)).map(l => l.taskId));
-  const done = doneIds.size, total = done + left;
-  const pct = total ? Math.round(done / total * 100) : 0;
-  $('progress').hidden = !total;
-  $('progPct').textContent = `${pct}%`;
-  $('progFill').style.width = `${pct}%`;
-  $('progText').textContent = left ? `${done} מתוך ${total} משימות הושלמו` : 'כל המשימות של היום הושלמו 🎉';
+  const L = $('rankList'); L.replaceChildren();
+  $('progress').hidden = !S.members.length;
+  const ws = weekStart();
+  const rows = S.members.map(m => ({ m, pts: S.logs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= ws).reduce((s, l) => s + (Number(l.points) || 0), 0) }))
+    .sort((a, b) => b.pts - a.pts || (a.m.name || '').localeCompare(b.m.name || '', 'he'));
+  const top = rows.length ? rows[0].pts : 0;
+  let place = 0, prev = null;
+  rows.forEach((r, i) => {
+    if (r.pts !== prev){ place = i + 1; prev = r.pts; }   // ties share a place
+    const medal = r.pts > 0 ? ({ 1:'🥇', 2:'🥈', 3:'🥉' })[place] : null;
+    const me = r.m.id === S.boundId || r.m.id === S.me;
+    L.append(h('li', null, h('button', { type:'button', class:'rank' + (me ? ' me' : '') + (isAdminMember(r.m.id) ? ' royal' : ''), onclick:() => openProfile(r.m.id), 'aria-label':`מקום ${place}: ${r.m.name}, ${r.pts} נקודות` },
+      h('span', { class:'rank-n' }, medal || String(place)),
+      h('span', { class:'ava sm', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
+      h('span', { class:'rank-name' }, r.m.name),
+      h('span', { class:'rank-bar', 'aria-hidden':'true' }, h('span', { style:`width:${top > 0 ? Math.round(r.pts / top * 100) : 0}%;background:${r.m.color}` })),
+      h('span', { class:'rank-pts' }, String(r.pts)))));
+  });
 }
 const ICONS = [[/זבל|פח/, '🗑️'], [/כלים|מדיח/, '🍽️'], [/כביס|לתלות|לקפל/, '🧺'], [/מיטה|חדר|לסדר|מדפ/, '🛏️'], [/כלב/, '🐕'], [/חתול/, '🐈'],
   [/לקרוא|ספר/, '📚'], [/שיעורי|ללמוד|מבחן/, '✏️'], [/להשקות|גינה|עציצ|צמח/, '🪴'], [/לבשל|ארוחה|מטבח|אוכל|שולחן/, '🍳'], [/שיניים|מקלחת|אמבט/, '🪥'],
