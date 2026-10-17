@@ -451,3 +451,12 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .cp-pts-row{display:flex;gap:8px;flex-wrap:wrap}
 .cp-pts-row select{flex:1}.cp-pts-row .cp-pts{width:7em}
 #cpText{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);resize:vertical;letter-spacing:normal}
+.cpc{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.cpc-row{display:flex;align-items:flex-start;gap:8px}
+.cpc-ava{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:.75rem;flex:none}
+.cpc-b{background:var(--sunk);border-radius:12px;padding:6px 10px;display:flex;flex-direction:column;min-width:0;flex:1}
+.cpc-b strong{font-size:.8rem}.cpc-b span{white-space:pre-wrap;overflow-wrap:anywhere}
+.cpc-row.mine .cpc-b{background:#E8F1FF}
+.cpc-x{border:0;background:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:2px 6px}
+.cpc-send{display:flex;gap:6px}
+.cpc-in{flex:1;min-width:0;font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}

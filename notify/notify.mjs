@@ -75,6 +75,14 @@ for (const [taskId, list] of byTask) {
     const to = [...new Set([...handlers, ...(c.about ? [c.about] : [])])].filter(id => id !== c.by);
     outbox.push({ to, title: `📢 תלונה חדשה מ${name(c.by)}${c.about ? ` על ${name(c.about)}` : ''}`, body: String(c.text || '').slice(0, 160), tag: `cp-${c.id}` });
   }
+  const cms = await all('cpComments');
+  for (const c of cps) {
+    const fresh = cms.filter(x => x.cpId === c.id && (x.at || 0) > since).sort((a, b) => a.at - b.at); if (!fresh.length) continue;
+    const last = fresh.at(-1); const writers = new Set(fresh.map(x => x.memberId));
+    const people = new Set([c.by, ...(c.about ? [c.about] : []), ...cms.filter(x => x.cpId === c.id).map(x => x.memberId)]);
+    const to = [...people].filter(id => !(writers.size === 1 && writers.has(id)));
+    outbox.push({ to, title: `💬 תגובה על תלונה: ${String(c.text || '').slice(0, 30)}`, body: `${name(last.memberId)}: ${String(last.text).slice(0, 150)}`, tag: `cpc-${c.id}` });
+  }
   for (const c of cps.filter(c => (c.handledAt || 0) > since && c.status !== 'open')) {
     const to = [...new Set([c.by, ...(c.target ? [c.target] : [])])];
     const pts = c.pts ? ` · ${c.pts > 0 ? '+' : ''}${c.pts} נקודות ל${name(c.target)}` : '';

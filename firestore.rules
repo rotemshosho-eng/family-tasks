@@ -301,6 +301,18 @@ service cloud.firestore {
       allow delete: if isAdmin() || (resource.data.status == 'open' && boundTo(resource.data.by));
     }
 
+    // תגובות על תלונות: כל אחד מגיב בשמו.
+    match /cpComments/{id} {
+      allow read: if signedIn();
+      allow create: if request.resource.data.keys().hasOnly(['cpId','memberId','text','at'])
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300
+        && request.resource.data.at is int
+        && exists(/databases/$(database)/documents/complaints/$(request.resource.data.cpId))
+        && memberExists(request.resource.data.memberId)
+        && (isAdmin() || boundTo(request.resource.data.memberId));
+      allow delete: if isAdmin() || boundTo(resource.data.memberId);
+    }
+
     // משתתפים באתגר: כל אחד מסמן את עצמו, הורה או מנהל יכולים לסמן כל אחד. ביטול = key ריק.
     match /challengeJoins/{memberId} {
       allow read: if signedIn();

@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1142,6 +1142,25 @@ async function handleComplaint(c, status, box){
     toast(status === 'done' ? 'סומן כטופל' : 'התלונה נדחתה');
   }catch(e){ fail(e); }
 }
+async function sendCpComment(c){
+  const me = myMemberId(); const text = (S.cpCm[c.id] || '').trim();
+  if (!me){ toast('קודם נכנסים עם הקוד שלך'); return; }
+  if (!text) return;
+  try{ await addDoc(collection(db,'cpComments'), { cpId:c.id, memberId:me, text, at:Date.now() }); S.cpCm[c.id] = ''; render(); }catch(e){ fail(e); }
+}
+function cpThread(c){
+  const me = myMemberId();
+  const list = S.cpComments.filter(x => x.cpId === c.id).sort((a,b) => a.at - b.at);
+  const inp = h('input', { type:'text', class:'cpc-in', 'data-cp':c.id, maxlength:'300', placeholder:'תגובה…', 'aria-label':'תגובה', value: S.cpCm[c.id] || '' });
+  inp.addEventListener('input', () => { S.cpCm[c.id] = inp.value; });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') sendCpComment(c); });
+  return h('div', { class:'cpc' },
+    list.map(x => h('div', { class:'cpc-row' + (x.memberId === me ? ' mine' : '') },
+      h('span', { class:'cpc-ava', style:`background:${mColor(x.memberId)}` }, avatarOf(x.memberId)),
+      h('div', { class:'cpc-b' }, h('strong', null, mName(x.memberId)), h('span', null, x.text)),
+      (S.isAdmin || x.memberId === me) ? h('button', { type:'button', class:'cpc-x', 'aria-label':'מחיקת תגובה', onclick: async () => { try{ await deleteDoc(doc(db,'cpComments',x.id)); }catch(e){ fail(e); } } }, '×') : null)),
+    me ? h('div', { class:'cpc-send' }, inp, h('button', { type:'button', class:'btn small', onclick:() => sendCpComment(c) }, 'שליחה')) : null);
+}
 async function agreeComplaint(c){
   const me = myMemberId(); if (!me){ toast('קודם נכנסים עם הקוד שלך'); return; }
   const has = (c.agree || []).includes(me);
@@ -1157,6 +1176,7 @@ function renderComplaints(){
   fillCpAbout();
   const all = $('cpf-all').checked;
   const list = (S.complaints || []).filter(c => all || c.status === 'open').sort((a,b) => b.at - a.at);
+  const ae = document.activeElement; const focusCp = ae && ae.classList && ae.classList.contains('cpc-in') ? ae.dataset.cp : null; const caret = focusCp ? ae.selectionStart : 0;
   const L = $('cpList'); L.replaceChildren();
   if (!list.length) L.append(h('div', { class:'empty' }, h('strong', null, all ? 'אין תלונות בכלל' : 'אין תלונות פתוחות'), 'שקט בממלכה. לבינתיים.'));
   const me = myMemberId();
@@ -1189,8 +1209,10 @@ function renderComplaints(){
       box.addEventListener('input', () => { S.cpDraft[c.id] = { r: box.querySelector('.cp-reply').value, t: box.querySelector('.cp-target').value, p: box.querySelector('.cp-pts').value }; });
       card.append(box);
     }
+    card.append(cpThread(c));
     L.append(card);
   });
+  if (focusCp){ const el = L.querySelector(`.cpc-in[data-cp="${focusCp}"]`); if (el){ el.focus({ preventScroll:true }); try{ el.setSelectionRange(caret, caret); }catch(e){} } }
 }
 
 /* ---------- admin ---------- */
@@ -1577,6 +1599,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; S.logsLoaded = true; });
     sub('complaints', a => { S.complaints = a; });
+    sub('cpComments', a => { S.cpComments = a; });
     sub('challengeJoins', a => { S.cjoins = Object.fromEntries(a.map(j => [j.id, j])); });
     sub('photos', a => { S.photos = Object.fromEntries(a.map(p => [p.id, p])); });
     sub('timers', a => { S.timers = a; });
