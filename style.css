@@ -350,3 +350,18 @@ h2{font-weight:600;font-size:1.15rem}
 @keyframes spin{to{rotate:360deg}}
 @keyframes splashOut{to{opacity:0;transform:scale(1.06)}}
 @media (prefers-reduced-motion: reduce){.splash *,.splash.out{animation:none!important}}
+.wait-tag{flex:none;font-size:.78rem;font-weight:600;color:var(--coin-ink);background:var(--coin);border-radius:999px;padding:2px 9px}
+label.check{display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer}
+label.check input{width:18px;height:18px;accent-color:var(--good)}
+
+/* family goal */
+.goal-card{background:var(--surface);border-radius:var(--r-lg);padding:16px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgb(23 43 77 / .08)}
+.goal-head{display:flex;align-items:center;gap:12px}
+.goal-e{flex:none;width:44px;height:44px;border-radius:12px;background:var(--sunk);display:grid;place-items:center;font-size:1.35rem}
+.goal-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.goal-t strong{font-weight:600;overflow-wrap:anywhere}
+.goal-card .progress-bar span{background:var(--coin)}
+.goal-card .progress-pct{color:var(--coin-deep)}
+.goal-card.reached{box-shadow:0 0 0 2px var(--good)}
+.goal-card.reached .progress-bar span{background:var(--good)}
+.done.waiting::before{content:"⏳";background:var(--coin);font-size:.75rem}

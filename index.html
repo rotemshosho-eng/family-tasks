@@ -21,8 +21,8 @@
 <div class="splash" id="splash" hidden aria-live="polite">
   <div class="splash-rays" aria-hidden="true"></div>
   <div class="splash-crown" aria-hidden="true">👑</div>
-  <p class="splash-kicker">כל בני הבית</p>
-  <h1 class="splash-title">השתחוו לרותם המלך</h1>
+  <p class="splash-kicker" id="splashKicker">כל בני הבית</p>
+  <h1 class="splash-title" id="splashTitle">השתחוו לרותם המלך</h1>
   <div class="splash-bows" aria-hidden="true"><span>🙇</span><span>🙇‍♀️</span><span>🙇</span></div>
 </div>
 <div class="wrap">
@@ -83,6 +83,7 @@
       <div class="progress-bar"><span id="progFill"></span></div>
       <p class="sub" id="progText"></p>
     </section>
+    <section class="goal-card" data-goal hidden></section>
     <section class="section">
       <div class="section-head"><h2 id="todoTitle">מה נשאר להיום</h2><span class="count" id="todoCount"></span></div>
       <div class="list" id="todo"></div>
@@ -163,6 +164,7 @@
     <span class="grow"></span>
     <button type="button" class="btn ghost small" id="switchUser">החלפת משתמש</button>
   </div>
+    <section class="goal-card" data-goal hidden></section>
     <section class="section">
       <div class="section-head"><h2>נקודות השבוע</h2><span class="count">השבוע מתחיל ביום ראשון</span></div>
       <div class="board" id="board"></div>
@@ -171,6 +173,12 @@
 
   <!-- ADMIN -->
   <main id="view-admin" class="section stack" hidden>
+    <section class="panel" id="reviewPanel" hidden>
+      <div class="section-head"><h2>מחכה לאישור שלך</h2><span class="count" id="reviewCount"></span></div>
+      <p class="sub">משימות שסומנו כבוצעו וצריכות בדיקה. הנקודות נכנסות רק אחרי אישור.</p>
+      <div id="reviewList"></div>
+    </section>
+
     <section class="panel" id="joinsPanel" hidden>
       <div class="section-head"><h2>מחכים לאישור</h2><span class="count" id="joinsCount"></span></div>
       <p class="sub">אנשים שנרשמו עם חשבון גוגל ורוצים להצטרף ללוח.</p>
@@ -181,6 +189,9 @@
       <h2 id="tfHead">משימה חדשה</h2>
       <div class="field"><label for="tf-title">מה צריך לעשות</label><input type="text" id="tf-title" maxlength="80" placeholder="למשל: להוציא את הזבל"></div>
       <div class="field"><label for="tf-assignee">של מי</label><select id="tf-assignee"></select></div>
+      <div class="field" id="tf-rotwrap" hidden><span class="lab">מי בתורנות (לפי הסדר)</span><div class="seg" id="tf-rot"></div>
+        <p class="sub">כל פעם שמישהו מסיים, התור עובר לבא אחריו.</p></div>
+      <label class="check"><input type="checkbox" id="tf-check"> צריך אישור שלי לפני שהנקודות נכנסות</label>
       <div class="field"><span class="lab">איך מחשבים נקודות</span>
         <div class="seg">
           <label><input type="radio" name="tf-mode" id="tf-mode-fixed" value="fixed" checked> מספר קבוע</label>
@@ -221,6 +232,16 @@
       </div>
       <div class="field"><label for="bf-reason">סיבה</label><input type="text" id="bf-reason" maxlength="60" placeholder="למשל: עזרה בלי שביקשו"></div>
       <div><button type="button" class="btn" id="bf-save">עדכון נקודות</button></div>
+    </section>
+
+    <section class="panel">
+      <h2>יעד משפחתי לחודש</h2>
+      <p class="sub">כל המשפחה צוברת ביחד. כשמגיעים ליעד, מקבלים את הפרס. מתאפס בתחילת כל חודש. כדי לבטל, שומרים 0.</p>
+      <div class="row">
+        <div class="field"><label for="gl-target">יעד בנקודות</label><input type="number" id="gl-target" min="0" inputmode="numeric" placeholder="למשל 1000"></div>
+        <div class="field"><label for="gl-prize">הפרס</label><input type="text" id="gl-prize" maxlength="40" placeholder="למשל: ערב פיצה"></div>
+      </div>
+      <div><button type="button" class="btn" id="gl-save">שמירת היעד</button></div>
     </section>
 
     <section class="panel">

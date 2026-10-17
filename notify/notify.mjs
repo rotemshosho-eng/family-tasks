@@ -5,6 +5,9 @@
 //   • a new chat message on a task      → everyone except whoever wrote it
 //   • a new task                        → the person it's assigned to (or everyone, minus whoever added it)
 //   • once a day after 19:00 (Israel)   → each person who still has tasks left today
+//   • a task waiting for approval       → whoever is marked as admin
+//   • 3, 7, 14, 21... days in a row      → an automatic streak bonus (added here, server-side) + a notification
+//   • Saturday after 20:00               → everyone: who won the week
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
@@ -38,6 +41,17 @@ const name = id => members.find(m => m.id === id)?.name || 'מישהו';
 const tokensFor = ids => tokens.filter(t => ids.includes(t.memberId)).map(t => t.id);
 const everyone = members.map(m => m.id);
 const outbox = []; // { to: [memberIds], title, body, tag }
+const allLogs = await all('logs');
+const counted = l => l.approved !== false;
+// Rotation: same rule as the app; the turn moves on each time the task is done.
+const doneCount = t => allLogs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed')).length;
+function whoseTurn(t) {
+  if (t.assignee !== 'rotate') return t.assignee || 'all';
+  const r = (t.rotation || []).filter(id => members.some(m => m.id === id));
+  return r.length ? r[doneCount(t) % r.length] : 'all';
+}
+const dayStr = d => { const p = parts(d); return `${p.year}-${p.month}-${p.day}`; };
+const daysAgo = n => dayStr(new Date(now.getTime() - n * 86400000));
 
 // 1. chat messages since the last run
 const msgs = (await db.collection('messages').where('at', '>', Timestamp.fromMillis(since)).get()).docs.map(d => d.data());
@@ -54,7 +68,8 @@ for (const [taskId, list] of byTask) {
 
 // 2. new tasks since the last run
 for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
-  const to = t.assignee && t.assignee !== 'all' ? [t.assignee] : everyone.filter(id => id !== t.suggestedBy);
+  const turn = whoseTurn(t);
+  const to = turn !== 'all' ? [turn] : everyone.filter(id => id !== t.suggestedBy);
   const pts = t.timed ? `${t.ratePerMin} נקודות לדקה` : `${t.points} נקודות`;
   outbox.push({ to: to.filter(id => id !== t.suggestedBy), title: 'משימה חדשה', body: `${t.title} · ${pts}`, tag: `task-${t.id}` });
 }
@@ -62,26 +77,54 @@ for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
 // 2b. points spent on a reward since the last run -> whoever is marked as admin
 const admins = members.filter(m => m.admin === true).map(m => m.id);
 if (admins.length) {
-  const spent = (await db.collection('logs').where('at', '>', since).get()).docs.map(d => d.data()).filter(l => l.kind === 'redeem');
+  const fresh = allLogs.filter(l => typeof l.at === 'number' && l.at > since);
+  for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: admins.filter(id => id !== l.memberId), title: 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
+  const spent = fresh.filter(l => l.kind === 'redeem');
   for (const l of spent) outbox.push({ to: admins.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
 }
 
 // 3. evening reminder, once a day
 if (hour >= REMIND_HOUR && state.remindedDay !== today) {
-  const logs = (await db.collection('logs').where('day', '==', today).get()).docs.map(d => d.data());
-  const allLogs = await all('logs');
+  const logs = allLogs.filter(l => l.day === today);
   const isDue = t => {
     if (t.pending) return false;
     if (t.type === 'once') return !allLogs.some(l => l.taskId === t.id);
     return (t.days || []).includes(dow) && !logs.some(l => l.taskId === t.id);
   };
   for (const m of members) {
-    const left = tasks.filter(t => isDue(t) && (t.assignee === m.id || t.assignee === 'all'));
+    const left = tasks.filter(t => { if (!isDue(t)) return false; const w = whoseTurn(t); return w === m.id || w === 'all'; });
     if (!left.length) continue;
     const list = left.slice(0, 3).map(t => t.title).join(', ') + (left.length > 3 ? ' ועוד' : '');
     outbox.push({ to: [m.id], title: `נשארו לך ${left.length} משימות להיום`, body: list, tag: 'evening' });
   }
   state.remindedDay = today;
+}
+
+// 4. streak bonus: days in a row with at least one approved task. 3 days = 10, 7 and every 7 after = 30.
+const STREAK_BONUS = n => n === 3 ? 10 : (n >= 7 && n % 7 === 0 ? 30 : 0);
+for (const m of members) {
+  const days = new Set(allLogs.filter(l => l.memberId === m.id && (l.kind === 'task' || l.kind === 'timed') && counted(l)).map(l => l.day));
+  if (!days.has(today)) continue;
+  let streak = 0; while (days.has(daysAgo(streak))) streak++;
+  const pts = STREAK_BONUS(streak); if (!pts) continue;
+  const already = allLogs.some(l => l.memberId === m.id && l.kind === 'bonus' && l.auto === 'streak' && l.day === today);
+  if (already) continue;
+  const log = { kind: 'bonus', auto: 'streak', title: `בונוס רצף: ${streak} ימים ברצף`, memberId: m.id, points: pts, day: today, at: now.getTime() };
+  await db.collection('logs').add(log); allLogs.push(log);
+  outbox.push({ to: [m.id], title: `🔥 ${streak} ימים ברצף!`, body: `קיבלת בונוס של ${pts} נקודות`, tag: `streak-${m.id}` });
+}
+
+// 5. Saturday night: who won the week (Sunday to Saturday), once a week
+if (dow === 6 && hour >= 20 && state.ceremonyDay !== today) {
+  const weekStart = daysAgo(6);
+  const totals = members.map(m => ({ m, pts: allLogs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= weekStart && l.day <= today)
+    .reduce((s, l) => s + (Number(l.points) || 0), 0) })).sort((a, b) => b.pts - a.pts);
+  if (totals.length && totals[0].pts > 0) {
+    const top = totals.filter(x => x.pts === totals[0].pts).map(x => x.m.name);
+    const who = top.length === 1 ? top[0] : top.join(' ו');
+    outbox.push({ to: everyone, title: `👑 ${top.length === 1 ? 'האלוף' : 'האלופים'} של השבוע: ${who}`, body: `${totals[0].pts} נקודות השבוע. שבוע חדש מתחיל מחר, בהצלחה לכולם!`, tag: 'weekly-winner' });
+  }
+  state.ceremonyDay = today;
 }
 
 // send

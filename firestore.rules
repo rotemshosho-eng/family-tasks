@@ -37,8 +37,15 @@ service cloud.firestore {
         || (exists(mPath) && get(mPath).data.get('uid', '') == request.auth.uid));
     }
 
+    // משימה שמסומנת "צריך אישור": הרישום חייב להתחיל כלא מאושר. אחרת אסור לשלוח שדה אישור.
+    function approvalOk(d) {
+      return (taskDoc(d.taskId).data.get('check', false) == true && d.get('approved', true) == false)
+        || (taskDoc(d.taskId).data.get('check', false) != true && !('approved' in d));
+    }
+
     function validFixed(d) {
-      return d.keys().hasOnly(['kind','taskId','title','memberId','points','day','at'])
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','approved','day','at'])
+        && approvalOk(d)
         && d.kind == 'task'
         && exists(/databases/$(database)/documents/tasks/$(d.taskId))
         && taskDoc(d.taskId).data.get('timed', false) == false
@@ -52,8 +59,9 @@ service cloud.firestore {
       let timerPath = /databases/$(database)/documents/timers/$(d.timerId);
       let timer = get(timerPath).data;
       let task = taskDoc(d.taskId).data;
-      return d.keys().hasOnly(['kind','taskId','title','memberId','points','minutes','timerId','day','at'])
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','minutes','timerId','approved','day','at'])
         && d.kind == 'timed'
+        && approvalOk(d)
         && d.timerId == d.taskId + '__' + d.memberId
         && timer.taskId == d.taskId
         && timer.memberId == d.memberId
