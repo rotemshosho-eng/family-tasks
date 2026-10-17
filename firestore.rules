@@ -65,6 +65,18 @@ service cloud.firestore {
         && freshTime(d);
     }
 
+    // שימוש בנקודות (מימוש פרס): כל אחד מוריד רק מהיתרה של עצמו. ביטול: רק המנהל.
+    function validRedeem(d) {
+      return d.keys().hasOnly(['kind','title','memberId','points','rewardId','day','at'])
+        && d.kind == 'redeem'
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 60
+        && d.points is int && d.points >= 1 && d.points <= 100000
+        && memberExists(d.memberId)
+        && (!('rewardId' in d) || (exists(/databases/$(database)/documents/rewards/$(d.rewardId))
+              && get(/databases/$(database)/documents/rewards/$(d.rewardId)).data.cost == d.points))
+        && freshTime(d);
+    }
+
     function validNewTask(d) {
       return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','reviewed','suggestedBy','createdAt'])
         && d.reviewed == false
@@ -187,9 +199,16 @@ service cloud.firestore {
         && (isAdmin() || boundTo(request.resource.data.memberId));
       allow delete: if isAdmin() || boundTo(resource.data.memberId);
     }
+    // פרסים: כולם רואים, רק המנהל מוסיף ומוחק.
+    match /rewards/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     match /logs/{id} {
       allow read: if signedIn();
       allow create: if isAdmin()
+        || (request.resource.data.kind == 'redeem' && validRedeem(request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && boundTo(request.resource.data.memberId));
       allow delete: if isAdmin() || (

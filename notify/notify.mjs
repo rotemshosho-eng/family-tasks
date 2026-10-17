@@ -59,6 +59,13 @@ for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   outbox.push({ to: to.filter(id => id !== t.suggestedBy), title: 'משימה חדשה', body: `${t.title} · ${pts}`, tag: `task-${t.id}` });
 }
 
+// 2b. points spent on a reward since the last run -> whoever is marked as admin
+const admins = members.filter(m => m.admin === true).map(m => m.id);
+if (admins.length) {
+  const spent = (await db.collection('logs').where('at', '>', since).get()).docs.map(d => d.data()).filter(l => l.kind === 'redeem');
+  for (const l of spent) outbox.push({ to: admins.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
+}
+
 // 3. evening reminder, once a day
 if (hour >= REMIND_HOUR && state.remindedDay !== today) {
   const logs = (await db.collection('logs').where('day', '==', today).get()).docs.map(d => d.data());

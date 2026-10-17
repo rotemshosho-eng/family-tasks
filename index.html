@@ -129,6 +129,39 @@
     </section>
   </main>
 
+  <!-- REWARDS -->
+  <main id="view-rewards" class="section stack" hidden>
+    <div class="who" id="rw-who"></div>
+    <section class="wallet" id="wallet" aria-label="הנקודות שלי"></section>
+    <section class="section">
+      <div class="section-head"><h2>פרסים</h2><span class="count" id="rwCount"></span></div>
+      <div class="rgrid" id="rwGrid"></div>
+    </section>
+    <section class="panel" id="rw-use">
+      <h2>השתמשתי בנקודות</h2>
+      <p class="sub">על משהו שלא ברשימה. הנקודות יורדות מהיתרה.</p>
+      <div class="row">
+        <div class="field"><label for="ru-points">כמה נקודות</label><input type="number" id="ru-points" min="1" inputmode="numeric" placeholder="למשל 30"></div>
+        <div class="field"><label for="ru-note">על מה</label><input type="text" id="ru-note" maxlength="60" placeholder="למשל: גלידה"></div>
+      </div>
+      <div><button type="button" class="btn" id="ru-save">הורדה מהיתרה</button></div>
+    </section>
+    <section class="section">
+      <div class="section-head"><h2>היסטוריית שימוש</h2></div>
+      <div class="list" id="rwHist"></div>
+    </section>
+    <section class="panel" id="rw-admin" hidden>
+      <h2>ניהול פרסים</h2>
+      <div class="row">
+        <div class="field"><label for="ra-emoji">סמל</label><select id="ra-emoji"></select></div>
+        <div class="field"><label for="ra-title">פרס</label><input type="text" id="ra-title" maxlength="40" placeholder="למשל: בחירת סרט"></div>
+        <div class="field"><label for="ra-cost">מחיר בנקודות</label><input type="number" id="ra-cost" min="1" inputmode="numeric" value="50"></div>
+      </div>
+      <div class="row"><button type="button" class="btn" id="ra-save">הוספת פרס</button><button type="button" class="btn ghost" id="ra-starter">הוספת רשימה מוכנה</button></div>
+      <div id="raList"></div>
+    </section>
+  </main>
+
   <!-- FAMILY -->
   <main id="view-family" class="section stack" hidden>
     <div class="mebar" id="meBar" hidden>
@@ -247,6 +280,7 @@
 <nav class="bottomnav" id="tabs" hidden aria-label="ניווט">
   <button type="button" data-tab="today" aria-pressed="true"><span class="ni" aria-hidden="true">🏠</span>בית</button>
   <button type="button" data-tab="tasks" aria-pressed="false"><span class="ni" aria-hidden="true">📅</span>משימות</button>
+  <button type="button" data-tab="rewards" aria-pressed="false"><span class="ni" aria-hidden="true">🏆</span>פרסים</button>
   <button type="button" data-tab="family" aria-pressed="false"><span class="ni" aria-hidden="true">👥</span>משפחה</button>
   <button type="button" data-tab="admin" aria-pressed="false" hidden><span class="ni" aria-hidden="true">⚙️</span><span class="nl">ניהול</span></button>
 </nav>

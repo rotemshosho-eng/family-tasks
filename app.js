@@ -8,7 +8,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -118,8 +118,8 @@ function render(){
   $('tabs').hidden = !S.user;
   $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin;
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
-  if (!['today','tasks','family','admin'].includes(S.tab)) S.tab = 'today';
-  const VIEWS = ['today','tasks','family','admin'];
+  if (!['today','tasks','rewards','family','admin'].includes(S.tab)) S.tab = 'today';
+  const VIEWS = ['today','tasks','rewards','family','admin'];
   const hideViews = () => VIEWS.forEach(v => $('view-'+v).hidden = true);
   VIEWS.forEach(v => $('view-'+v).hidden = S.tab !== v);
   // A family member's device is locked to whoever signed in with their code. Only the admin can view as anyone.
@@ -145,7 +145,7 @@ function render(){
   renderChatSheet(); renderProfileSheet();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderAllTasks(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderAllTasks(); renderRewards(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
@@ -340,7 +340,7 @@ function memberStats(id){
   const ws = weekStart(), td = today();
   const mine = S.logs.filter(l => l.memberId === id);
   let week = 0, total = 0, done = 0; const days = new Set();
-  for (const l of mine){ const p = Number(l.points) || 0; total += p; if (l.day >= ws) week += p; if (l.kind === 'task' || l.kind === 'timed'){ done++; days.add(l.day); } }
+  for (const l of mine){ if (l.kind === 'redeem') continue; const p = Number(l.points) || 0; total += p; if (l.day >= ws) week += p; if (l.kind === 'task' || l.kind === 'timed'){ done++; days.add(l.day); } }
   // streak: consecutive days, ending today (or yesterday if nothing yet today), with at least one finished task
   let streak = 0; const d = new Date(); if (!days.has(td)) d.setDate(d.getDate() - 1);
   while (days.has(dstr(d))){ streak++; d.setDate(d.getDate() - 1); }
@@ -492,7 +492,7 @@ function renderBoard(){
   }
   const ws = weekStart();
   const rows = S.members.map(m => { let wk = 0, tot = 0;
-    for (const l of S.logs){ if (l.memberId !== m.id) continue; const p = Number(l.points) || 0; tot += p; if (l.day >= ws) wk += p; }
+    for (const l of S.logs){ if (l.memberId !== m.id || l.kind === 'redeem') continue; const p = Number(l.points) || 0; tot += p; if (l.day >= ws) wk += p; }
     return { m, wk, tot }; }).sort((a,b) => b.wk - a.wk);
   const top = rows[0].wk;
   rows.forEach(r => { const lead = top > 0 && r.wk === top;
@@ -613,6 +613,106 @@ function renderAllTasks(){
   group('חד-פעמיות שבוצעו', finished, false);
 }
 
+
+/* ---------- rewards: balance, spending, catalog ---------- */
+const REWARD_EMOJI = ['🎬','🍕','🍦','📱','🎮','🛌','🍳','🎟️','🧸','📚','🏊','🚲','🎨','🎁','💵','⭐'];
+const STARTER_REWARDS = [
+  ['📱', '30 דקות מסך נוספות', 30], ['🍦', 'גלידה או קינוח', 40], ['🛌', 'לישון חצי שעה מאוחר יותר', 50],
+  ['🎬', 'לבחור את הסרט בערב משפחתי', 60], ['🍳', 'לבחור מה אוכלים בארוחת ערב', 70], ['🙅', 'פטור ממשימה אחת', 80],
+  ['🎮', 'שעת משחק עם אבא או אמא', 100], ['🧑‍🤝‍🧑', 'חבר מגיע לישון', 150], ['🎨', 'יציאה לפעילות לבחירה', 250], ['🎁', 'מתנה קטנה עד 50 ₪', 400]];
+function walletOf(id){
+  let earned = 0, used = 0;
+  for (const l of S.logs){ if (l.memberId !== id) continue; const p = Number(l.points) || 0; if (l.kind === 'redeem') used += p; else earned += p; }
+  return { earned, used, balance: earned - used };
+}
+function rewardsWho(){ return S.boundId || (S.me !== 'all' && member(S.me) ? S.me : null); }
+async function redeem(memberId, title, cost, rewardId){
+  const w = walletOf(memberId);
+  if (!(cost >= 1)){ toast('כמות נקודות: לפחות 1'); return false; }
+  if (cost > w.balance){ toast(`אין מספיק נקודות: יש ${w.balance}, צריך ${cost}`); return false; }
+  try{
+    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, ...(rewardId ? { rewardId } : {}), day:today(), at:Date.now() });
+    toast(`${mName(memberId)}: ירדו ${cost} נקודות`); return true;
+  }catch(e){ fail(e); return false; }
+}
+function renderRewards(){
+  const who = rewardsWho();
+  // admin with no member chosen: pick whose wallet to show
+  const rw = $('rw-who'); rw.replaceChildren(); rw.hidden = !S.isAdmin;
+  if (S.isAdmin){ rw.append(h('span', { class:'lbl' }, 'של מי:'));
+    S.members.forEach(m => rw.append(h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === m.id),
+      onclick:() => { S.me = m.id; store.set('ft-me', m.id); render(); } }, h('span', { class:'dot', style:`background:${m.color}` }), m.name))); }
+  const W = $('wallet'); W.replaceChildren();
+  $('rw-use').hidden = !who;
+  if (!who){
+    W.append(h('div', { class:'empty' }, h('strong', null, 'בחרו בן משפחה'), 'כדי לראות כמה נקודות יש לו ולממש פרסים.'));
+  } else {
+    const w = walletOf(who); const m = member(who);
+    const ils = v => shekelsFor(v) != null ? fmtILS(shekelsFor(v)) : null;
+    W.append(
+      h('div', { class:'wallet-main' }, h('span', { class:'wallet-l' }, `היתרה של ${m.name}`),
+        h('span', { class:'wallet-v' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), String(w.balance)),
+        ils(w.balance) ? h('span', { class:'wallet-s' }, ils(w.balance)) : null),
+      h('div', { class:'wallet-row' },
+        h('div', null, h('span', { class:'wallet-n' }, String(w.earned)), h('span', { class:'wallet-l' }, 'צבר בכל הזמן')),
+        h('div', null, h('span', { class:'wallet-n' }, String(w.used)), h('span', { class:'wallet-l' }, 'השתמש'))));
+  }
+  const G = $('rwGrid'); G.replaceChildren();
+  const list = S.rewards.slice().sort((a,b) => (a.cost||0) - (b.cost||0));
+  $('rwCount').textContent = list.length ? String(list.length) : '';
+  if (!list.length) G.append(h('div', { class:'empty', style:'grid-column:1/-1' }, h('strong', null, 'עוד אין פרסים'),
+    S.isAdmin ? 'הוסיפו פרסים בחלק "ניהול פרסים" למטה, או רשימה מוכנה בלחיצה אחת.' : 'מי שמנהל את הלוח יוסיף פרסים בקרוב.'));
+  const bal = who ? walletOf(who).balance : 0;
+  list.forEach(r => {
+    const key = 'r' + r.id; const can = who && bal >= r.cost;
+    const btn = h('button', { type:'button', class:'btn small', disabled: !can }, can ? 'לממש' : (who ? `חסרות ${r.cost - bal}` : 'לממש'));
+    btn.addEventListener('click', () => arm(key, btn, () => redeem(who, r.title, r.cost, r.id)));
+    if (S.armed === key){ btn.classList.add('armed'); btn.textContent = 'בטוח? שוב'; }
+    G.append(h('div', { class:'reward' + (can ? '' : ' locked') },
+      h('span', { class:'reward-e', 'aria-hidden':'true' }, r.emoji || '🎁'),
+      h('span', { class:'reward-t' }, r.title),
+      h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), `${r.cost} נקודות`),
+      btn));
+  });
+  const H = $('rwHist'); H.replaceChildren();
+  const hist = S.logs.filter(l => l.kind === 'redeem' && (!who || l.memberId === who)).sort((a,b) => b.at - a.at).slice(0, 30);
+  if (!hist.length) H.append(h('p', { class:'sub' }, 'עוד לא השתמשו בנקודות.'));
+  hist.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
+    H.append(h('div', { class:'arow' },
+      h('div', { class:'t' }, h('strong', null, l.title), h('small', null, `${+da}.${+mo}${who ? '' : ` · ${mName(l.memberId)}`}`)),
+      h('span', { class:'num neg' }, `-${l.points}`),
+      S.isAdmin ? armedBtn('rh' + l.id, 'ביטול', () => removeLog(l)) : null)); });
+  // admin catalog
+  $('rw-admin').hidden = !S.isAdmin;
+  if (S.isAdmin){
+    const A = $('raList'); A.replaceChildren();
+    list.forEach(r => A.append(h('div', { class:'arow' }, h('span', { class:'reward-e sm' }, r.emoji || '🎁'),
+      h('div', { class:'t' }, h('strong', null, r.title), h('small', null, `${r.cost} נקודות`)),
+      armedBtn('rd' + r.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'rewards',r.id)); toast('הפרס נמחק'); }catch(e){ fail(e); } }))));
+  }
+}
+async function saveUse(){
+  const who = rewardsWho(); if (!who) return;
+  const pts = Math.round(Number($('ru-points').value)); const note = $('ru-note').value.trim() || 'שימוש בנקודות';
+  if (!(pts >= 1)){ toast('כתבו כמה נקודות'); $('ru-points').focus(); return; }
+  const btn = $('ru-save'); btn.disabled = true;
+  if (await redeem(who, note, pts)){ $('ru-points').value = ''; $('ru-note').value = ''; }
+  btn.disabled = false;
+}
+async function saveReward(){
+  const title = $('ra-title').value.trim(); const cost = Math.round(Number($('ra-cost').value)); const emoji = $('ra-emoji').value || '🎁';
+  if (!title){ toast('כתבו מה הפרס'); $('ra-title').focus(); return; }
+  if (!(cost >= 1 && cost <= 100000)){ toast('מחיר: מספר נקודות חיובי'); return; }
+  try{ await addDoc(collection(db,'rewards'), { title, cost, emoji, createdAt: Date.now() }); $('ra-title').value = ''; toast('הפרס נוסף'); }catch(e){ fail(e); }
+}
+async function addStarterRewards(){
+  const have = new Set(S.rewards.map(r => r.title));
+  const b = writeBatch(db); let n = 0;
+  for (const [emoji, title, cost] of STARTER_REWARDS){ if (have.has(title)) continue; b.set(doc(collection(db,'rewards')), { title, cost, emoji, createdAt: Date.now() + n }); n++; }
+  if (!n){ toast('כל הפרסים מהרשימה כבר קיימים'); return; }
+  try{ await b.commit(); toast(`נוספו ${n} פרסים. אפשר לערוך מחירים ולמחוק מה שלא מתאים.`); }catch(e){ fail(e); }
+}
+
 /* ---------- admin ---------- */
 function syncSelects(){
   const fill = (sel, withAll) => { const v = sel.value; sel.replaceChildren();
@@ -665,9 +765,9 @@ function renderAdminLists(){
   const H = $('histList'); H.replaceChildren();
   const hist = S.logs.slice().sort((a,b) => b.at - a.at).slice(0, 40);
   if (!hist.length) H.append(h('p', { class:'sub' }, 'כאן יופיע כל מה שבוצע וכל שינוי נקודות.'));
-  hist.forEach(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
+  hist.forEach(l => { const p = (l.kind === 'redeem' ? -1 : 1) * (Number(l.points) || 0); const [, mo, da] = (l.day || '--').split('-');
     H.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : ''}${l.title}${l.minutes ? ` (${l.minutes} דק׳)` : ''}`)),
+      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.minutes ? ` (${l.minutes} דק׳)` : ''}`)),
       h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p),
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
@@ -783,6 +883,10 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  $('ru-save').addEventListener('click', saveUse);
+  $('ra-save').addEventListener('click', saveReward);
+  $('ra-starter').addEventListener('click', addStarterRewards);
+  REWARD_EMOJI.forEach(e => $('ra-emoji').append(h('option', { value:e }, e)));
   $('chatBack').addEventListener('click', closeChat);
   $('ag-go').addEventListener('click', adminCodeGo);
   $('ag-code').addEventListener('keydown', e => { if (e.key === 'Enter') adminCodeGo(); });
@@ -892,9 +996,11 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('members', a => { S.members = a.sort((x,y) => (x.order||0) - (y.order||0)); if (!S.memInit){ S.memInit = true; resetMemberForm(); } });
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; });
+    sub('rewards', a => { S.rewards = a.sort((x,y) => (x.cost||0) - (y.cost||0)); });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });
     sub('profiles', a => { S.profiles = Object.fromEntries(a.map(p => [p.id, p])); });
+    sub('rewards', a => { S.rewards = a; });
     S.binding = null; S.bindLoaded = false;
     unsubs.push(onSnapshot(doc(db,'bindings',user.uid), s => {
       S.binding = s.exists() ? s.data() : null; S.bindLoaded = true; render();
