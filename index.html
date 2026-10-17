@@ -382,6 +382,26 @@
 </div>
 <!-- complaints: everyone sees everything; admin and parents handle -->
 <button type="button" class="fab" id="cpFab" hidden aria-label="תלונות">📢<span class="fab-l">תלונות</span><span class="fab-n" id="cpFabN" hidden></span></button>
+<button type="button" class="fab fab2" id="dnFab" hidden aria-label="הערות למפתח">🛠️<span class="fab-l">הערות למפתח</span><span class="fab-n" id="dnFabN" hidden></span></button>
+<div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">
+  <div class="sheet-head">
+    <button type="button" class="btn ghost small" id="dnBack">חזרה</button>
+    <div class="sheet-titles"><strong id="dnTitle">🛠️ הערות למפתח</strong><span class="sub">רק המנהל רואה את זה</span></div>
+  </div>
+  <div class="sheet-body scroll">
+    <section class="panel" id="dnForm">
+      <h2>מה לשפר באפליקציה?</h2>
+      <p class="sub">באג, רעיון, משהו שלא נוח. ההערה מגיעה ישר למנהל, ואף אחד אחר לא רואה אותה.</p>
+      <div class="chips" id="dnKinds"></div>
+      <div class="field"><label for="dnText">ההערה</label><textarea id="dnText" rows="4" maxlength="800" placeholder="למשל: הכפתור של הטיימר קטן מדי"></textarea></div>
+      <div><button type="button" class="btn" id="dnSend">שליחה למנהל</button></div>
+    </section>
+    <section class="section" id="dnInbox" hidden>
+      <div class="section-head"><h2>תיבת ההערות</h2><span class="count" id="dnCount"></span></div>
+      <div class="list" id="dnList"></div>
+    </section>
+  </div>
+</div>
 <div class="sheet" id="cpSheet" hidden role="dialog" aria-modal="true" aria-labelledby="cpTitle">
   <div class="sheet-head">
     <button type="button" class="btn ghost small" id="cpBack">חזרה</button>

@@ -301,6 +301,18 @@ service cloud.firestore {
       allow delete: if isAdmin() || (resource.data.status == 'open' && boundTo(resource.data.by));
     }
 
+    // הערות למפתח: כל אחד שולח בשמו, רק המנהל קורא ומטפל.
+    match /devNotes/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(['text','kind','by','status','at'])
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 800
+        && request.resource.data.kind in ['bug','idea','ux','other']
+        && request.resource.data.status == 'new'
+        && request.resource.data.at is int
+        && memberExists(request.resource.data.by)
+        && (isAdmin() || boundTo(request.resource.data.by));
+    }
+
     // תגובות על תלונות: כל אחד מגיב בשמו.
     match /cpComments/{id} {
       allow read: if signedIn();

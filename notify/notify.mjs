@@ -90,6 +90,13 @@ for (const [taskId, list] of byTask) {
   }
 }
 
+// 1c. notes to the developer -> admin only
+{
+  const kinds = { bug: '🐞 באג', idea: '💡 רעיון', ux: '😕 לא נוח', other: '💬 הערה' };
+  for (const n of (await all('devNotes')).filter(n => (n.at || 0) > since))
+    outbox.push({ to: members.filter(m => m.admin === true || m.role === 'admin').map(m => m.id).filter(id => id !== n.by), title: `🛠️ ${kinds[n.kind] || 'הערה'} מ${name(n.by)}`, body: String(n.text || '').slice(0, 170), tag: `dn-${n.id}` });
+}
+
 // 2. new tasks since the last run
 for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   const turn = whoseTurn(t);

@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -199,7 +199,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -1168,10 +1168,10 @@ async function agreeComplaint(c){
 }
 function renderComplaints(){
   const open = (S.complaints || []).filter(c => c.status === 'open').length;
-  $('cpFab').hidden = !S.user || S.tab !== 'today' || !(S.boundId || S.isAdmin) || !!S.cpOpen;
+  $('cpFab').hidden = !S.user || S.tab !== 'today' || !(S.boundId || S.isAdmin) || !!S.cpOpen || !!S.dnOpen;
   $('cpFabN').hidden = !open; $('cpFabN').textContent = String(open);
   const sheet = $('cpSheet');
-  if (!S.cpOpen){ sheet.hidden = true; if (!S.chatOpen && !S.profileOpen) document.body.classList.remove('locked'); return; }
+  if (!S.cpOpen){ sheet.hidden = true; if (!S.chatOpen && !S.profileOpen && !S.dnOpen) document.body.classList.remove('locked'); return; }
   sheet.hidden = false; document.body.classList.add('locked');
   fillCpAbout();
   const all = $('cpf-all').checked;
@@ -1213,6 +1213,47 @@ function renderComplaints(){
     L.append(card);
   });
   if (focusCp){ const el = L.querySelector(`.cpc-in[data-cp="${focusCp}"]`); if (el){ el.focus({ preventScroll:true }); try{ el.setSelectionRange(caret, caret); }catch(e){} } }
+}
+
+
+/* ---------- notes to the developer (only the admin reads them) ---------- */
+const DN_KINDS = [['bug','🐞','באג'],['idea','💡','רעיון'],['ux','😕','לא נוח'],['other','💬','אחר']];
+let dnKind = 'idea';
+function initDevNotes(){
+  DN_KINDS.forEach(([id, e, t]) => $('dnKinds').append(h('button', { type:'button', class:'chip', 'data-k':id, onclick:() => { dnKind = id; syncDn(); } }, `${e} ${t}`)));
+  syncDn();
+}
+function syncDn(){ $('dnKinds').querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === dnKind))); }
+async function sendDevNote(){
+  const text = $('dnText').value.trim(); const by = myMemberId();
+  if (!by){ toast('קודם נכנסים עם הקוד שלך'); return; }
+  if (!text){ toast('כתבו את ההערה'); $('dnText').focus(); return; }
+  const btn = $('dnSend'); btn.disabled = true;
+  try{ await addDoc(collection(db,'devNotes'), { text, kind:dnKind, by, status:'new', at:Date.now() }); $('dnText').value = ''; toast('נשלח למנהל. תודה! 🛠️'); }
+  catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
+function renderDevNotes(){
+  const fresh = S.realAdmin ? S.devNotes.filter(n => n.status === 'new').length : 0;
+  $('dnFab').hidden = $('cpFab').hidden;
+  $('dnFabN').hidden = !fresh; $('dnFabN').textContent = String(fresh);
+  const sheet = $('dnSheet');
+  if (!S.dnOpen){ sheet.hidden = true; return; }
+  sheet.hidden = false; document.body.classList.add('locked');
+  $('dnInbox').hidden = !S.isAdmin;
+  if (!S.isAdmin) return;
+  const list = S.devNotes.slice().sort((a,b) => (a.status === 'new' ? 0 : 1) - (b.status === 'new' ? 0 : 1) || b.at - a.at);
+  $('dnCount').textContent = list.length ? String(list.length) : '';
+  const L = $('dnList'); L.replaceChildren();
+  if (!list.length) L.append(h('div', { class:'empty' }, h('strong', null, 'אין הערות'), 'כשמישהו ישלח הערה, היא תופיע כאן ותקבל התראה.'));
+  list.forEach(n => { const k = DN_KINDS.find(x => x[0] === n.kind) || DN_KINDS[3]; const d = new Date(n.at);
+    L.append(h('div', { class:'cp' + (n.status === 'new' ? '' : ' cp-done') },
+      h('div', { class:'cp-head' }, h('span', { class:'cp-ava', style:`background:${mColor(n.by)}` }, avatarOf(n.by)),
+        h('div', { class:'cp-who' }, h('strong', null, mName(n.by)), h('small', null, `${k[1]} ${k[2]} · ${d.getDate()}.${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)),
+        h('span', { class:'cp-status' }, n.status === 'new' ? 'חדש' : '✓ טופל')),
+      h('p', { class:'cp-text' }, n.text),
+      h('div', { class:'cp-actions' },
+        h('button', { type:'button', class:'btn small' + (n.status === 'new' ? '' : ' ghost'), onclick: async () => { try{ await updateDoc(doc(db,'devNotes',n.id), { status: n.status === 'new' ? 'done' : 'new' }); }catch(e){ fail(e); } } }, n.status === 'new' ? '✓ טופל' : 'החזרה לחדש'),
+        armedBtn('dn' + n.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'devNotes',n.id)); }catch(e){ fail(e); } })))); });
 }
 
 /* ---------- admin ---------- */
@@ -1429,6 +1470,8 @@ function buildStatic(){
   $('chatBack').addEventListener('click', closeChat);
   $('cpFab').addEventListener('click', openComplaints); $('cpBack').addEventListener('click', closeComplaints);
   $('cpSend').addEventListener('click', sendComplaint);
+  $('dnFab').addEventListener('click', () => { S.dnOpen = true; render(); }); $('dnBack').addEventListener('click', () => { S.dnOpen = false; render(); });
+  $('dnSend').addEventListener('click', sendDevNote); initDevNotes();
   document.querySelectorAll('input[name=cpf]').forEach(r => r.addEventListener('change', render));
   initComplaints();
   $('ag-go').addEventListener('click', adminCodeGo);
@@ -1618,11 +1661,15 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     const startJoinsSub = () => { if (joinsUnsub) return;
       joinsUnsub = onSnapshot(collection(db,'joinRequests'), s => { S.joins = s.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, e => console.error(e));
       unsubs.push(() => { joinsUnsub && joinsUnsub(); joinsUnsub = null; }); };
+    let devUnsub = null;
+    const startDevSub = () => { if (devUnsub) return;
+      devUnsub = onSnapshot(collection(db,'devNotes'), s => { S.devNotes = s.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, e => console.error(e));
+      unsubs.push(() => { devUnsub && devUnsub(); devUnsub = null; }); };
     const checkAdmin = async hasSession => {
       let ok = false;
       if (hasSession || !user.isAnonymous){ try{ await getDoc(doc(db,'private','admin')); ok = true; }catch(e){ ok = false; } }
       S.isAdmin = ok; S.realAdmin = ok; if (!ok) S.viewAs = null; S.adminChecked = true;
-      if (ok){ startAdminSubs(); startJoinsSub(); } else { S.pins = {}; S.joins = []; }
+      if (ok){ startAdminSubs(); startJoinsSub(); startDevSub(); } else { S.pins = {}; S.joins = []; S.devNotes = []; }
       render();
     };
     // Admin by code: this device holds adminSessions/<uid> with the admin code; it counts while the code is current.
