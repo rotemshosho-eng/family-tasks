@@ -108,6 +108,9 @@
         <h2>משימה חדשה</h2>
         <div class="field"><label for="sg-title">מה צריך לעשות</label><input type="text" id="sg-title" maxlength="80" placeholder="למשל: לסדר את המדפים בחדר"></div>
         <div class="field"><label for="sg-assignee">של מי</label><select id="sg-assignee"></select></div>
+        <div class="field" id="sg-rotwrap" hidden><span class="lab">מי בתורנות (לפי הסדר)</span><div class="seg" id="sg-rot"></div>
+          <p class="sub">כל פעם שמישהו מסיים, התור עובר לבא אחריו.</p></div>
+        <label class="check"><input type="checkbox" id="sg-check"> צריך אישור של מנהל לפני שהנקודות נכנסות</label>
         <div class="field"><span class="lab">סוג</span>
           <div class="seg">
             <label><input type="radio" name="sg-type" id="sg-type-once" value="once" checked> חד-פעמית</label>

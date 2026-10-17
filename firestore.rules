@@ -86,8 +86,11 @@ service cloud.firestore {
     }
 
     function validNewTask(d) {
-      return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','reviewed','suggestedBy','createdAt'])
+      return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','check','rotation','reviewed','suggestedBy','createdAt'])
         && d.reviewed == false
+        && (!('check' in d) || d.check is bool)
+        && (d.assignee != 'rotate' || (d.rotation is list && d.rotation.size() >= 2 && d.rotation.size() <= 20))
+        && (!('rotation' in d) || d.assignee == 'rotate')
         && d.title is string && d.title.size() > 0 && d.title.size() <= 80
         && d.assignee is string
         && d.type in ['once', 'repeat']

@@ -323,13 +323,17 @@ async function saveSuggestion(){
   if (!timed && (!Number.isFinite(points) || points < 0 || points > 1000)){ toast('נקודות: מספר בין 0 ל-1000'); return; }
   if (timed && (!(ratePerMin >= 1) || ratePerMin > 100)){ toast('נקודות לדקה: מספר בין 1 ל-100'); return; }
   if (timed && (!(maxMinutes >= 1) || maxMinutes > 240)){ toast('תקרה: בין 1 ל-240 דקות'); return; }
+  const assignee = $('sg-assignee').value || 'all';
+  const rotation = assignee === 'rotate' ? [...$('sg-rot').querySelectorAll('input:checked')].map(i => i.value) : [];
+  if (assignee === 'rotate' && rotation.length < 2){ toast('בתורנות צריך לפחות שני בני משפחה'); return; }
   const btn = $('sg-save'); btn.disabled = true;
   try{
-    await addDoc(collection(db,'tasks'), { title, assignee: $('sg-assignee').value || 'all', type, days, timed,
+    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked,
+      ...(assignee === 'rotate' ? { rotation } : {}),
       ...(timed ? { ratePerMin, maxMinutes } : { points }), reviewed:false,
       suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
     toast('המשימה נוספה');
-    $('sg-title').value = ''; setSgMode('fixed'); toggleSuggest(false);
+    $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); toggleSuggest(false);
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function markSeen(t){ try{ await updateDoc(doc(db,'tasks',t.id), { reviewed:true }); }catch(e){ fail(e); } }
@@ -734,7 +738,13 @@ function syncSelects(){
   const rot = $('tf-rot'); const picked = new Set([...rot.querySelectorAll('input:checked')].map(i => i.value).concat(rot.dataset.want ? JSON.parse(rot.dataset.want) : []));
   delete rot.dataset.want; rot.replaceChildren(...S.members.map(m => h('label', null, h('input', { type:'checkbox', value:m.id, checked: picked.has(m.id) }), m.name)));
   $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate';
+  const sgPrev = $('sg-assignee').value;
   const sg = $('sg-assignee'), had = sg.options.length; fill(sg, true);
+  if (![...sg.options].some(o => o.value === 'rotate')) sg.append(h('option', { value:'rotate' }, 'תורנות (מתחלף)'));
+  if (sgPrev === 'rotate') sg.value = 'rotate';
+  { const rot = $('sg-rot'); const picked = new Set([...rot.querySelectorAll('input:checked')].map(i => i.value));
+    rot.replaceChildren(...S.members.map(m => h('label', null, h('input', { type:'checkbox', value:m.id, checked: picked.has(m.id) }), m.name)));
+    $('sg-rotwrap').hidden = sg.value !== 'rotate'; }
   if (!had && S.me !== 'all' && member(S.me)) sg.value = S.me;
 }
 function renderAdminLists(){
@@ -913,6 +923,7 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  $('sg-assignee').addEventListener('change', () => { $('sg-rotwrap').hidden = $('sg-assignee').value !== 'rotate'; });
   $('gl-save').addEventListener('click', saveGoal);
   $('tf-assignee').addEventListener('change', () => { $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate'; });
   $('ru-save').addEventListener('click', saveUse);
