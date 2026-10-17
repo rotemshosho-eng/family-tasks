@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1016,6 +1016,16 @@ function renderBoss(){
 }
 
 /* ---------- family challenge with a deadline ---------- */
+// Who takes part: marked themselves (or marked by a parent), or did at least one task during the challenge.
+const challengeKey = c => `${c.start}|${c.title}`;
+const didInChallenge = (c, id) => S.logs.some(l => l.memberId === id && (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until);
+const markedIn = (c, id) => S.cjoins[id]?.key === challengeKey(c);
+const canMarkFor = id => S.isAdmin || id === S.boundId || (!!S.boundId && isParentMember(S.boundId));
+async function toggleJoin(c, id){
+  const on = markedIn(c, id);
+  try{ await setDoc(doc(db,'challengeJoins',id), { key: on ? '' : challengeKey(c), memberId:id, at:Date.now(), ...(S.isAdmin || id === S.boundId ? {} : { by:S.boundId }) });
+    toast(on ? `${mName(id)} הוסר/ה מהאתגר` : `${mName(id)} משתתף/ת באתגר 💪`); }catch(e){ fail(e); }
+}
 function challengeCount(c){ return S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until).length; }
 function renderChallenge(){
   $('chEditor').hidden = !canEditGoal();
@@ -1027,11 +1037,18 @@ function renderChallenge(){
     el.classList.toggle('reached', done);
     el.append(h('div', { class:'goal-head' }, h('span', { class:'goal-e', 'aria-hidden':'true' }, done ? '🎉' : over ? '⌛' : '⚡'),
         h('div', { class:'goal-t' }, h('strong', null, done ? `ניצחתם באתגר! ${c.prize || ''}`.trim() : `אתגר: ${c.title}`),
-          h('span', { class:'sub' }, done ? (c.bonus ? `כל הכבוד! כל אחד מקבל ${c.bonus} נקודות בונוס 🎁` : 'כל הכבוד לכולם!') : over ? `האתגר נגמר. הגעתם ל-${n} מתוך ${c.target}.` :
-            `עוד ${c.target - n} משימות ביחד · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}${c.bonus ? ` · ${c.bonus} נקודות לכל אחד` : ''}`)),
+          h('span', { class:'sub' }, done ? (c.bonus ? `כל הכבוד! כל משתתף מקבל ${c.bonus} נקודות בונוס 🎁` : 'כל הכבוד לכולם!') : over ? `האתגר נגמר. הגעתם ל-${n} מתוך ${c.target}.` :
+            `עוד ${c.target - n} משימות ביחד · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}${c.bonus ? ` · ${c.bonus} נקודות לכל משתתף` : ''}`)),
         h('span', { class:'progress-pct' }, `${pct}%`)),
       h('div', { class:'progress-bar' }, h('span', { style:`width:${pct}%` })),
-      h('p', { class:'sub' }, `${n} מתוך ${c.target} משימות`));
+      h('p', { class:'sub' }, `${n} מתוך ${c.target} משימות`),
+      h('div', { class:'cj' }, h('span', { class:'cj-l' }, c.bonus ? 'משתתפים (רק הם מקבלים את הבונוס):' : 'משתתפים:'),
+        S.members.map(m => { const auto = didInChallenge(c, m.id); const on = auto || markedIn(c, m.id); const can = !auto && !done && !over && canMarkFor(m.id);
+          return h('button', { type:'button', class:'chip cj-chip' + (on ? ' on' : ''), disabled: !can, 'aria-pressed':String(on),
+            title: auto ? 'עשה/תה משימה באתגר' : '', onclick: () => toggleJoin(c, m.id) },
+            h('span', { class:'dot', style:`background:${m.color}` }), m.name, on ? ' ✓' : ''); })),
+      (!done && !over && S.boundId && !didInChallenge(c, S.boundId) && !markedIn(c, S.boundId))
+        ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : null);
   });
 }
 async function saveChallenge(){
@@ -1457,6 +1474,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('members', a => { S.members = a.sort((x,y) => (x.order||0) - (y.order||0)); if (!S.memInit){ S.memInit = true; resetMemberForm(); } });
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; S.logsLoaded = true; });
+    sub('challengeJoins', a => { S.cjoins = Object.fromEntries(a.map(j => [j.id, j])); });
     sub('photos', a => { S.photos = Object.fromEntries(a.map(p => [p.id, p])); });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });

@@ -277,6 +277,19 @@ service cloud.firestore {
         && (!('archived' in request.resource.data) || request.resource.data.archived is bool);
     }
 
+    // משתתפים באתגר: כל אחד מסמן את עצמו, הורה או מנהל יכולים לסמן כל אחד. ביטול = key ריק.
+    match /challengeJoins/{memberId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['key','memberId','by','at'])
+        && request.resource.data.memberId == memberId
+        && request.resource.data.key is string && request.resource.data.key.size() <= 80
+        && request.resource.data.at is int
+        && (boundTo(memberId)
+          || (request.resource.data.by is string && boundTo(request.resource.data.by)
+              && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent')));
+    }
+
     // תמונת הוכחה: קטנה, נשמרת רק עד שהמשימה נבדקת.
     match /photos/{logId} {
       allow read: if signedIn();

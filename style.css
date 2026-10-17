@@ -423,3 +423,7 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .thumb img{width:44px;height:44px;object-fit:cover;border-radius:10px;display:block}
 .lightbox{position:fixed;inset:0;z-index:250;background:rgb(10 18 33 / .88);display:flex;align-items:center;justify-content:center;padding:16px}
 .lightbox img{max-width:100%;max-height:90vh;border-radius:14px}
+.cj{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.cj-l{font-size:.85rem;color:var(--muted);flex-basis:100%}
+.cj-chip.on{background:#E7F7EF;box-shadow:0 0 0 1.5px #39B980 inset;font-weight:600}
+.cj-chip:disabled{cursor:default}

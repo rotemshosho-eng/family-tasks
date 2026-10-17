@@ -126,11 +126,15 @@ for (const m of members) {
     const n = allLogs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until).length;
     const paid = allLogs.some(l => l.auto === 'challenge' && l.key === key);
     if (n >= c.target && !paid) {
-      for (const m of members) {
+      const joins = (await db.collection('challengeJoins').get()).docs.map(d => ({ id: d.id, ...d.data() }));
+      const inIt = m => joins.some(j => j.id === m.id && j.key === key)
+        || allLogs.some(l => l.memberId === m.id && (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until);
+      const winners = members.filter(inIt);
+      for (const m of winners) {
         const log = { kind: 'bonus', auto: 'challenge', key, title: `בונוס אתגר: ${c.title}`, memberId: m.id, points: c.bonus, day: today, at: now.getTime() };
         await db.collection('logs').add(log); allLogs.push(log);
       }
-      outbox.push({ to: everyone, title: '🎉 ניצחתם באתגר!', body: `${c.title}: כל אחד קיבל ${c.bonus} נקודות בונוס${c.prize ? ` · ${c.prize}` : ''}`, tag: 'challenge' });
+      outbox.push({ to: everyone, title: '🎉 ניצחתם באתגר!', body: `${c.title}: ${winners.map(m => m.name).join(', ')} קיבלו ${c.bonus} נקודות בונוס${c.prize ? ` · ${c.prize}` : ''}`, tag: 'challenge' });
     }
   }
 }
