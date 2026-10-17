@@ -2,7 +2,7 @@ import * as cfg from './firebase-config.js';
 const firebaseConfig = cfg.firebaseConfig;
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { deleteField, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, addDoc as _addDoc, updateDoc as _updateDoc, deleteDoc as _deleteDoc, setDoc as _setDoc, getDoc, writeBatch as _writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  collection, doc, onSnapshot, addDoc as _addDoc, updateDoc as _updateDoc, deleteDoc as _deleteDoc, setDoc as _setDoc, getDoc, writeBatch as _writeBatch, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -199,7 +199,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderBoss(); renderChallenge(); checkNewBadges(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -1095,6 +1095,104 @@ function showPhoto(src){
 }
 const dropPhoto = id => { if (S.photos[id]) _deleteDoc(doc(db,'photos',id)).catch(() => {}); };
 
+
+/* ---------- complaints ---------- */
+const CP_CATS = [['fun','😂','בשביל הצחוק'],['app','📱','על האפליקציה/משימות'],['house','🏠','משהו בבית'],['person','👤','על מישהו'],['other','💬','אחר']];
+let cpCat = 'fun';
+const canHandle = () => S.isAdmin || (!!S.boundId && isParentMember(S.boundId));
+// The admin may not have a family member of his own; then complaints are signed by the admin's member if one exists.
+const myMemberId = () => S.boundId || (S.isAdmin ? (S.members.find(m => roleOf(m.id) === 'admin')?.id || null) : null);
+function openComplaints(){ S.cpOpen = true; render(); }
+function closeComplaints(){ S.cpOpen = false; render(); }
+function initComplaints(){
+  const C = $('cpCats');
+  CP_CATS.forEach(([id, e, t]) => C.append(h('button', { type:'button', class:'chip', 'data-cat':id, onclick:() => { cpCat = id; syncCpForm(); } }, `${e} ${t}`)));
+  syncCpForm();
+}
+function syncCpForm(){
+  $('cpCats').querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cat === cpCat)));
+  $('cpAboutWrap').hidden = cpCat !== 'person';
+}
+function fillCpAbout(){
+  const sel = $('cpAbout'); const keep = sel.value; const me = myMemberId();
+  sel.replaceChildren(...S.members.filter(m => m.id !== me).map(m => h('option', { value:m.id }, m.name)));
+  if (keep) sel.value = keep;
+}
+async function sendComplaint(){
+  const text = $('cpText').value.trim(); const by = myMemberId();
+  if (!by){ toast('קודם נכנסים עם הקוד שלך'); return; }
+  if (!text){ toast('כתבו מה קרה'); $('cpText').focus(); return; }
+  const about = cpCat === 'person' ? $('cpAbout').value : '';
+  if (cpCat === 'person' && !about){ toast('בחרו על מי'); return; }
+  const btn = $('cpSend'); btn.disabled = true;
+  try{ await addDoc(collection(db,'complaints'), { text, cat:cpCat, by, about, status:'open', agree:[], at:Date.now() });
+    $('cpText').value = ''; toast('התלונה נשלחה. המלך ישקול אותה בכובד ראש 👑'); }catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
+async function handleComplaint(c, status, box){
+  const reply = box.querySelector('.cp-reply').value.trim();
+  const target = box.querySelector('.cp-target').value; const pts = Math.round(Number(box.querySelector('.cp-pts').value)) || 0;
+  if (pts && (Math.abs(pts) > 100)){ toast('נקודות: עד 100 לכל כיוון'); return; }
+  const by = S.isAdmin ? {} : { handledBy: S.boundId };
+  try{
+    if (pts && target){
+      await addDoc(collection(db,'logs'), { kind:'bonus', title: pts > 0 ? `פיצוי על תלונה: ${c.text.slice(0, 30)}` : `קנס על תלונה: ${c.text.slice(0, 30)}`,
+        memberId:target, points:pts, complaintId:c.id, ...(S.isAdmin ? {} : { by:S.boundId }), day:today(), at:Date.now() });
+    }
+    await updateDoc(doc(db,'complaints',c.id), { status, reply, ...(pts && target ? { pts, target } : {}), handledAt:Date.now(), ...by });
+    toast(status === 'done' ? 'סומן כטופל' : 'התלונה נדחתה');
+  }catch(e){ fail(e); }
+}
+async function agreeComplaint(c){
+  const me = myMemberId(); if (!me){ toast('קודם נכנסים עם הקוד שלך'); return; }
+  const has = (c.agree || []).includes(me);
+  try{ await updateDoc(doc(db,'complaints',c.id), { agree: has ? arrayRemove(me) : arrayUnion(me) }); }catch(e){ fail(e); }
+}
+function renderComplaints(){
+  const open = (S.complaints || []).filter(c => c.status === 'open').length;
+  $('cpFab').hidden = !S.user || S.tab !== 'today' || !(S.boundId || S.isAdmin) || !!S.cpOpen;
+  $('cpFabN').hidden = !open; $('cpFabN').textContent = String(open);
+  const sheet = $('cpSheet');
+  if (!S.cpOpen){ sheet.hidden = true; if (!S.chatOpen && !S.profileOpen) document.body.classList.remove('locked'); return; }
+  sheet.hidden = false; document.body.classList.add('locked');
+  fillCpAbout();
+  const all = $('cpf-all').checked;
+  const list = (S.complaints || []).filter(c => all || c.status === 'open').sort((a,b) => b.at - a.at);
+  const L = $('cpList'); L.replaceChildren();
+  if (!list.length) L.append(h('div', { class:'empty' }, h('strong', null, all ? 'אין תלונות בכלל' : 'אין תלונות פתוחות'), 'שקט בממלכה. לבינתיים.'));
+  const me = myMemberId();
+  list.forEach(c => {
+    const cat = CP_CATS.find(x => x[0] === c.cat) || CP_CATS[4]; const d = new Date(c.at);
+    const n = (c.agree || []).length; const mine = (c.agree || []).includes(me);
+    const card = h('div', { class:'cp cp-' + c.status },
+      h('div', { class:'cp-head' },
+        h('span', { class:'cp-ava', style:`background:${mColor(c.by)}` }, avatarOf(c.by)),
+        h('div', { class:'cp-who' }, h('strong', null, mName(c.by) + (c.about ? ` ← על ${mName(c.about)}` : '')),
+          h('small', null, `${cat[1]} ${cat[2]} · ${d.getDate()}.${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)),
+        h('span', { class:'cp-status' }, c.status === 'open' ? 'פתוחה' : c.status === 'done' ? '✓ טופל' : '✗ נדחה')),
+      h('p', { class:'cp-text' }, c.text),
+      c.reply || c.pts ? h('div', { class:'cp-ans' }, '👑 ', c.reply || '', c.pts ? h('strong', null, ` ${c.pts > 0 ? '+' : ''}${c.pts} נקודות ל${mName(c.target)}`) : null) : null,
+      h('div', { class:'cp-actions' },
+        h('button', { type:'button', class:'chip' + (mine ? ' on' : ''), 'aria-pressed':String(mine), onclick:() => agreeComplaint(c) }, `👍 מסכים${n ? ` · ${n}` : ''}`),
+        (S.isAdmin || (c.by === me && c.status === 'open')) ? armedBtn('cpd' + c.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'complaints',c.id)); toast('נמחק'); }catch(e){ fail(e); } }) : null));
+    if (c.status === 'open' && canHandle() && c.by !== S.boundId){
+      const box = h('div', { class:'cp-handle' },
+        h('input', { type:'text', class:'cp-reply', maxlength:'200', placeholder:'תשובה (לא חובה)', 'aria-label':'תשובה' }),
+        h('div', { class:'cp-pts-row' },
+          h('select', { class:'cp-target', 'aria-label':'למי נקודות' }, h('option', { value:'' }, 'בלי נקודות'),
+            S.members.filter(m => m.id !== S.boundId).map(m => h('option', { value:m.id, selected: m.id === (c.about || '') }, m.name))),
+          h('input', { type:'number', class:'cp-pts', inputmode:'numeric', placeholder:'+10 / -10', 'aria-label':'כמה נקודות' })),
+        h('div', { class:'cp-pts-row' },
+          h('button', { type:'button', class:'btn small', onclick:() => handleComplaint(c, 'done', box) }, '✓ טופל'),
+          h('button', { type:'button', class:'btn ghost small', onclick:() => handleComplaint(c, 'rejected', box) }, '✗ נדחה')));
+      // keep what the handler typed across re-renders
+      const keep = S.cpDraft[c.id]; if (keep){ box.querySelector('.cp-reply').value = keep.r; box.querySelector('.cp-target').value = keep.t; box.querySelector('.cp-pts').value = keep.p; }
+      box.addEventListener('input', () => { S.cpDraft[c.id] = { r: box.querySelector('.cp-reply').value, t: box.querySelector('.cp-target').value, p: box.querySelector('.cp-pts').value }; });
+      card.append(box);
+    }
+    L.append(card);
+  });
+}
+
 /* ---------- admin ---------- */
 function syncSelects(){
   const fill = (sel, withAll) => { const v = sel.value; sel.replaceChildren();
@@ -1307,6 +1405,10 @@ function buildStatic(){
   $('tf-assignee').addEventListener('change', () => { $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate'; });
   $('ru-save').addEventListener('click', saveUse);
   $('chatBack').addEventListener('click', closeChat);
+  $('cpFab').addEventListener('click', openComplaints); $('cpBack').addEventListener('click', closeComplaints);
+  $('cpSend').addEventListener('click', sendComplaint);
+  document.querySelectorAll('input[name=cpf]').forEach(r => r.addEventListener('change', render));
+  initComplaints();
   $('ag-go').addEventListener('click', adminCodeGo);
   $('ag-code').addEventListener('keydown', e => { if (e.key === 'Enter') adminCodeGo(); });
   $('ag-cancel').addEventListener('click', closeAdminGate);
@@ -1474,6 +1576,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('members', a => { S.members = a.sort((x,y) => (x.order||0) - (y.order||0)); if (!S.memInit){ S.memInit = true; resetMemberForm(); } });
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; S.logsLoaded = true; });
+    sub('complaints', a => { S.complaints = a; });
     sub('challengeJoins', a => { S.cjoins = Object.fromEntries(a.map(j => [j.id, j])); });
     sub('photos', a => { S.photos = Object.fromEntries(a.map(p => [p.id, p])); });
     sub('timers', a => { S.timers = a; });

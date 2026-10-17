@@ -380,6 +380,28 @@
   </div>
   <div class="sheet-body" id="chatBody"></div>
 </div>
+<!-- complaints: everyone sees everything; admin and parents handle -->
+<button type="button" class="fab" id="cpFab" hidden aria-label="תלונות">📢<span class="fab-l">תלונות</span><span class="fab-n" id="cpFabN" hidden></span></button>
+<div class="sheet" id="cpSheet" hidden role="dialog" aria-modal="true" aria-labelledby="cpTitle">
+  <div class="sheet-head">
+    <button type="button" class="btn ghost small" id="cpBack">חזרה</button>
+    <div class="sheet-titles"><strong id="cpTitle">📢 תלונות</strong><span class="sub">כל המשפחה רואה הכל</span></div>
+  </div>
+  <div class="sheet-body scroll">
+    <section class="panel" id="cpForm">
+      <h2>תלונה חדשה</h2>
+      <div class="chips" id="cpCats"></div>
+      <div class="field" id="cpAboutWrap" hidden><label for="cpAbout">על מי</label><select id="cpAbout"></select></div>
+      <div class="field"><label for="cpText">מה קרה?</label><textarea id="cpText" rows="3" maxlength="500" placeholder="ספרו מה מפריע לכם"></textarea></div>
+      <div><button type="button" class="btn" id="cpSend">שליחת תלונה</button></div>
+    </section>
+    <div class="seg cp-filter" role="group" aria-label="סינון">
+      <label><input type="radio" name="cpf" id="cpf-open" checked> פתוחות</label>
+      <label><input type="radio" name="cpf" id="cpf-all"> הכל</label>
+    </div>
+    <div class="list" id="cpList"></div>
+  </div>
+</div>
 <!-- profile of one family member -->
 <div class="sheet" id="profileSheet" hidden role="dialog" aria-modal="true" aria-label="פרופיל">
   <div class="sheet-head">

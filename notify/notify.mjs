@@ -67,6 +67,21 @@ for (const [taskId, list] of byTask) {
   outbox.push({ to: everyone.filter(id => !(senders.size === 1 && senders.has(id))), title: `צ'אט: ${t.title}`, body: body.slice(0, 180), tag: `chat-${taskId}` });
 }
 
+// 1b. complaints: new ones -> admin, parents and whoever it's about; handled ones -> who complained
+{
+  const cps = await all('complaints');
+  const handlers = members.filter(m => m.admin === true || m.role === 'admin' || m.role === 'parent').map(m => m.id);
+  for (const c of cps.filter(c => (c.at || 0) > since)) {
+    const to = [...new Set([...handlers, ...(c.about ? [c.about] : [])])].filter(id => id !== c.by);
+    outbox.push({ to, title: `📢 תלונה חדשה מ${name(c.by)}${c.about ? ` על ${name(c.about)}` : ''}`, body: String(c.text || '').slice(0, 160), tag: `cp-${c.id}` });
+  }
+  for (const c of cps.filter(c => (c.handledAt || 0) > since && c.status !== 'open')) {
+    const to = [...new Set([c.by, ...(c.target ? [c.target] : [])])];
+    const pts = c.pts ? ` · ${c.pts > 0 ? '+' : ''}${c.pts} נקודות ל${name(c.target)}` : '';
+    outbox.push({ to, title: c.status === 'done' ? '✓ התלונה טופלה' : '✗ התלונה נדחתה', body: `${String(c.text || '').slice(0, 60)}${c.reply ? ` · 👑 ${c.reply}` : ''}${pts}`, tag: `cp-${c.id}` });
+  }
+}
+
 // 2. new tasks since the last run
 for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   const turn = whoseTurn(t);

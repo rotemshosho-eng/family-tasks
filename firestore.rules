@@ -277,6 +277,30 @@ service cloud.firestore {
         && (!('archived' in request.resource.data) || request.resource.data.archived is bool);
     }
 
+    // תלונות: כולם רואים. כל אחד מתלונן בשמו. מנהל והורים מטפלים (לא בתלונה של עצמם).
+    match /complaints/{id} {
+      allow read: if signedIn();
+      allow create: if request.resource.data.keys().hasOnly(['text','cat','by','about','status','agree','at'])
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+        && request.resource.data.cat in ['fun','app','house','person','other']
+        && request.resource.data.status == 'open'
+        && request.resource.data.agree is list && request.resource.data.agree.size() == 0
+        && request.resource.data.about is string
+        && request.resource.data.at is int
+        && request.resource.data.by is string && memberExists(request.resource.data.by)
+        && (isAdmin() || boundTo(request.resource.data.by));
+      allow update: if isAdmin()
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['agree'])
+            && request.resource.data.agree is list && request.resource.data.agree.size() <= 30 && signedIn())
+        || (resource.data.status == 'open'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reply','pts','target','handledAt','handledBy'])
+            && request.resource.data.status in ['done','rejected']
+            && request.resource.data.handledBy is string && request.resource.data.handledBy != resource.data.by
+            && boundTo(request.resource.data.handledBy)
+            && get(/databases/$(database)/documents/members/$(request.resource.data.handledBy)).data.get('role', '') == 'parent');
+      allow delete: if isAdmin() || (resource.data.status == 'open' && boundTo(resource.data.by));
+    }
+
     // משתתפים באתגר: כל אחד מסמן את עצמו, הורה או מנהל יכולים לסמן כל אחד. ביטול = key ריק.
     match /challengeJoins/{memberId} {
       allow read: if signedIn();
@@ -311,7 +335,19 @@ service cloud.firestore {
       allow create: if isAdmin()
         || (request.resource.data.kind == 'redeem' && validRedeem(request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && boundTo(request.resource.data.memberId))
-        || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && boundTo(request.resource.data.memberId));
+        || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && boundTo(request.resource.data.memberId))
+        || (request.resource.data.kind == 'bonus'
+            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','complaintId','by','day','at'])
+            && request.resource.data.points is int && request.resource.data.points != 0
+            && request.resource.data.points >= -100 && request.resource.data.points <= 100
+            && request.resource.data.title is string && request.resource.data.title.size() <= 80
+            && memberExists(request.resource.data.memberId)
+            && exists(/databases/$(database)/documents/complaints/$(request.resource.data.complaintId))
+            && get(/databases/$(database)/documents/complaints/$(request.resource.data.complaintId)).data.status == 'open'
+            && request.resource.data.by is string && request.resource.data.by != request.resource.data.memberId
+            && boundTo(request.resource.data.by)
+            && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent'
+            && freshTime(request.resource.data));
       allow delete: if isAdmin() || (
         resource.data.kind in ['task', 'timed']
         && request.time.toMillis() - resource.data.at < 43200000

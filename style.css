@@ -427,3 +427,27 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .cj-l{font-size:.85rem;color:var(--muted);flex-basis:100%}
 .cj-chip.on{background:#E7F7EF;box-shadow:0 0 0 1.5px #39B980 inset;font-weight:600}
 .cj-chip:disabled{cursor:default}
+.fab{position:fixed;left:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:13;display:flex;align-items:center;gap:6px;border:0;border-radius:999px;padding:12px 16px;
+  background:#172B4D;color:#fff;font:600 1rem var(--body);box-shadow:0 6px 18px rgb(23 43 77 / .35);cursor:pointer}
+.fab-l{font-size:.95rem}
+.fab-n{background:#FF6B6B;color:#fff;border-radius:999px;min-width:22px;height:22px;display:inline-grid;place-items:center;font-size:.8rem;padding:0 6px}
+#cpCats{display:flex;flex-wrap:wrap;gap:6px}
+.cp-filter{align-self:flex-start}
+.cp{background:var(--surface);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgb(23 43 77 / .08)}
+.cp.cp-done,.cp.cp-rejected{opacity:.85}
+.cp-head{display:flex;align-items:center;gap:10px}
+.cp-ava{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:600;flex:none}
+.cp-who{display:flex;flex-direction:column;min-width:0;flex:1}
+.cp-who small{color:var(--muted)}
+.cp-status{font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:999px;background:#FFF1D6;color:#9A6200;white-space:nowrap}
+.cp.cp-done .cp-status{background:#E7F7EF;color:#1F7A52}
+.cp.cp-rejected .cp-status{background:var(--sunk);color:var(--muted)}
+.cp-text{margin:0;white-space:pre-wrap;line-height:1.5}
+.cp-ans{background:#FFF6E5;border-radius:12px;padding:8px 12px}
+.cp-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cp-actions .chip.on{background:#E7F7EF;box-shadow:0 0 0 1.5px #39B980 inset}
+.cp-handle{display:flex;flex-direction:column;gap:8px;border-top:2px dotted var(--line);padding-top:10px}
+.cp-handle input,.cp-handle select{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sunk);min-width:0}
+.cp-pts-row{display:flex;gap:8px;flex-wrap:wrap}
+.cp-pts-row select{flex:1}.cp-pts-row .cp-pts{width:7em}
+#cpText{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);resize:vertical;letter-spacing:normal}
