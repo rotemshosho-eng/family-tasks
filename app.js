@@ -172,8 +172,8 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderPending(); renderAuth(); syncSelects();
-  if (S.isAdmin){ renderAdminLists(); renderJoins(); }
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderPending(); renderAuth(); syncSelects();
+  if (S.isAdmin){ renderAdminLists(); renderJoins(); renderPresets(); }
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
 }
@@ -691,12 +691,12 @@ function walletOf(id){
   return { earned, used, balance: earned - used };
 }
 function rewardsWho(){ return S.boundId || (S.me !== 'all' && member(S.me) ? S.me : null); }
-async function redeem(memberId, title, cost){
+async function redeem(memberId, title, cost, rewardId){
   const w = walletOf(memberId);
   if (!(cost >= 1)){ toast('כמות נקודות: לפחות 1'); return false; }
   if (cost > w.balance){ toast(`אין מספיק נקודות: יש ${w.balance}, צריך ${cost}`); return false; }
   try{
-    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, day:today(), at:Date.now() });
+    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, ...(rewardId ? { rewardId } : {}), day:today(), at:Date.now() });
     toast(`${mName(memberId)}: ירדו ${cost} נקודות`); return true;
   }catch(e){ fail(e); return false; }
 }
@@ -754,6 +754,85 @@ function renderReview(){
       h('span', { class:'num gold' }, `+${l.points}`),
       h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); toast(`אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
       armedBtn('rv' + l.id, 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); toast('סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
+}
+
+/* ---------- ready-made household tasks ---------- */
+// [title, points or {rate, max} for timed, days (0=Sunday) or 'once']
+const PRESETS = [
+  ['לסדר את החדר', 10, [0,1,2,3,4,5,6]], ['להוציא את הזבל', 10, [0,2,4]], ['לפרוק את המדיח', 10, [0,1,2,3,4,5,6]],
+  ['לשטוף כלים', 15, [0,1,2,3,4,5,6]], ['לערוך את השולחן', 5, [0,1,2,3,4,5,6]], ['לפנות את השולחן', 5, [0,1,2,3,4,5,6]],
+  ['לתלות כביסה', 15, [1,4]], ['לקפל ולסדר כביסה', 15, [1,4]], ['לשאוב אבק', 20, [5]], ['לשטוף רצפה', 25, [5]],
+  ['לנקות שירותים', 25, [5]], ['להשקות עציצים', 5, [1,4]], ['להאכיל את הכלב', 5, [0,1,2,3,4,5,6]], ['לצחצח שיניים בוקר וערב', 5, [0,1,2,3,4,5,6]],
+  ['להכין שיעורי בית', 15, [0,1,2,3,4]], ['לסדר את התיק למחר', 5, [0,1,2,3,4]], ['להחליף מצעים', 20, [5]], ['לעזור בקניות', 15, 'once'],
+  ['לקרוא ספר', { rate: 1, max: 30 }, [0,1,2,3,4,5,6]], ['להתאמן או לשחק בחוץ', { rate: 1, max: 45 }, [0,1,2,3,4,5,6]]];
+function renderPresets(){
+  const box = $('presets'); if (box.dataset.built) { markPresets(); return; } box.dataset.built = '1';
+  PRESETS.forEach(([title, pts, days]) => {
+    const timed = typeof pts === 'object';
+    box.append(h('button', { type:'button', class:'chip preset', 'data-title':title, onclick: () => addPreset(title, pts, days) },
+      taskIcon({ title }) + ' ' + title, h('span', { class:'preset-pts' }, timed ? `${pts.rate}/דק׳` : `+${pts}`)));
+  });
+  markPresets();
+}
+function markPresets(){ const have = new Set(S.tasks.map(t => t.title)); $('presets').querySelectorAll('.preset').forEach(b => b.classList.toggle('added', have.has(b.dataset.title))); }
+async function addPreset(title, pts, days){
+  if (S.tasks.some(t => t.title === title)){ toast('המשימה הזו כבר קיימת'); return; }
+  const timed = typeof pts === 'object'; const once = days === 'once';
+  const data = { title, assignee:'all', type: once ? 'once' : 'repeat', days: once ? [] : days, timed, check:false,
+    ...(timed ? { ratePerMin: pts.rate, maxMinutes: pts.max } : { points: pts }), createdAt: Date.now() };
+  try{ await addDoc(collection(db,'tasks'), data); toast(`נוספה: ${title}. אפשר לשנות אותה ב"כל המשימות".`); }catch(e){ fail(e); }
+}
+
+
+/* ---------- exchanges: spend points on a reward (admin and parents manage the list) ---------- */
+const EX_EMOJI = ['📺','📱','🎮','🍦','🍫','🍕','🎬','🛌','🙅','🎨','⚽','🚲','🎟️','🧸','📚','🎁','💵','⭐'];
+const EX_STARTER = [['📺','15 דקות טלוויזיה',10], ['📱','30 דקות טלפון או טאבלט',20], ['🎮','30 דקות משחק מחשב',20], ['🍫','ממתק אחד',15],
+  ['🍦','גלידה',30], ['🛌','לישון חצי שעה מאוחר יותר',40], ['🎬','לבחור סרט לערב משפחתי',50], ['🍕','לבחור מה אוכלים בערב',60],
+  ['🙅','פטור ממשימה אחת',50], ['🎟️','יציאה לפעילות לבחירה',200]];
+const canEditRewards = () => S.isAdmin || (!!S.boundId && isParentMember(S.boundId));
+const activeRewards = () => (S.rewards || []).filter(r => !r.archived).sort((a,b) => (a.cost||0) - (b.cost||0));
+function renderExchanges(){
+  const who = rewardsWho(); const bal = who ? walletOf(who).balance : 0; const list = activeRewards();
+  const G = $('exGrid'); G.replaceChildren(); $('exCount').textContent = list.length ? String(list.length) : '';
+  if (!list.length) G.append(h('div', { class:'empty', style:'grid-column:1/-1' }, h('strong', null, 'עוד אין על מה להחליף'),
+    canEditRewards() ? 'הוסיפו למטה, או לחצו "הוספת רשימה מוכנה".' : 'מנהל או הורה יוסיפו בקרוב.'));
+  list.forEach(r => {
+    const key = 'ex' + r.id; const can = !!who && bal >= r.cost;
+    const btn = h('button', { type:'button', class:'btn small', disabled: !can }, can ? 'להחליף' : (who ? `חסרות ${r.cost - bal}` : 'להחליף'));
+    btn.addEventListener('click', () => arm(key, btn, () => redeem(who, r.title, r.cost, r.id)));
+    if (S.armed === key){ btn.classList.add('armed'); btn.textContent = 'בטוח? שוב'; }
+    G.append(h('div', { class:'reward' + (can ? '' : ' locked') },
+      h('span', { class:'reward-e', 'aria-hidden':'true' }, r.emoji || '🎁'),
+      h('span', { class:'reward-t' }, r.title),
+      h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), `${r.cost} נקודות`),
+      btn,
+      canEditRewards() ? h('div', { class:'reward-admin' },
+        h('button', { type:'button', class:'linkbtn', onclick: () => editExchange(r) }, 'עריכה'),
+        h('button', { type:'button', class:'linkbtn danger', onclick: () => removeExchange(r) }, 'הסרה')) : null));
+  });
+  $('exEditor').hidden = !canEditRewards();
+}
+const byField = () => S.isAdmin ? {} : { by: S.boundId };
+function editExchange(r){ S.editEx = r.id; $('ex-emoji').value = r.emoji || '🎁'; $('ex-title').value = r.title; $('ex-cost').value = r.cost; $('exHead').textContent = 'עריכת החלפה'; $('ex-save').textContent = 'שמירה'; $('ex-cancel').hidden = false; $('ex-title').focus(); }
+function resetExchange(){ S.editEx = null; $('ex-title').value = ''; $('ex-cost').value = 10; $('exHead').textContent = 'הוספת החלפה'; $('ex-save').textContent = 'הוספה'; $('ex-cancel').hidden = true; }
+async function saveExchange(){
+  const title = $('ex-title').value.trim(); const cost = Math.round(Number($('ex-cost').value)); const emoji = $('ex-emoji').value || '🎁';
+  if (!title){ toast('כתבו מה מקבלים'); $('ex-title').focus(); return; }
+  if (!(cost >= 1 && cost <= 100000)){ toast('כמה נקודות: מספר חיובי'); return; }
+  try{
+    if (S.editEx){ const old = S.rewards.find(x => x.id === S.editEx); await setDoc(doc(db,'rewards',S.editEx), { title, cost, emoji, createdAt: old?.createdAt || Date.now(), ...byField() }); toast('נשמר'); }
+    else { await addDoc(collection(db,'rewards'), { title, cost, emoji, createdAt: Date.now(), ...byField() }); toast('נוסף'); }
+    resetExchange();
+  }catch(e){ fail(e); }
+}
+async function removeExchange(r){
+  try{ await setDoc(doc(db,'rewards',r.id), { title:r.title, cost:r.cost, emoji:r.emoji || '🎁', createdAt:r.createdAt || Date.now(), archived:true, ...byField() }); toast('הוסר'); if (S.editEx === r.id) resetExchange(); }catch(e){ fail(e); }
+}
+async function addStarterExchanges(){
+  const have = new Set(activeRewards().map(r => r.title)); const b = writeBatch(db); let n = 0;
+  for (const [emoji, title, cost] of EX_STARTER){ if (have.has(title)) continue; b.set(doc(collection(db,'rewards')), { title, cost, emoji, createdAt: Date.now() + n, ...byField() }); n++; }
+  if (!n){ toast('כל הרשימה כבר קיימת'); return; }
+  try{ await b.commit(); toast(`נוספו ${n}. אפשר לערוך מחירים ולהסיר מה שלא מתאים.`); }catch(e){ fail(e); }
 }
 
 /* ---------- admin ---------- */
@@ -942,6 +1021,10 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  $('ex-save').addEventListener('click', saveExchange);
+  $('ex-cancel').addEventListener('click', resetExchange);
+  $('ex-starter').addEventListener('click', addStarterExchanges);
+  EX_EMOJI.forEach(e => $('ex-emoji').append(h('option', { value:e }, e)));
   $('sg-assignee').addEventListener('change', () => { $('sg-rotwrap').hidden = $('sg-assignee').value !== 'rotate'; });
   $('gl-save').addEventListener('click', saveGoal);
   $('tf-assignee').addEventListener('change', () => { $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate'; });
@@ -1098,6 +1181,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });
     sub('profiles', a => { S.profiles = Object.fromEntries(a.map(p => [p.id, p])); });
+    sub('rewards', a => { S.rewards = a; });
     S.binding = null; S.bindLoaded = false;
     unsubs.push(onSnapshot(doc(db,'bindings',user.uid), s => {
       S.binding = s.exists() ? s.data() : null; S.bindLoaded = true; render();

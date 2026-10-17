@@ -75,14 +75,14 @@ for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   outbox.push({ to: to.filter(id => id !== t.suggestedBy), title: 'משימה חדשה', body: `${t.title} · ${pts}`, tag: `task-${t.id}` });
 }
 
-// 2b. points spent on a reward since the last run -> whoever is marked as admin
+// 2b. points spent on a reward since the last run -> admin and parents
 const admins = members.filter(m => m.admin === true).map(m => m.id);
 {
   const fresh = allLogs.filter(l => typeof l.at === 'number' && l.at > since);
   const approvers = members.filter(m => m.admin === true || m.role === 'admin' || m.role === 'parent').map(m => m.id);
   for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
   const spent = fresh.filter(l => l.kind === 'redeem');
-  for (const l of spent) outbox.push({ to: admins.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
+  for (const l of spent) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
 }
 
 // 3. evening reminder, once a day

@@ -393,3 +393,9 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .rank-bar span{display:block;height:100%;border-radius:inherit;min-width:0}
 .rank-pts{font:700 1.05rem var(--display);font-variant-numeric:tabular-nums;min-width:2.5ch;text-align:end}
 .rank.royal .rank-name::after{content:" 👑"}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.chip.preset{font-size:.88rem;padding:5px 10px}
+.preset-pts{font-size:.78rem;color:var(--coin-deep);font-weight:700}
+.chip.preset.added{opacity:.45;text-decoration:line-through}
+.reward-admin{display:flex;gap:12px;align-self:stretch;justify-content:flex-end}
+.linkbtn.danger{color:var(--danger)}

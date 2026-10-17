@@ -217,10 +217,17 @@ service cloud.firestore {
         && (isAdmin() || boundTo(request.resource.data.memberId));
       allow delete: if isAdmin() || boundTo(resource.data.memberId);
     }
-    // פרסים: כולם רואים, רק המנהל מוסיף ומוחק.
+    // החלפות נקודות: כולם רואים. המנהל והורים מוסיפים ועורכים (הסרה = archived).
     match /rewards/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
+      allow create, update: if request.resource.data.keys().hasOnly(['title','cost','emoji','createdAt','archived','by'])
+        && request.resource.data.by is string && boundTo(request.resource.data.by)
+        && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent'
+        && request.resource.data.cost is int && request.resource.data.cost >= 1 && request.resource.data.cost <= 100000
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 40
+        && (!('emoji' in request.resource.data) || (request.resource.data.emoji is string && request.resource.data.emoji.size() <= 8))
+        && (!('archived' in request.resource.data) || request.resource.data.archived is bool);
     }
 
     match /logs/{id} {
