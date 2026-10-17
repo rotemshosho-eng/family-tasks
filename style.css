@@ -269,11 +269,11 @@ h2{font-weight:600;font-size:1.15rem}
 .task-sub{color:var(--muted);font-size:.8rem}
 .meta{gap:6px}
 .task.pinned{box-shadow:0 0 0 2px var(--coin), 0 1px 3px rgb(23 43 77 / .08)}
-.check{flex:none;width:40px;height:40px;border-radius:50%;border:2.5px solid var(--line);background:var(--surface);cursor:pointer;
+.donecheck{flex:none;width:40px;height:40px;border-radius:50%;border:2.5px solid var(--line);background:var(--surface);cursor:pointer;
   display:grid;place-items:center;color:var(--good);font:700 1.1rem var(--body);transition:border-color .15s, background .15s}
-.check:hover:not(:disabled){border-color:var(--good)}
-.check:active:not(:disabled){background:var(--good-soft)}
-.check:disabled{opacity:.5}
+.donecheck:hover:not(:disabled){border-color:var(--good)}
+.donecheck:active:not(:disabled){background:var(--good-soft)}
+.donecheck:disabled{opacity:.5}
 .btn.start{background:var(--good);color:#fff;box-shadow:none}
 .btn{box-shadow:none}
 .btn:active:not(:disabled){transform:translateY(1px);box-shadow:none}

@@ -623,7 +623,7 @@ function taskCard(t, canAct){
   if (canAct && !whoRunning){
     control = timed
       ? h('button', { type:'button', class:'btn small start', disabled: busy || !S.members.length, onclick: go }, busy ? 'שומר…' : 'התחלתי')
-      : h('button', { type:'button', class:'check', 'aria-label':`סיימתי: ${t.title}`, disabled: busy || !S.members.length, onclick: go }, busy ? '…' : '');
+      : h('button', { type:'button', class:'donecheck', 'aria-label':`סיימתי: ${t.title}`, disabled: busy || !S.members.length, onclick: go }, busy ? '…' : '');
   }
   const card = h('div', { class:'task' + (t.pinned ? ' pinned' : '') },
     h('div', { class:'ticon', 'aria-hidden':'true' }, taskIcon(t)),
