@@ -493,3 +493,5 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .pod-md{font-size:1.4rem}.pod b{font-size:.92rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod small{color:var(--muted);font-weight:600}
 @media (prefers-color-scheme: dark){.pod.first{background:linear-gradient(180deg,#3A3018,#2E2610)}}
 .rank-hint{align-self:center;text-decoration:none;font-size:.85rem;color:var(--muted)}
+.fab.fab-duo{width:auto;min-width:56px;padding:0 14px;gap:4px;font-size:1.3rem}
+.fab .fab-sm{font-size:1.05rem}
