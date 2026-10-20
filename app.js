@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { menuFor:null, fabMenu:false, rankOpen:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -228,7 +228,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); renderGoalBox(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -649,23 +649,13 @@ function renderBoard(){
 function renderToday(){
   const mine = isMine;
   const due = S.tasks.filter(t => isDue(t) && mine(t) && !t.boss).sort((a,b) => (!!b.pinned - !!a.pinned) || (a.type === 'once') - (b.type === 'once') || ((b.points||0) - (a.points||0)));
-  $('todoTitle').textContent = 'עוד להיום';
+  $('todoTitle').textContent = S.me === 'all' || seeAll() ? 'מה נשאר להיום' : `מה נשאר ל${mName(S.me)} היום`;
   $('todoCount').textContent = due.length ? `${due.length} משימות` : '';
   const L = $('todo'); L.replaceChildren();
   if (!S.tasks.length) L.append(h('div', { class:'empty' }, h('strong', null, 'אין עדיין משימות'),
     S.isAdmin ? 'הוסיפו משימה בלשונית ניהול: שם, כמה נקודות, של מי, ובאילו ימים.' : 'עוד לא נוספו משימות ללוח.'));
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
-  // the first task you can do now gets the big card; boss first, then pinned, then soonest deadline
-  const doable = due.filter(t => canDoTask(t) && !pastDeadline(t));
-  const boss = S.tasks.filter(t => t.boss && isDue(t));
-  const pick = [...boss, ...doable.slice().sort((a,b) => (!!b.pinned - !!a.pinned) || ((a.untilTime || '99') < (b.untilTime || '99') ? -1 : (a.untilTime || '99') > (b.untilTime || '99') ? 1 : 0))][0];
-  $('nextSec').hidden = !pick; $('nextList').replaceChildren(); $('nextSec').classList.toggle('boss', !!pick?.boss);
-  if (pick){ $('nextLbl').textContent = pick.boss ? '🐉 משימת בוס · הראשון שעושה מקבל פי 3' : (S.me === 'all' || seeAll() ? 'המשימה הבאה' : 'המשימה הבאה שלך'); const c = taskCard(pick, canDoTask(pick)); c.classList.add('hero'); $('nextList').append(c); }
-  const rest = due.filter(t => t !== pick);
-  $('todoCount').textContent = rest.length ? String(rest.length) : '';
-  if (due.length && !rest.length) L.append(h('div', { class:'empty' }, h('strong', null, 'רק המשימה שלמעלה נשארה'), 'עוד אחת וסיימת להיום!'));
-  rest.forEach(t => L.append(taskCard(t, canDoTask(t))));
-  renderDayCard(due);
+  due.forEach(t => L.append(taskCard(t, canDoTask(t))));
   const td = today();
   const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td).sort((a,b) => b.at - a.at);
   $('doneSec').hidden = !done.length;
@@ -729,12 +719,6 @@ function renderProgress(){
   const rows = S.members.map(m => ({ m, pts: S.logs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= ws).reduce((s, l) => s + (Number(l.points) || 0), 0) }))
     .sort((a, b) => b.pts - a.pts || (a.m.name || '').localeCompare(b.m.name || '', 'he'));
   const top = rows.length ? rows[0].pts : 0;
-  { const P = $('podium'); P.replaceChildren(); const three = rows.slice(0, 3); const order = three.length === 3 ? [three[1], three[0], three[2]] : three;
-    order.forEach(r => { const i = rows.indexOf(r); const medal = r.pts > 0 ? ['🥇','🥈','🥉'][i] : '·'; const me = r.m.id === S.boundId || r.m.id === S.me;
-      P.append(h('button', { type:'button', class:'pod' + (i === 0 ? ' first' : '') + (me ? ' me' : ''), onclick:() => openProfile(r.m.id) },
-        h('span', { class:'pod-md' }, medal), h('span', { class:'ava sm', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
-        h('b', null, r.m.name + (isAdminMember(r.m.id) ? ' 👑' : '')), h('small', null, String(r.pts)))); });
-    $('rankList').hidden = !S.rankOpen; $('rankMore').hidden = rows.length <= 3; $('rankMore').textContent = S.rankOpen ? 'פחות ‹' : 'כל הטבלה ›'; }
   let place = 0, prev = null;
   rows.forEach((r, i) => {
     if (r.pts !== prev){ place = i + 1; prev = r.pts; }   // ties share a place
@@ -762,7 +746,7 @@ function taskCard(t, canAct){
   const act = timed ? (m => startTimer(t, m)) : t.qtyPer ? (m => askQty(t, m)) : (m => complete(t, m));
   const go = () => { if (who && member(who)) act(who); else { S.openPick = S.openPick === t.id ? null : t.id; render(); } };
   const meta = [h('span', { class:'ptspill' + (t.boss ? ' boss' : '') }, '★ ', timed ? `${t.ratePerMin} לדקה` : t.qtyPer ? `${t.points} על כל ${t.qtyPer}` : String(ptsOf(t)))];
-  if (timed) meta.push(h('span', { class:'pts-note' }, `עד ${t.maxMinutes} דק׳`)); else if (t.qtyPer) meta.push(h('span', { class:'pts-note' }, t.qtyUnit));
+  if (timed) meta.push(h('span', { class:'pts-note' }, `עד ${t.maxMinutes} דק׳`)); else if (t.qtyPer) meta.push(h('span', { class:'pts-note' }, t.qtyUnit)); else if (t.boss) meta.push(h('span', { class:'pts-note' }, 'פי 3'));
   const sub = [assigneeLabel(t), recLabel(t)];
   if (t.check) sub.push('צריך אישור');
   if (t.untilTime) sub.push(pastDeadline(t) ? `⏰ עבר ${t.untilTime}, פספסת` : `⏰ עד ${t.untilTime}`);
@@ -778,13 +762,12 @@ function taskCard(t, canAct){
     h('div', { class:'ticon', 'aria-hidden':'true' }, taskIcon(t)),
     h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta),
       h('span', { class:'task-sub' }, sub.join(' · '))),
-    unreadFor(t) ? h('button', { type:'button', class:'chatbtn unread', 'aria-label':`${unreadFor(t)} הודעות חדשות`, onclick:() => openChat(t.id) }, '💬 ' + unreadFor(t)) : null,
-    h('button', { type:'button', class:'morebtn', 'aria-label':`עוד: ${t.title}`, 'aria-expanded':String(S.menuFor === t.id), onclick:() => { S.menuFor = S.menuFor === t.id ? null : t.id; render(); } }, '⋯'),
     control,
-    S.menuFor === t.id ? h('div', { class:'cardmenu' },
-      h('button', { type:'button', class:'chip', onclick:() => { S.menuFor = null; openChat(t.id); } }, `💬 צ'אט${chatCount(t) ? ` (${chatCount(t)})` : ''}`),
-      canEditTask(t) ? h('button', { type:'button', class:'chip', onclick:() => { S.menuFor = null; openTaskEdit(t); } }, '✏️ עריכה') : null,
-      canEditTask(t) ? h('button', { type:'button', class:'chip', onclick:() => { S.menuFor = null; duplicateTask(t); } }, '⧉ שכפול') : null) : null);
+    // secondary buttons go on their own row under the title, so the title keeps the full width
+    h('div', { class:'tools' },
+      chatButton(t),
+      canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
+      canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null));
   running.forEach(tm => {
     const r = timedResult(t, tm); const b = S.busy.has(tm.id);
     card.append(h('div', { class:'running' },
@@ -1062,7 +1045,11 @@ function checkNewBadges(){
 
 /* ---------- boss task: one-time, first to do it gets triple points ---------- */
 const ptsOf = t => (Number(t.points) || 0) * (t.boss ? 3 : 1);
-function renderBoss(){} // the boss task now shows as the big "next task" card on the home screen
+function renderBoss(){
+  const list = S.tasks.filter(t => t.boss && isDue(t));
+  const B = $('bossSec'); B.hidden = !list.length; const L = $('bossList'); L.replaceChildren();
+  list.forEach(t => L.append(taskCard(t, true)));
+}
 
 /* ---------- family challenge with a deadline ---------- */
 // Who takes part: marked themselves (or marked by a parent), or did at least one task during the challenge.
@@ -1076,26 +1063,6 @@ async function toggleJoin(c, id){
     toast(on ? `${mName(id)} הוסר/ה מהאתגר` : `${mName(id)} משתתף/ת באתגר 💪`); }catch(e){ fail(e); }
 }
 function challengeCount(c){ return S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until).length; }
-function renderGoalBox(){
-  const slides = [...$('goalSlides').children].filter(el => !el.hidden);
-  $('goalBox').hidden = !slides.length;
-  const D = $('goalDots'); D.replaceChildren(); D.hidden = slides.length < 2;
-  const box = $('goalSlides'); const w = box.clientWidth || 1; const cur = Math.round(Math.abs(box.scrollLeft) / w);
-  slides.forEach((s, i) => D.append(h('i', { class: i === cur ? 'on' : '' })));
-}
-function renderDayCard(due){
-  const C = $('dayCard'); const me = S.me !== 'all' && !seeAll() ? S.me : null; const td = today();
-  const doneToday = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td && (!me || l.memberId === me)).length;
-  const left = due.length; const total = doneToday + left;
-  C.hidden = !S.members.length; if (C.hidden) return;
-  const pct = total ? Math.round(doneToday / total * 100) : 100;
-  const st = me ? memberStats(me) : null;
-  C.replaceChildren(
-    h('div', { class:'ring', style:`--p:${pct}` }, h('span', null, `${doneToday}/${total}`)),
-    h('div', { class:'day-t' },
-      h('strong', null, !total ? 'אין משימות היום' : left ? `עוד ${left} ${left === 1 ? 'משימה' : 'משימות'} להיום` : 'סיימת הכל להיום! 🎉'),
-      h('small', null, st ? `${st.week} נקודות השבוע${st.streak ? ` · 🔥 ${st.streak} ${st.streak === 1 ? 'יום' : 'ימים'} ברצף` : ''}` : 'כל המשפחה ביחד')));
-}
 function renderChallenge(){
   $('chEditor').hidden = !canEditGoal();
   const c = S.challenge; const td = today();
@@ -1290,7 +1257,6 @@ function renderComplaints(){
 function closeTop(){
   const lb = document.querySelector('.lightbox'); if (lb){ lb.remove(); return true; }
   if (S.fabMenu){ S.fabMenu = false; return true; }
-  if (S.menuFor){ S.menuFor = null; return true; }
   if (S.qtyAsk){ S.qtyAsk = null; return true; }
   if (S.openPick){ S.openPick = null; return true; }
   if (S.chatOpen){ if (typeof markSeen_chat === 'function') markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; return true; }
@@ -1301,7 +1267,7 @@ function closeTop(){
   if (S.tab !== 'today'){ S.tab = 'today'; window.scrollTo(0, 0); return true; }
   return false;
 }
-const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.menuFor || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
+const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
 // Keep exactly one extra history entry while anything can be closed; at home with nothing open, "back" leaves the app as usual.
 function syncHistory(){
   try{ const trapped = history.state && history.state.ftBack;
@@ -1586,9 +1552,7 @@ function buildStatic(){
   $('cpSend').addEventListener('click', sendComplaint);
   $('dnFab').addEventListener('click', () => { S.dnOpen = true; render(); });
   $('fmCp').addEventListener('click', () => { S.fabMenu = false; openComplaints(); });
-  $('fmDn').addEventListener('click', () => { S.fabMenu = false; S.dnOpen = true; render(); });
-  $('rankMore').addEventListener('click', () => { S.rankOpen = !S.rankOpen; render(); });
-  $('goalSlides').addEventListener('scroll', () => renderGoalBox(), { passive:true }); $('dnBack').addEventListener('click', () => { S.dnOpen = false; render(); });
+  $('fmDn').addEventListener('click', () => { S.fabMenu = false; S.dnOpen = true; render(); }); $('dnBack').addEventListener('click', () => { S.dnOpen = false; render(); });
   $('dnSend').addEventListener('click', sendDevNote); initDevNotes();
   document.querySelectorAll('input[name=cpf]').forEach(r => r.addEventListener('change', render));
   initComplaints();

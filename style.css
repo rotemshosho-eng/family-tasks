@@ -474,46 +474,15 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .task .tools .chatbtn{height:32px;min-width:36px}
 .task .pts-line{white-space:normal}
 @media (prefers-color-scheme: dark){.donecheck{border-color:#5B6B86}}
-/* ===== home v2 ===== */
-.daycard{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:18px;padding:12px 14px;box-shadow:0 1px 3px rgb(23 43 77 / .08)}
-.ring{--p:0;width:56px;height:56px;border-radius:50%;background:conic-gradient(var(--good,#39B980) calc(var(--p) * 1%),var(--sunk) 0);display:grid;place-items:center;flex:none}
-.ring span{width:44px;height:44px;border-radius:50%;background:var(--surface);display:grid;place-items:center;font-weight:700;font-size:.85rem}
-.day-t{display:flex;flex-direction:column;min-width:0}.day-t strong{font-size:1.05rem}.day-t small{color:var(--muted)}
-.nextsec{display:flex;flex-direction:column;gap:6px}
-.next-lbl{font-size:.85rem;font-weight:600;color:var(--muted);padding-inline-start:4px}
-.task.hero{background:linear-gradient(135deg,#172B4D,#24406E);color:#fff;padding:18px 16px;border-radius:22px;box-shadow:0 8px 22px rgb(23 43 77 / .28)}
-.task.hero .title{font-size:1.3rem;color:#fff}.task.hero .task-sub{color:#C9D4E8}
-.task.hero .ticon{width:56px;height:56px;font-size:1.9rem;background:rgb(255 255 255 / .12);border-radius:16px}
-.task.hero .donecheck{width:56px;height:56px;border-color:#39B980;border-width:3px;background:rgb(57 185 128 / .15)}
-.task.hero .morebtn{color:#C9D4E8}
-.task.hero .pts-note{color:#C9D4E8}
-.task.hero .ptspill{background:#FFB84D;color:#172B4D}
-.nextsec.boss .task.hero{background:linear-gradient(135deg,#2B1B4D,#172B4D);box-shadow:0 0 0 2px #FFB84D inset,0 8px 22px rgb(23 43 77 / .3)}
+/* light cleanup: points as a pill, one floating button */
 .ptspill{display:inline-flex;align-items:center;background:#FFF1D6;color:#9A6200;font-weight:700;border-radius:999px;padding:2px 10px;font-size:.88rem;white-space:nowrap}
 .ptspill.boss{background:#FFB84D;color:#172B4D}
 .pts-note{font-size:.82rem;color:var(--muted);margin-inline-start:6px}
 .task .meta{display:flex;align-items:center;flex-wrap:wrap;gap:2px}
-.morebtn{flex:none;border:0;background:none;color:var(--muted);font-size:1.4rem;line-height:1;padding:6px 8px;border-radius:10px;cursor:pointer;align-self:center}
-.morebtn[aria-expanded="true"]{background:var(--sunk)}
-.cardmenu{flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;padding-top:8px;border-top:2px dotted var(--line)}
-.task.hero .cardmenu .chip{background:rgb(255 255 255 / .12);color:#fff}
-.task > .chatbtn.unread{align-self:center}
-.podium{display:flex;gap:8px;align-items:flex-end}
-.pod{flex:1;min-width:0;border:0;background:var(--sunk);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font:inherit;color:inherit}
-.pod.first{padding-top:16px;padding-bottom:14px;background:linear-gradient(180deg,#FFF6E5,#FFE7BF)}
-.pod.me{box-shadow:0 0 0 2px #39B980 inset}
-.pod-md{font-size:1.4rem}.pod b{font-size:.92rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod small{color:var(--muted);font-weight:600}
-.standings .progress-head{display:flex;justify-content:space-between;align-items:center}
-.standings .progress-head .linkbtn{text-decoration:none;font-size:.85rem}
-.rank-list{margin-top:6px}
-.goalbox{display:flex;flex-direction:column;gap:6px}
-.goalslides{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;scrollbar-width:none}
-.goalslides::-webkit-scrollbar{display:none}
-.goalslides > .goal-card{flex:0 0 100%;scroll-snap-align:center;margin:0}
-.dots{display:flex;gap:5px;justify-content:center}.dots i{width:6px;height:6px;border-radius:50%;background:var(--line);transition:width .2s}.dots i.on{background:var(--ink,#172B4D);width:16px;border-radius:4px}
+.task.boss .pts-note{color:#C9D4E8}
 .fab{width:56px;height:56px;padding:0;justify-content:center}
 .fab .fab-n{position:absolute;top:-4px;inset-inline-end:-4px}
 .fabmenu{position:fixed;left:16px;bottom:calc(150px + env(safe-area-inset-bottom));z-index:14;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .fabmenu .btn{box-shadow:0 6px 18px rgb(23 43 77 / .25)}
 #view-today{padding-bottom:70px}
-@media (prefers-color-scheme: dark){.pod.first{background:linear-gradient(180deg,#3A3018,#2E2610)}.ptspill{background:#3A3018;color:#FFC870}.dots i.on{background:#C9D4E8}}
+@media (prefers-color-scheme: dark){.ptspill{background:#3A3018;color:#FFC870}}
