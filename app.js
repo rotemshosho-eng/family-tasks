@@ -719,16 +719,12 @@ function renderProgress(){
   const rows = S.members.map(m => ({ m, pts: S.logs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= ws).reduce((s, l) => s + (Number(l.points) || 0), 0) }))
     .sort((a, b) => b.pts - a.pts || (a.m.name || '').localeCompare(b.m.name || '', 'he'));
   const top = rows.length ? rows[0].pts : 0;
-  // only the podium: places 1-3 (gold in the middle)
-  { const P = $('podium'); P.replaceChildren(); const three = rows.slice(0, 3); const order = three.length === 3 ? [three[1], three[0], three[2]] : three;
-    order.forEach(r => { const i = rows.indexOf(r); const medal = r.pts > 0 ? ['🥇','🥈','🥉'][i] : '·'; const me = r.m.id === S.boundId || r.m.id === S.me;
-      P.append(h('button', { type:'button', class:'pod' + (i === 0 ? ' first' : '') + (me ? ' me' : ''), 'aria-expanded':String(S.rankOpen), onclick:() => { S.rankOpen = !S.rankOpen; render(); }, 'aria-label':`מקום ${i + 1}: ${r.m.name}, ${r.pts} נקודות. לחיצה פותחת את הטבלה המלאה` },
-        h('span', { class:'pod-md' }, medal), h('span', { class:'ava sm', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
-        h('b', null, r.m.name + (isAdminMember(r.m.id) ? ' 👑' : '')), h('small', null, String(r.pts)))); });
-    $('rankList').hidden = !S.rankOpen; $('rankHint').textContent = S.rankOpen ? 'סגירה ▲' : 'הטבלה המלאה ▼'; }
+  // the first view shows the top 3; tapping the table (or the button under it) shows everyone
+  $('rankHint').hidden = rows.length <= 3; $('rankHint').textContent = S.rankOpen ? 'סגירה ▲' : `הטבלה המלאה (${rows.length}) ▼`;
   let place = 0, prev = null;
   rows.forEach((r, i) => {
     if (r.pts !== prev){ place = i + 1; prev = r.pts; }   // ties share a place
+    if (i >= 3 && !S.rankOpen) return;
     const medal = r.pts > 0 ? ({ 1:'🥇', 2:'🥈', 3:'🥉' })[place] : null;
     const me = r.m.id === S.boundId || r.m.id === S.me;
     L.append(h('li', null, h('button', { type:'button', class:'rank' + (me ? ' me' : '') + (isAdminMember(r.m.id) ? ' royal' : ''), onclick:() => openProfile(r.m.id), 'aria-label':`מקום ${place}: ${r.m.name}, ${r.pts} נקודות` },
@@ -1545,6 +1541,7 @@ function buildStatic(){
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('mo-save').addEventListener('click', saveMoney);
+  $('rankHint').addEventListener('click', () => { S.rankOpen = !S.rankOpen; render(); });
   $('viewAsExit').addEventListener('click', stopViewAs);
   $('ex-save').addEventListener('click', saveExchange);
   $('ex-cancel').addEventListener('click', resetExchange);
