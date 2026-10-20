@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { plain: store.get('ft-plain') === '1', rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -189,15 +189,17 @@ function render(){
   // "View as": the admin sees the app exactly as that member does, look-only.
   if (S.viewAs && (!S.realAdmin || !member(S.viewAs))) S.viewAs = null;
   if (S.adminChecked) S.isAdmin = S.realAdmin && !S.viewAs;
+  // "plain" mode: the admin keeps full powers but sees the app like everyone else (his own member, no admin tab)
+  const plain = S.isAdmin && S.plain;
   renderViewAs();
   // The admin's own screen gets a gold background.
   document.body.classList.toggle('royal', !!S.isAdmin || (!!S.boundId && isAdminMember(S.boundId)));
   const typing = document.activeElement && document.activeElement.id === 'chat-input';
   const d = new Date();
   $('dateline').textContent = `יום ${DAYS[d.getDay()]}׳, ${d.getDate()}.${d.getMonth()+1}`;
-  if (!S.isAdmin && S.tab === 'admin') S.tab = 'today';
+  if ((!S.isAdmin || plain) && S.tab === 'admin') S.tab = 'today';
   $('tabs').hidden = !S.user;
-  $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin;
+  $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin || plain;
   for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
   if (!['today','tasks','rewards','family','admin'].includes(S.tab)) S.tab = 'today';
   const VIEWS = ['today','tasks','rewards','family','admin'];
@@ -207,7 +209,8 @@ function render(){
   // Who this device belongs to: a Google account linked to a member, or a member's code.
   const isGoogle = !!S.user && !S.user.isAnonymous;
   const gMember = isGoogle ? S.members.find(m => m.uid && m.uid === S.user.uid) : null;
-  const bound = S.viewAs ? S.viewAs : S.isAdmin ? null : (gMember ? gMember.id : (S.binding && member(S.binding.memberId) ? S.binding.memberId : null));
+  const ownMember = gMember ? gMember.id : (S.binding && member(S.binding.memberId) ? S.binding.memberId : null);
+  const bound = S.viewAs ? S.viewAs : plain ? (ownMember || S.members.find(m => roleOf(m.id) === 'admin')?.id || null) : S.isAdmin ? null : ownMember;
   S.boundId = bound;
   const ready = S.bindLoaded && S.adminChecked;
   const needLogin = !!S.user && !S.isAdmin && ready && !bound;
@@ -218,7 +221,7 @@ function render(){
   if (needLogin){ hideViews(); $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
   if (!S.isAdmin && !ready && S.user){ hideViews(); $('tabs').hidden = true; return; }
   renderHero(bound);
-  $('who').hidden = !S.isAdmin;
+  $('who').hidden = !S.isAdmin || plain;
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
@@ -226,7 +229,7 @@ function render(){
     tb.lastChild.textContent = nRev ? `משימות (${nRev})` : 'משימות'; }
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
   renderChatSheet(); renderProfileSheet(); updateSplash();
-  $('sgSec').hidden = !S.user || S.isAdmin || !bound || needLogin;
+  $('sgSec').hidden = !S.user || (S.isAdmin && !plain) || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
@@ -390,7 +393,7 @@ function canEditTask(t){
   return isParentMember(S.boundId) || t.suggestedBy === S.boundId;
 }
 function openTaskEdit(t){
-  if (S.isAdmin){ S.tab = 'admin'; render(); editTask(t); return; }
+  if (S.isAdmin && !S.plain){ S.tab = 'admin'; render(); editTask(t); return; }
   S.editSg = t.id; S.tab = 'tasks'; render();
   $('sgHead').textContent = 'עריכת משימה'; $('sgPresets').hidden = true; $('sg-save').textContent = 'שמירת שינויים';
   $('sg-title').value = t.title;
@@ -435,7 +438,7 @@ async function saveSuggestion(){
         rotation: assignee === 'rotate' ? rotation : deleteField(),
         points: timed ? deleteField() : (q ? q.points : points), ratePerMin: timed ? ratePerMin : deleteField(), maxMinutes: timed ? maxMinutes : deleteField(),
         qtyPer: q ? q.qtyPer : deleteField(), qtyUnit: q ? q.qtyUnit : deleteField(), qtyMax: deleteField(), untilTime: $('sg-until').value || deleteField(),
-        reviewed:false, editedBy: S.boundId });
+        reviewed: !!S.isAdmin, editedBy: S.boundId });
       toast('המשימה עודכנה'); toggleSuggest(false);
     }catch(e){ fail(e); } finally{ btn.disabled = false; }
     return;
@@ -770,7 +773,9 @@ function taskCard(t, canAct){
     h('div', { class:'tools' },
       chatButton(t),
       canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
-      canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null));
+      canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null,
+      (S.isAdmin && S.plain && !t.pinned) ? (() => { const b = h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`מחיקה: ${t.title}`, title:'מחיקה' }, '🗑️');
+        b.addEventListener('click', () => arm('dt' + t.id, b, () => deleteTask(t, false))); if (S.armed === 'dt' + t.id){ b.classList.add('armed'); b.textContent = 'בטוח?'; } return b; })() : null));
   running.forEach(tm => {
     const r = timedResult(t, tm); const b = S.busy.has(tm.id);
     card.append(h('div', { class:'running' },
@@ -834,8 +839,8 @@ async function redeem(memberId, title, cost, rewardId, force){
 }
 function renderRewards(){
   const who = rewardsWho();
-  const rw = $('rw-who'); rw.replaceChildren(); rw.hidden = !S.isAdmin;
-  if (S.isAdmin){ rw.append(h('span', { class:'lbl' }, 'של מי:'));
+  const rw = $('rw-who'); rw.replaceChildren(); rw.hidden = !S.isAdmin || S.plain;
+  if (S.isAdmin && !S.plain){ rw.append(h('span', { class:'lbl' }, 'של מי:'));
     S.members.forEach(m => rw.append(h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === m.id),
       onclick:() => { S.me = m.id; store.set('ft-me', m.id); render(); } }, h('span', { class:'dot', style:`background:${m.color}` }), m.name))); }
   const W = $('wallet'); W.replaceChildren();
@@ -1691,7 +1696,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   let taps = [];
   $('appTitle').addEventListener('click', () => {
     const now = Date.now(); taps = taps.filter(t => now - t < 4000); taps.push(now);
-    if (taps.length >= 5){ taps = []; if (!S.isAdmin) openAdminGate(); }
+    if (taps.length >= 5){ taps = []; if (S.isAdmin && S.plain){ S.plain = false; store.set('ft-plain', '0'); S.tab = 'admin'; render(); toast('חזרת לניהול 👑'); } else if (!S.isAdmin) openAdminGate(); }
   });
   $('ag-google').addEventListener('click', () => { if (!hasGIS()) closeAdminGate(); adminSignIn(); });
   $('login-go').addEventListener('click', loginGo);
@@ -1705,7 +1710,9 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   $('wait-out').addEventListener('click', () => signOut(auth));
   $('wait-cancel').addEventListener('click', cancelJoin);
   // Leaving admin mode: drop the code session; a Google sign-in is signed out (the device returns to its family member).
+  $('plainBtn').addEventListener('click', () => { S.plain = true; store.set('ft-plain', '1'); S.tab = 'today'; render(); window.scrollTo(0, 0); toast('מצב רגיל. השליטה נשארת אצלך. 5 לחיצות על הכותרת מחזירות לניהול.'); });
   $('logoutBtn').addEventListener('click', async () => {
+    S.plain = false; store.set('ft-plain', '0');
     S.tab = 'today';
     try{ if (S.user) await deleteDoc(doc(db,'adminSessions',S.user.uid)); }catch(e){}
     S.codeAdmin = false;
