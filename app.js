@@ -221,6 +221,7 @@ function render(){
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
+  syncHistory();
 }
 function renderViewAs(){
   const bar = $('viewAsBar'); bar.hidden = !S.viewAs;
@@ -1110,7 +1111,7 @@ function photoThumb(l){
 }
 function showPhoto(src){
   const o = h('div', { class:'lightbox', role:'dialog', 'aria-label':'תמונה', onclick:() => o.remove() }, h('img', { src, alt:'הוכחה' }));
-  document.body.append(o);
+  document.body.append(o); syncHistory();
 }
 const dropPhoto = id => { if (S.photos[id]) _deleteDoc(doc(db,'photos',id)).catch(() => {}); };
 
@@ -1234,6 +1235,30 @@ function renderComplaints(){
   if (focusCp){ const el = L.querySelector(`.cpc-in[data-cp="${focusCp}"]`); if (el){ el.focus({ preventScroll:true }); try{ el.setSelectionRange(caret, caret); }catch(e){} } }
 }
 
+
+/* ---------- phone "back" button: closes what's open inside the app instead of leaving it ---------- */
+// Order matters: the top-most thing closes first. Returns true if something was closed.
+function closeTop(){
+  const lb = document.querySelector('.lightbox'); if (lb){ lb.remove(); return true; }
+  if (S.qtyAsk){ S.qtyAsk = null; return true; }
+  if (S.openPick){ S.openPick = null; return true; }
+  if (S.chatOpen){ if (typeof markSeen_chat === 'function') markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; return true; }
+  if (S.profileOpen){ S.profileOpen = null; return true; }
+  if (S.dnOpen){ S.dnOpen = false; return true; }
+  if (S.cpOpen){ S.cpOpen = false; return true; }
+  if (S.viewAs){ S.viewAs = null; S.tab = 'admin'; return true; }
+  if (S.tab !== 'today'){ S.tab = 'today'; window.scrollTo(0, 0); return true; }
+  return false;
+}
+const somethingOpen = () => !!(document.querySelector('.lightbox') || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
+// Keep exactly one extra history entry while anything can be closed; at home with nothing open, "back" leaves the app as usual.
+function syncHistory(){
+  try{ const trapped = history.state && history.state.ftBack;
+    if (somethingOpen() && !trapped) history.pushState({ ftBack:1 }, '');
+    else if (!somethingOpen() && trapped) history.back(); // closed with an in-app button: drop the spare entry
+  }catch(e){}
+}
+window.addEventListener('popstate', () => { if (closeTop()) render(); syncHistory(); });
 
 /* ---------- duplicate a task (a copy you can then edit) ---------- */
 async function duplicateTask(t){
