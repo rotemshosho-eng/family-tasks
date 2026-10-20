@@ -81,19 +81,26 @@
   <!-- TODAY -->
   <main id="view-today" class="section stack">
     <div class="who" id="who"></div>
-    <section class="section" id="bossSec" hidden>
-      <div class="section-head"><h2>🐉 משימת בוס</h2><span class="sub">הראשון שעושה מקבל פי 3</span></div>
-      <div class="list" id="bossList"></div>
+    <section class="daycard" id="dayCard" hidden></section>
+    <section class="nextsec" id="nextSec" hidden>
+      <span class="next-lbl" id="nextLbl">המשימה הבאה שלך</span>
+      <div class="list" id="nextList"></div>
     </section>
-    <section class="goal-card challenge" data-challenge hidden></section>
     <section class="standings" id="progress" aria-label="טבלת המקומות השבוע">
-      <div class="progress-head"><strong>טבלת המקומות</strong><span class="sub">השבוע</span></div>
-      <ol class="rank-list" id="rankList"></ol>
+      <div class="progress-head"><strong>השבוע</strong><button type="button" class="linkbtn" id="rankMore">כל הטבלה ›</button></div>
+      <div class="podium" id="podium"></div>
+      <ol class="rank-list" id="rankList" hidden></ol>
     </section>
-    <section class="goal-card" data-goal hidden></section>
+    <section class="goalbox" id="goalBox" hidden>
+      <div class="goalslides" id="goalSlides">
+        <section class="goal-card challenge" data-challenge hidden></section>
+        <section class="goal-card" data-goal hidden></section>
+      </div>
+      <div class="dots" id="goalDots"></div>
+    </section>
     <section class="section">
       <div class="seg scope" data-scope hidden></div>
-      <div class="section-head"><h2 id="todoTitle">מה נשאר להיום</h2><span class="count" id="todoCount"></span></div>
+      <div class="section-head"><h2 id="todoTitle">עוד להיום</h2><span class="count" id="todoCount"></span></div>
       <div class="list" id="todo"></div>
     </section>
     <section class="section" id="doneSec" hidden>
@@ -385,8 +392,12 @@
   <div class="sheet-body" id="chatBody"></div>
 </div>
 <!-- complaints: everyone sees everything; admin and parents handle -->
-<button type="button" class="fab" id="cpFab" hidden aria-label="תלונות">📢<span class="fab-l">תלונות</span><span class="fab-n" id="cpFabN" hidden></span></button>
-<button type="button" class="fab fab2" id="dnFab" hidden aria-label="הערות למפתח">🛠️<span class="fab-l">הערות למפתח</span><span class="fab-n" id="dnFabN" hidden></span></button>
+<button type="button" class="fab" id="cpFab" hidden aria-label="תלונות והערות">📢<span class="fab-n" id="cpFabN" hidden></span></button>
+<div class="fabmenu" id="fabMenu" hidden>
+  <button type="button" class="btn" id="fmCp">📢 תלונות</button>
+  <button type="button" class="btn ghost" id="fmDn">🛠️ הערות למפתח</button>
+</div>
+<button type="button" class="fab fab2" id="dnFab" hidden aria-label="הערות למפתח">🛠️<span class="fab-n" id="dnFabN" hidden></span></button>
 <div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">
   <div class="sheet-head">
     <button type="button" class="btn ghost small" id="dnBack">חזרה</button>
