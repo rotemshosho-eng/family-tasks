@@ -466,3 +466,11 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .seg.scope{align-self:flex-start;margin-bottom:8px}
 .cp.cp-doing .cp-status{background:#E8F1FF;color:#1D5FB8}
 .done-who{font-weight:700}
+/* task card: icon + title + main button on one row, small tools under it */
+.task{align-items:flex-start}
+.task .body{flex:1 1 0;min-width:0}
+.task > .donecheck,.task > .btn.start{align-self:center;flex:none}
+.task .tools{flex-basis:100%;display:flex;gap:6px;justify-content:flex-start;padding-inline-start:56px;margin-top:-4px}
+.task .tools .chatbtn{height:32px;min-width:36px}
+.task .pts-line{white-space:normal}
+@media (prefers-color-scheme: dark){.donecheck{border-color:#5B6B86}}

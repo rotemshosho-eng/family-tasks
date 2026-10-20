@@ -761,10 +761,12 @@ function taskCard(t, canAct){
     h('div', { class:'ticon', 'aria-hidden':'true' }, taskIcon(t)),
     h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta),
       h('span', { class:'task-sub' }, sub.join(' · '))),
-    canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
-    canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null,
-    chatButton(t),
-    control);
+    control,
+    // secondary buttons go on their own row under the title, so the title keeps the full width
+    h('div', { class:'tools' },
+      chatButton(t),
+      canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
+      canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null));
   running.forEach(tm => {
     const r = timedResult(t, tm); const b = S.busy.has(tm.id);
     card.append(h('div', { class:'running' },
