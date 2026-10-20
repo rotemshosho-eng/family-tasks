@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -722,9 +722,10 @@ function renderProgress(){
   // only the podium: places 1-3 (gold in the middle)
   { const P = $('podium'); P.replaceChildren(); const three = rows.slice(0, 3); const order = three.length === 3 ? [three[1], three[0], three[2]] : three;
     order.forEach(r => { const i = rows.indexOf(r); const medal = r.pts > 0 ? ['🥇','🥈','🥉'][i] : '·'; const me = r.m.id === S.boundId || r.m.id === S.me;
-      P.append(h('button', { type:'button', class:'pod' + (i === 0 ? ' first' : '') + (me ? ' me' : ''), onclick:() => openProfile(r.m.id), 'aria-label':`מקום ${i + 1}: ${r.m.name}, ${r.pts} נקודות` },
+      P.append(h('button', { type:'button', class:'pod' + (i === 0 ? ' first' : '') + (me ? ' me' : ''), 'aria-expanded':String(S.rankOpen), onclick:() => { S.rankOpen = !S.rankOpen; render(); }, 'aria-label':`מקום ${i + 1}: ${r.m.name}, ${r.pts} נקודות. לחיצה פותחת את הטבלה המלאה` },
         h('span', { class:'pod-md' }, medal), h('span', { class:'ava sm', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
-        h('b', null, r.m.name + (isAdminMember(r.m.id) ? ' 👑' : '')), h('small', null, String(r.pts)))); }); }
+        h('b', null, r.m.name + (isAdminMember(r.m.id) ? ' 👑' : '')), h('small', null, String(r.pts)))); });
+    $('rankList').hidden = !S.rankOpen; $('rankHint').textContent = S.rankOpen ? 'סגירה ▲' : 'הטבלה המלאה ▼'; }
   let place = 0, prev = null;
   rows.forEach((r, i) => {
     if (r.pts !== prev){ place = i + 1; prev = r.pts; }   // ties share a place
@@ -1263,6 +1264,7 @@ function renderComplaints(){
 function closeTop(){
   const lb = document.querySelector('.lightbox'); if (lb){ lb.remove(); return true; }
   if (S.fabMenu){ S.fabMenu = false; return true; }
+  if (S.rankOpen){ S.rankOpen = false; return true; }
   if (S.qtyAsk){ S.qtyAsk = null; return true; }
   if (S.openPick){ S.openPick = null; return true; }
   if (S.chatOpen){ if (typeof markSeen_chat === 'function') markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; return true; }
@@ -1273,7 +1275,7 @@ function closeTop(){
   if (S.tab !== 'today'){ S.tab = 'today'; window.scrollTo(0, 0); return true; }
   return false;
 }
-const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
+const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.rankOpen || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
 // Keep exactly one extra history entry while anything can be closed; at home with nothing open, "back" leaves the app as usual.
 function syncHistory(){
   try{ const trapped = history.state && history.state.ftBack;
