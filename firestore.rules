@@ -38,6 +38,7 @@ service cloud.firestore {
     }
 
     // משימה שמסומנת "צריך אישור": הרישום חייב להתחיל כלא מאושר. אחרת אסור לשלוח שדה אישור.
+    function validUntil(d) { return !('untilTime' in d) || (d.untilTime is string && d.untilTime.size() == 5); }
     function validQty(d) {
       return (!('qtyPer' in d) && !('qtyUnit' in d) && !('qtyMax' in d))
         || (d.timed == false && d.qtyPer is int && d.qtyPer >= 1 && d.qtyPer <= 1000
@@ -110,9 +111,9 @@ service cloud.firestore {
     }
 
     function validNewTask(d) {
-      return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','reviewed','suggestedBy','createdAt'])
+      return d.keys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','untilTime','check','rotation','reviewed','suggestedBy','createdAt'])
         && d.reviewed == false
-        && validQty(d)
+        && validQty(d) && validUntil(d)
         && (!('check' in d) || d.check is bool)
         && (d.assignee != 'rotate' || (d.rotation is list && d.rotation.size() >= 2 && d.rotation.size() <= 20))
         && (!('rotation' in d) || d.assignee == 'rotate')
@@ -130,7 +131,7 @@ service cloud.firestore {
     // קודי כניסה: רק המנהל רואה ומשנה.
     // קוד המנהל עצמו: רק מנהל רואה ומשנה. ההגדרה הראשונה נעשית כשנכנסים עם גוגל.
     function validTaskShape(d) {
-      return validQty(d)
+      return validQty(d) && validUntil(d)
         && (!('check' in d) || d.check is bool)
         && (d.assignee != 'rotate' || (d.rotation is list && d.rotation.size() >= 2 && d.rotation.size() <= 20))
         && (!('rotation' in d) || d.assignee == 'rotate')
@@ -220,7 +221,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         resource.data.get('pinned', false) == false
         && resource.data.get('pending', false) == false
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','reviewed','editedBy'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title','assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','untilTime','check','rotation','reviewed','editedBy'])
         && request.resource.data.reviewed == false
         && validTaskShape(request.resource.data)
         && request.resource.data.editedBy is string && boundTo(request.resource.data.editedBy)

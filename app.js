@@ -73,6 +73,7 @@ function whoseTurn(t){
   return r.length ? r[doneCount(t) % r.length] : 'all';
 }
 function assigneeLabel(t){
+  if (t.assignee === 'each'){ const left = eachLeft(t); return left.length && left.length < S.members.length ? `כל אחד בנפרד · עוד לא: ${left.map(mName).join(', ')}` : 'כל אחד בנפרד'; }
   const w = whoseTurn(t);
   if (t.assignee === 'rotate') return w === 'all' ? 'תורנות' : `תורנות · התור של ${mName(w)}`;
   return w === 'all' ? 'מי שרוצה' : mName(w);
@@ -80,9 +81,9 @@ function assigneeLabel(t){
 // Parents can switch between their own tasks and the whole family's (the choice is remembered on the phone).
 const isParentNow = () => !S.isAdmin && !!S.boundId && isParentMember(S.boundId);
 const seeAll = () => isParentNow() && store.get('ft-seeall') !== '0';
-const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all'; };
+const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all' || w === 'each'; };
 // May this phone press "done" on the task? Only for itself (or anyone, for the admin).
-const canDoTask = t => { if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === S.boundId || (isParentNow() && !isTimed(t)); };
+const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || (isParentNow() && !isTimed(t)); };
 // A parent marking a task for a child (e.g. one without a phone): the log carries who marked it, and counts at once.
 const actingFor = memberId => (!S.isAdmin && S.boundId && memberId !== S.boundId) ? { by: S.boundId } : null;
 function renderScope(){
@@ -104,11 +105,22 @@ function timedResult(task, tm){
 }
 const clock = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${pad(s % 60)}`; };
 function recLabel(t){ if (t.type === 'once') return 'חד-פעמית'; const d = (t.days || []).slice().sort(); return d.length === 7 ? 'כל יום' : 'ימים ' + d.map(i => DAYS[i]).join(' '); }
-function isDue(t){
+// "each" = everyone does it for themselves; the task stays on each person's list until they did it.
+function isDueFor(t, m){
   if (t.pending) return false;
-  if (t.type === 'once') return !S.logs.some(l => l.taskId === t.id && !rejected(l));
-  return (t.days || []).includes(dow()) && !S.logs.some(l => l.taskId === t.id && l.day === today() && !rejected(l));
+  const mine = l => l.taskId === t.id && !rejected(l) && (!m || l.memberId === m);
+  if (t.type === 'once') return !S.logs.some(mine);
+  return (t.days || []).includes(dow()) && !S.logs.some(l => mine(l) && l.day === today());
 }
+const eachLeft = t => S.members.filter(m => isDueFor(t, m.id)).map(m => m.id);
+function isDue(t){
+  if (t.assignee !== 'each') return isDueFor(t, null);
+  if (S.me !== 'all' && !seeAll()) return isDueFor(t, S.me);
+  return eachLeft(t).length > 0;
+}
+// "Until" time (e.g. 07:30): after it, today's task can't be marked any more.
+const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const pastDeadline = t => !!t.untilTime && nowHM() > t.untilTime;
 function arm(key, btn, fn){
   if (S.armed === key){ S.armed = null; fn(); return; }
   S.armed = key; btn.classList.add('armed'); btn.textContent = 'בטוח? שוב';
@@ -382,7 +394,7 @@ function openTaskEdit(t){
   S.editSg = t.id; S.tab = 'tasks'; render();
   $('sgHead').textContent = 'עריכת משימה'; $('sgPresets').hidden = true; $('sg-save').textContent = 'שמירת שינויים';
   $('sg-title').value = t.title;
-  const sel = $('sg-assignee'); sel.value = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
+  const sel = $('sg-assignee'); sel.value = ['rotate','each'].includes(t.assignee) ? t.assignee : (member(t.assignee) ? t.assignee : 'all'); $('sg-until').value = t.untilTime || '';
   $('sg-rot').querySelectorAll('input').forEach(i => i.checked = (t.rotation || []).includes(i.value)); $('sg-rotwrap').hidden = sel.value !== 'rotate';
   $('sg-check').checked = !!t.check;
   setSgMode(modeOf(t)); fillQty('sg', t);
@@ -394,7 +406,7 @@ function openTaskEdit(t){
 }
 function resetSgEdit(){
   S.editSg = null; $('sgHead').textContent = 'או משימה משלך'; $('sgPresets').hidden = false; $('sg-save').textContent = 'הוספה';
-  $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); fillQty('sg');
+  $('sg-title').value = ''; $('sg-until').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); fillQty('sg');
 }
 function setSgMode(m){ $('sg-mode-' + m).checked = true; $('sg-fixed-row').hidden = m !== 'fixed'; $('sg-timed-row').hidden = m !== 'timed'; $('sg-qty-row').hidden = m !== 'qty'; }
 // Anyone can add a task with its own points or time. It is live at once; the admin sees it marked "new" and can edit or delete it.
@@ -422,14 +434,14 @@ async function saveSuggestion(){
       await updateDoc(doc(db,'tasks',old.id), { title, assignee, type, days, timed, check: $('sg-check').checked,
         rotation: assignee === 'rotate' ? rotation : deleteField(),
         points: timed ? deleteField() : (q ? q.points : points), ratePerMin: timed ? ratePerMin : deleteField(), maxMinutes: timed ? maxMinutes : deleteField(),
-        qtyPer: q ? q.qtyPer : deleteField(), qtyUnit: q ? q.qtyUnit : deleteField(), qtyMax: deleteField(),
+        qtyPer: q ? q.qtyPer : deleteField(), qtyUnit: q ? q.qtyUnit : deleteField(), qtyMax: deleteField(), untilTime: $('sg-until').value || deleteField(),
         reviewed:false, editedBy: S.boundId });
       toast('המשימה עודכנה'); toggleSuggest(false);
     }catch(e){ fail(e); } finally{ btn.disabled = false; }
     return;
   }
   try{
-    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked,
+    await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked, ...($('sg-until').value ? { untilTime: $('sg-until').value } : {}),
       ...(assignee === 'rotate' ? { rotation } : {}),
       ...(timed ? { ratePerMin, maxMinutes } : q ? q : { points }), reviewed:false,
       suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
@@ -727,7 +739,7 @@ const taskIcon = t => (ICONS.find(([re]) => re.test(t.title || '')) || [null, '�
 // One task as a card. canAct: show the finish/start control (tasks due today).
 function taskCard(t, canAct){
   const turn = whoseTurn(t); const timed = isTimed(t);
-  const who = turn === 'all' ? (S.me !== 'all' && !(isParentNow() && !timed) ? S.me : null) : turn;
+  const who = (turn === 'all' || turn === 'each') ? (S.me !== 'all' && !(isParentNow() && !timed) ? S.me : null) : turn;
   const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
   const whoRunning = who && running.some(tm => tm.memberId === who);
   const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
@@ -736,6 +748,7 @@ function taskCard(t, canAct){
   const meta = [h('span', { class:'pts-line' }, h('span', { class:'star', 'aria-hidden':'true' }, '★'), timed ? `${t.ratePerMin} נקודות לדקה, עד ${t.maxMinutes} דק׳` : t.qtyPer ? qtyText(t) : t.boss ? `${ptsOf(t)} נקודות (פי 3)` : `${t.points} נקודות`)];
   const sub = [assigneeLabel(t), recLabel(t)];
   if (t.check) sub.push('צריך אישור');
+  if (t.untilTime) sub.push(pastDeadline(t) ? `⏰ עבר ${t.untilTime}, פספסת` : `⏰ עד ${t.untilTime}`);
   if (t.pinned) sub.unshift('נעוצה');
   let control = null;
   if (canAct && !whoRunning){
@@ -776,7 +789,7 @@ function taskCard(t, canAct){
       h('button', { type:'button', class:'btn ghost small', onclick:() => { S.qtyAsk = null; render(); } }, 'ביטול')));
   }
   if (canAct && S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
-    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || !timed || m.id === S.boundId)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
+    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || !timed || m.id === S.boundId) && (t.assignee !== 'each' || isDueFor(t, m.id))).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
       h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
   return card;
 }
@@ -1262,7 +1275,7 @@ window.addEventListener('popstate', () => { if (closeTop()) render(); syncHistor
 
 /* ---------- duplicate a task (a copy you can then edit) ---------- */
 async function duplicateTask(t){
-  const keys = ['assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation'];
+  const keys = ['assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','untilTime'];
   const data = { title: (t.title + ' (עותק)').slice(0, 80) };
   for (const k of keys) if (t[k] !== undefined && t[k] !== null) data[k] = t[k];
   data.timed = !!t.timed; data.type = t.type === 'once' ? 'once' : 'repeat'; data.days = Array.isArray(t.days) ? t.days : []; data.assignee = t.assignee || 'all';
@@ -1323,14 +1336,15 @@ function syncSelects(){
     if ([...sel.options].some(o => o.value === v)) sel.value = v; };
   const prevAssignee = $('tf-assignee').value;
   fill($('tf-assignee'), true); fill($('bf-member'), false);
-  { const sel = $('tf-assignee'), v = sel.dataset.want || prevAssignee; if (![...sel.options].some(o => o.value === 'rotate')) sel.append(h('option', { value:'rotate' }, 'תורנות (מתחלף)')); if (v) sel.value = v; delete sel.dataset.want; }
+  { const sel = $('tf-assignee'), v = sel.dataset.want || prevAssignee; sel.insertBefore(h('option', { value:'each' }, 'כל אחד בנפרד'), sel.options[1] || null); if (![...sel.options].some(o => o.value === 'rotate')) sel.append(h('option', { value:'rotate' }, 'תורנות (מתחלף)')); if (v) sel.value = v; delete sel.dataset.want; }
   const rot = $('tf-rot'); const picked = new Set([...rot.querySelectorAll('input:checked')].map(i => i.value).concat(rot.dataset.want ? JSON.parse(rot.dataset.want) : []));
   delete rot.dataset.want; rot.replaceChildren(...S.members.map(m => h('label', null, h('input', { type:'checkbox', value:m.id, checked: picked.has(m.id) }), m.name)));
   $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate';
   const sgPrev = $('sg-assignee').value;
   const sg = $('sg-assignee'), had = sg.options.length; fill(sg, true);
+  sg.insertBefore(h('option', { value:'each' }, 'כל אחד בנפרד'), sg.options[1] || null);
   if (![...sg.options].some(o => o.value === 'rotate')) sg.append(h('option', { value:'rotate' }, 'תורנות (מתחלף)'));
-  if (sgPrev === 'rotate') sg.value = 'rotate';
+  if (sgPrev === 'rotate' || sgPrev === 'each') sg.value = sgPrev;
   { const rot = $('sg-rot'); const picked = new Set([...rot.querySelectorAll('input:checked')].map(i => i.value));
     rot.replaceChildren(...S.members.map(m => h('label', null, h('input', { type:'checkbox', value:m.id, checked: picked.has(m.id) }), m.name)));
     $('sg-rotwrap').hidden = sg.value !== 'rotate'; }
@@ -1386,7 +1400,7 @@ function renderAdminLists(){
 }
 function editTask(t){
   S.editTask = t.id; $('tfHead').textContent = t.pending ? `קביעת ניקוד: ${t.title}` : 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
-  $('tf-title').value = t.title; $('tf-assignee').dataset.want = t.assignee === 'rotate' ? 'rotate' : (member(t.assignee) ? t.assignee : 'all');
+  $('tf-title').value = t.title; $('tf-assignee').dataset.want = ['rotate','each'].includes(t.assignee) ? t.assignee : (member(t.assignee) ? t.assignee : 'all'); $('tf-until').value = t.untilTime || '';
   $('tf-rot').dataset.want = JSON.stringify(t.rotation || []); $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-check').checked = !!t.check; $('tf-boss').checked = !!t.boss; syncSelects();
   setMode(modeOf(t)); fillQty('tf', t);
   $('tf-points').value = t.points ?? 10; $('tf-rate').value = t.ratePerMin ?? 1; $('tf-max').value = t.maxMinutes ?? 30; updateHint();
@@ -1396,7 +1410,7 @@ function editTask(t){
 }
 function resetTaskForm(){
   S.editTask = null; $('tfHead').textContent = 'משימה חדשה'; $('tf-save').textContent = 'הוספת משימה'; $('tf-cancel').hidden = true;
-  $('tf-title').value = ''; $('tf-assignee').dataset.want = 'all'; $('tf-check').checked = false; $('tf-boss').checked = false; $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); fillQty('tf'); updateHint();
+  $('tf-title').value = ''; $('tf-assignee').dataset.want = 'all'; $('tf-until').value = ''; $('tf-check').checked = false; $('tf-boss').checked = false; $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-points').value = 10; $('tf-rate').value = 1; $('tf-max').value = 30; setMode('fixed'); fillQty('tf'); updateHint();
   $('tf-type-repeat').checked = true; $('tf-dayswrap').hidden = false;
   DAYS.forEach((_, i) => $('tf-day-'+i).checked = true);
 }
@@ -1435,7 +1449,8 @@ async function saveTask(){
   const rotation = assignee === 'rotate' ? [...$('tf-rot').querySelectorAll('input:checked')].map(i => i.value) : [];
   if (assignee === 'rotate' && rotation.length < 2){ toast('בתורנות צריך לפחות שני בני משפחה'); return; }
   const q = radioMode('tf') === 'qty' ? readQty('tf') : null; if (typeof q === 'string'){ toast(q); return; }
-  const data = { title, assignee, type, days, timed, check: $('tf-check').checked,
+  const untilTime = $('tf-until').value || '';
+  const data = { title, assignee, type, days, timed, check: $('tf-check').checked, ...(untilTime ? { untilTime } : {}),
     ...(assignee === 'rotate' ? { rotation } : {}),
     ...(timed ? { ratePerMin, maxMinutes } : q ? q : { points }) };
   if ($('tf-boss').checked){ if (timed || q){ toast('משימת בוס עובדת רק עם מספר נקודות קבוע'); return; } data.boss = true; data.type = 'once'; data.days = []; }

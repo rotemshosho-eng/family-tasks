@@ -47,6 +47,7 @@ const rejected = l => l.approved === 'rejected';
 // Rotation: same rule as the app; the turn moves on each time the task is done.
 const doneCount = t => allLogs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed') && !rejected(l)).length;
 function whoseTurn(t) {
+  if (t.assignee === 'each') return 'all';
   if (t.assignee !== 'rotate') return t.assignee || 'all';
   const r = (t.rotation || []).filter(id => members.some(m => m.id === id));
   return r.length ? r[doneCount(t) % r.length] : 'all';
@@ -124,13 +125,16 @@ const admins = members.filter(m => m.admin === true).map(m => m.id);
 // 3. evening reminder, once a day
 if (hour >= REMIND_HOUR && state.remindedDay !== today) {
   const logs = allLogs.filter(l => l.day === today);
-  const isDue = t => {
+  const hm = `${String(hour).padStart(2, '0')}:00`;
+  const isDue = (t, m) => {
     if (t.pending) return false;
-    if (t.type === 'once') return !allLogs.some(l => l.taskId === t.id && !rejected(l));
-    return (t.days || []).includes(dow) && !logs.some(l => l.taskId === t.id && !rejected(l));
+    if (t.untilTime && t.untilTime <= hm) return false; // its time has passed (e.g. "wake up by 07:30")
+    const by = l => l.taskId === t.id && !rejected(l) && (t.assignee !== 'each' || l.memberId === m);
+    if (t.type === 'once') return !allLogs.some(by);
+    return (t.days || []).includes(dow) && !logs.some(by);
   };
   for (const m of members) {
-    const left = tasks.filter(t => { if (!isDue(t)) return false; const w = whoseTurn(t); return w === m.id || w === 'all'; });
+    const left = tasks.filter(t => { if (!isDue(t, m.id)) return false; const w = whoseTurn(t); return w === m.id || w === 'all'; });
     if (!left.length) continue;
     const list = left.slice(0, 3).map(t => t.title).join(', ') + (left.length > 3 ? ' ועוד' : '');
     outbox.push({ to: [m.id], title: `נשארו לך ${left.length} משימות להיום`, body: list, tag: 'evening' });
