@@ -97,6 +97,10 @@ for (const [taskId, list] of byTask) {
     outbox.push({ to: members.filter(m => m.admin === true || m.role === 'admin').map(m => m.id).filter(id => id !== n.by), title: `🛠️ ${kinds[n.kind] || 'הערה'} מ${name(n.by)}`, body: String(n.text || '').slice(0, 170), tag: `dn-${n.id}` });
 }
 
+// 1d. a note's status changed -> tell whoever wrote it
+for (const n of (await all('devNotes')).filter(n => (n.statusAt || 0) > since && n.status !== 'new'))
+  outbox.push({ to: [n.by], title: n.status === 'doing' ? '🔧 ההערה שלך בטיפול' : '✓ ההערה שלך טופלה', body: String(n.text || '').slice(0, 150), tag: `dn-${n.id}` });
+
 // 2. new tasks since the last run
 for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   const turn = whoseTurn(t);

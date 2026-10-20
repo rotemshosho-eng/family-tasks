@@ -82,7 +82,9 @@ const isParentNow = () => !S.isAdmin && !!S.boundId && isParentMember(S.boundId)
 const seeAll = () => isParentNow() && store.get('ft-seeall') !== '0';
 const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all'; };
 // May this phone press "done" on the task? Only for itself (or anyone, for the admin).
-const canDoTask = t => { if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === S.boundId; };
+const canDoTask = t => { if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === S.boundId || (isParentNow() && !isTimed(t)); };
+// A parent marking a task for a child (e.g. one without a phone): the log carries who marked it, and counts at once.
+const actingFor = memberId => (!S.isAdmin && S.boundId && memberId !== S.boundId) ? { by: S.boundId } : null;
 function renderScope(){
   const on = isParentNow();
   document.querySelectorAll('[data-scope]').forEach((el, i) => { el.hidden = !on; el.replaceChildren(); if (!on) return;
@@ -124,7 +126,9 @@ async function complete(t, memberId){
   if (!db || S.busy.has(t.id)) return; S.busy.add(t.id); S.openPick = null; render();
   try{
     const pts = ptsOf(t);
-    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points:pts, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
+    const by = actingFor(memberId); const check = t.check && !by;
+    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points:pts, ...(check ? { approved:false } : {}), ...(by || {}), day:today(), at:Date.now() });
+    if (by){ toast(`סומן בשם ${mName(memberId)}: ${pts} נקודות`); confetti(60); return; }
     toast(t.check ? `נשלח לאישור: ${pts} נקודות יתווספו אחרי בדיקה. אפשר לצרף תמונה ב"בוצע היום" 📷` : t.boss ? `🐉 ${mName(memberId)} ניצח/ה את הבוס! ${pts} נקודות` : `${mName(memberId)} קיבל/ה ${pts} נקודות`);
     confetti(t.boss ? 200 : t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
@@ -137,7 +141,8 @@ async function completeQty(t, memberId, n){
   if (!db || S.busy.has(t.id)) return; S.busy.add(t.id); S.qtyAsk = null; render();
   const points = qtyPoints(t, n);
   try{
-    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points, count:n, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
+    const by = actingFor(memberId);
+    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points, count:n, ...(t.check && !by ? { approved:false } : {}), ...(by || {}), day:today(), at:Date.now() });
     toast(t.check ? `נשלח לאישור: ${n} ${t.qtyUnit} = ${points} נקודות` : `${mName(memberId)}: ${n} ${t.qtyUnit} = ${points} נקודות`); confetti(t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
 }
@@ -639,16 +644,17 @@ function renderToday(){
   else if (!due.length) L.append(h('div', { class:'empty' }, h('strong', null, 'הכל בוצע להיום'), 'משימות חוזרות יופיעו שוב ביום שלהן.'));
   due.forEach(t => L.append(taskCard(t, canDoTask(t))));
   const td = today();
-  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td && (S.me === 'all' || seeAll() || l.memberId === S.me)).sort((a,b) => b.at - a.at);
+  const done = S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && !rejected(l) && l.day === td).sort((a,b) => b.at - a.at);
   $('doneSec').hidden = !done.length;
-  $('doneCount').textContent = done.length ? `${done.filter(counted).reduce((s,l) => s + (Number(l.points)||0), 0)} נקודות` : '';
+  $('doneCount').textContent = done.length ? `${done.length} משימות` : '';
   const D = $('doneList'); D.replaceChildren();
   done.forEach(l => D.append(h('div', { class:'done' + (counted(l) ? '' : ' waiting') },
     h('span', { class:'dot', style:`background:${mColor(l.memberId)}` }),
-    h('span', { class:'t' }, `${l.title} · ${mName(l.memberId)}` + (l.minutes ? ` · ${l.minutes} דק׳` : '') + (l.count ? ` · ${l.count} יח׳` : '')),
+    h('span', { class:'t' }, h('strong', { class:'done-who' }, mName(l.memberId)), ` · ${l.title}` + (l.minutes ? ` · ${l.minutes} דק׳` : '') + (l.count ? ` · ${l.count} יח׳` : '') + (l.by ? ` (סומן ע״י ${mName(l.by)})` : '')),
     counted(l) ? h('span', { class:'num gold' }, `+${l.points}`) : h('span', { class:'wait-tag' }, 'מחכה לאישור'),
     waiting(l) ? (photoThumb(l) || ((S.isAdmin || l.memberId === S.boundId) ? h('button', { type:'button', class:'btn ghost small', 'aria-label':'צירוף תמונה', onclick:() => attachPhoto(l) }, '📷') : null)) : null,
-    (S.isAdmin || l.memberId === S.boundId) ? h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול') : null)));
+    (S.isAdmin || l.memberId === S.boundId) ? h('button', { type:'button', class:'btn ghost small', onclick:() => removeLog(l) }, 'ביטול')
+      : isParentNow() ? armedBtn('nd' + l.id, 'לא בוצע', () => removeLog(l)) : null)));
 }
 
 
@@ -719,8 +725,8 @@ const ICONS = [[/זבל|פח/, '🗑️'], [/כלים|מדיח/, '🍽️'], [/�
 const taskIcon = t => (ICONS.find(([re]) => re.test(t.title || '')) || [null, '📋'])[1];
 // One task as a card. canAct: show the finish/start control (tasks due today).
 function taskCard(t, canAct){
-  const turn = whoseTurn(t); const who = turn === 'all' ? (S.me !== 'all' ? S.me : null) : turn;
-  const timed = isTimed(t);
+  const turn = whoseTurn(t); const timed = isTimed(t);
+  const who = turn === 'all' ? (S.me !== 'all' && !(isParentNow() && !timed) ? S.me : null) : turn;
   const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
   const whoRunning = who && running.some(tm => tm.memberId === who);
   const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
@@ -742,6 +748,7 @@ function taskCard(t, canAct){
     h('div', { class:'body' }, h('span', { class:'title' }, t.title), h('div', { class:'meta' }, meta),
       h('span', { class:'task-sub' }, sub.join(' · '))),
     canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
+    canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null,
     chatButton(t),
     control);
   running.forEach(tm => {
@@ -768,7 +775,7 @@ function taskCard(t, canAct){
       h('button', { type:'button', class:'btn ghost small', onclick:() => { S.qtyAsk = null; render(); } }, 'ביטול')));
   }
   if (canAct && S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
-    S.members.filter(m => !running.some(tm => tm.memberId === m.id)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
+    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || !timed || m.id === S.boundId)).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
       h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
   return card;
 }
@@ -1228,6 +1235,20 @@ function renderComplaints(){
 }
 
 
+/* ---------- duplicate a task (a copy you can then edit) ---------- */
+async function duplicateTask(t){
+  const keys = ['assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation'];
+  const data = { title: (t.title + ' (עותק)').slice(0, 80) };
+  for (const k of keys) if (t[k] !== undefined && t[k] !== null) data[k] = t[k];
+  data.timed = !!t.timed; data.type = t.type === 'once' ? 'once' : 'repeat'; data.days = Array.isArray(t.days) ? t.days : []; data.assignee = t.assignee || 'all';
+  if (data.assignee !== 'rotate') delete data.rotation;
+  if (S.isAdmin){ if (t.boss) data.boss = true; }
+  else { if (!S.boundId){ toast('קודם נכנסים עם הקוד שלך'); return; } data.reviewed = false; data.suggestedBy = S.boundId; }
+  data.createdAt = Date.now();
+  try{ const ref = await addDoc(collection(db,'tasks'), data); toast('המשימה שוכפלה. עכשיו אפשר לערוך את העותק.');
+    const copy = { id: ref.id, ...data }; openTaskEdit(copy); }catch(e){ fail(e); }
+}
+
 /* ---------- notes to the developer (only the admin reads them) ---------- */
 const DN_KINDS = [['bug','🐞','באג'],['idea','💡','רעיון'],['ux','😕','לא נוח'],['other','💬','אחר']];
 let dnKind = 'idea';
@@ -1253,18 +1274,19 @@ function renderDevNotes(){
   sheet.hidden = false; document.body.classList.add('locked');
   $('dnInbox').hidden = !S.isAdmin;
   if (!S.isAdmin) return;
-  const list = S.devNotes.slice().sort((a,b) => (a.status === 'new' ? 0 : 1) - (b.status === 'new' ? 0 : 1) || b.at - a.at);
+  const rank = { new:0, doing:1, done:2 }; const list = S.devNotes.slice().sort((a,b) => (rank[a.status] ?? 0) - (rank[b.status] ?? 0) || b.at - a.at);
   $('dnCount').textContent = list.length ? String(list.length) : '';
   const L = $('dnList'); L.replaceChildren();
   if (!list.length) L.append(h('div', { class:'empty' }, h('strong', null, 'אין הערות'), 'כשמישהו ישלח הערה, היא תופיע כאן ותקבל התראה.'));
   list.forEach(n => { const k = DN_KINDS.find(x => x[0] === n.kind) || DN_KINDS[3]; const d = new Date(n.at);
-    L.append(h('div', { class:'cp' + (n.status === 'new' ? '' : ' cp-done') },
+    L.append(h('div', { class:'cp' + (n.status === 'done' ? ' cp-done' : n.status === 'doing' ? ' cp-doing' : '') },
       h('div', { class:'cp-head' }, h('span', { class:'cp-ava', style:`background:${mColor(n.by)}` }, avatarOf(n.by)),
         h('div', { class:'cp-who' }, h('strong', null, mName(n.by)), h('small', null, `${k[1]} ${k[2]} · ${d.getDate()}.${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)),
-        h('span', { class:'cp-status' }, n.status === 'new' ? 'חדש' : '✓ טופל')),
+        h('span', { class:'cp-status' }, n.status === 'new' ? 'חדש' : n.status === 'doing' ? '🔧 בטיפול' : '✓ טופל')),
       h('p', { class:'cp-text' }, n.text),
       h('div', { class:'cp-actions' },
-        h('button', { type:'button', class:'btn small' + (n.status === 'new' ? '' : ' ghost'), onclick: async () => { try{ await updateDoc(doc(db,'devNotes',n.id), { status: n.status === 'new' ? 'done' : 'new' }); }catch(e){ fail(e); } } }, n.status === 'new' ? '✓ טופל' : 'החזרה לחדש'),
+        h('div', { class:'cp-pts-row' }, [['new','חדש'],['doing','🔧 בטיפול'],['done','✓ טופל']].filter(([v]) => v !== n.status).map(([v, label]) =>
+          h('button', { type:'button', class:'btn small' + (v === 'new' ? ' ghost' : ''), onclick: async () => { try{ await updateDoc(doc(db,'devNotes',n.id), { status:v, statusAt:Date.now() }); }catch(e){ fail(e); } } }, label))),
         armedBtn('dn' + n.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'devNotes',n.id)); }catch(e){ fail(e); } })))); });
 }
 

@@ -464,3 +464,5 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 #dnText{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);resize:vertical;letter-spacing:normal}
 #dnKinds{display:flex;flex-wrap:wrap;gap:6px}
 .seg.scope{align-self:flex-start;margin-bottom:8px}
+.cp.cp-doing .cp-status{background:#E8F1FF;color:#1D5FB8}
+.done-who{font-weight:700}

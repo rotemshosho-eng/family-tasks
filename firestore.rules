@@ -45,13 +45,24 @@ service cloud.firestore {
             && d.qtyUnit is string && d.qtyUnit.size() > 0 && d.qtyUnit.size() <= 20);
     }
 
+    function parentFor(d) {
+      return d.by is string && d.by != d.memberId && boundTo(d.by)
+        && get(/databases/$(database)/documents/members/$(d.by)).data.get('role', '') == 'parent';
+    }
+    // this phone is signed in (with a code) as a parent
+    function parentDevice() {
+      let bPath = /databases/$(database)/documents/bindings/$(request.auth.uid);
+      return signedIn() && exists(bPath) && boundTo(get(bPath).data.memberId)
+        && get(/databases/$(database)/documents/members/$(get(bPath).data.memberId)).data.get('role', '') == 'parent';
+    }
     function approvalOk(d) {
-      return (taskDoc(d.taskId).data.get('check', false) == true && d.get('approved', true) == false)
+      return ('by' in d && !('approved' in d))
+        || (taskDoc(d.taskId).data.get('check', false) == true && d.get('approved', true) == false)
         || (taskDoc(d.taskId).data.get('check', false) != true && !('approved' in d));
     }
 
     function validFixed(d) {
-      return d.keys().hasOnly(['kind','taskId','title','memberId','points','count','approved','day','at'])
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','count','approved','by','day','at'])
         && approvalOk(d)
         && d.kind == 'task'
         && exists(/databases/$(database)/documents/tasks/$(d.taskId))
@@ -358,7 +369,8 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if isAdmin()
         || (request.resource.data.kind == 'redeem' && validRedeem(request.resource.data) && boundTo(request.resource.data.memberId))
-        || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && boundTo(request.resource.data.memberId))
+        || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && !('by' in request.resource.data) && boundTo(request.resource.data.memberId))
+        || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && parentFor(request.resource.data))
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'bonus'
             && request.resource.data.keys().hasOnly(['kind','title','memberId','points','complaintId','by','day','at'])
@@ -375,7 +387,7 @@ service cloud.firestore {
       allow delete: if isAdmin() || (
         resource.data.kind in ['task', 'timed']
         && request.time.toMillis() - resource.data.at < 43200000
-        && boundTo(resource.data.memberId)
+        && (boundTo(resource.data.memberId) || parentDevice())
       );
       // אישור או דחייה: המנהל, או הורה (לא על משימה של עצמו) שמשנה רק את שדה האישור.
       allow update: if isAdmin() || (
