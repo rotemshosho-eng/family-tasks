@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { plain: store.get('ft-plain') === '1', rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -36,6 +36,7 @@ const today = () => dstr(new Date());
 const dow = () => new Date().getDay();
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return dstr(d); };
 const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
+S.plain = store.get('ft-plain') === '1';
 S.me = store.get('ft-me') || 'all';
 S.seen = (() => { try{ return JSON.parse(store.get('ft-seen') || '{}') || {}; }catch(e){ return {}; } })();
 
