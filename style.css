@@ -486,3 +486,9 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .fabmenu .btn{box-shadow:0 6px 18px rgb(23 43 77 / .25)}
 #view-today{padding-bottom:70px}
 @media (prefers-color-scheme: dark){.ptspill{background:#3A3018;color:#FFC870}}
+.podium{display:flex;gap:8px;align-items:flex-end}
+.pod{flex:1;min-width:0;border:0;background:var(--sunk);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font:inherit;color:inherit}
+.pod.first{padding-top:16px;padding-bottom:14px;background:linear-gradient(180deg,#FFF6E5,#FFE7BF)}
+.pod.me{box-shadow:0 0 0 2px #39B980 inset}
+.pod-md{font-size:1.4rem}.pod b{font-size:.92rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pod small{color:var(--muted);font-weight:600}
+@media (prefers-color-scheme: dark){.pod.first{background:linear-gradient(180deg,#3A3018,#2E2610)}}

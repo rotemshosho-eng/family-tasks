@@ -719,6 +719,12 @@ function renderProgress(){
   const rows = S.members.map(m => ({ m, pts: S.logs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= ws).reduce((s, l) => s + (Number(l.points) || 0), 0) }))
     .sort((a, b) => b.pts - a.pts || (a.m.name || '').localeCompare(b.m.name || '', 'he'));
   const top = rows.length ? rows[0].pts : 0;
+  // only the podium: places 1-3 (gold in the middle)
+  { const P = $('podium'); P.replaceChildren(); const three = rows.slice(0, 3); const order = three.length === 3 ? [three[1], three[0], three[2]] : three;
+    order.forEach(r => { const i = rows.indexOf(r); const medal = r.pts > 0 ? ['🥇','🥈','🥉'][i] : '·'; const me = r.m.id === S.boundId || r.m.id === S.me;
+      P.append(h('button', { type:'button', class:'pod' + (i === 0 ? ' first' : '') + (me ? ' me' : ''), onclick:() => openProfile(r.m.id), 'aria-label':`מקום ${i + 1}: ${r.m.name}, ${r.pts} נקודות` },
+        h('span', { class:'pod-md' }, medal), h('span', { class:'ava sm', style:`background:${r.m.color}` }, avatarOf(r.m.id)),
+        h('b', null, r.m.name + (isAdminMember(r.m.id) ? ' 👑' : '')), h('small', null, String(r.pts)))); }); }
   let place = 0, prev = null;
   rows.forEach((r, i) => {
     if (r.pts !== prev){ place = i + 1; prev = r.pts; }   // ties share a place
@@ -1280,7 +1286,7 @@ window.addEventListener('popstate', () => { if (closeTop()) render(); syncHistor
 /* ---------- duplicate a task (a copy you can then edit) ---------- */
 async function duplicateTask(t){
   const keys = ['assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','untilTime'];
-  const data = { title: (t.title + ' (עותק)').slice(0, 80) };
+  const data = { title: t.title };
   for (const k of keys) if (t[k] !== undefined && t[k] !== null) data[k] = t[k];
   data.timed = !!t.timed; data.type = t.type === 'once' ? 'once' : 'repeat'; data.days = Array.isArray(t.days) ? t.days : []; data.assignee = t.assignee || 'all';
   if (data.assignee !== 'rotate') delete data.rotation;
