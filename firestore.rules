@@ -375,13 +375,15 @@ service cloud.firestore {
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && !('by' in request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && parentFor(request.resource.data))
         || (request.resource.data.kind == 'bonus'
-            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','by','day','at'])
+            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','by','approved','day','at'])
+            && request.resource.data.approved == false
             && get(/databases/$(database)/documents/settings/perms).data.get('parentPoints', false) == true
             && request.resource.data.points is int && request.resource.data.points != 0
             && request.resource.data.points >= -100 && request.resource.data.points <= 100
             && request.resource.data.title is string && request.resource.data.title.size() <= 80
             && memberExists(request.resource.data.memberId)
-            && parentFor(request.resource.data)
+            && request.resource.data.by is string && boundTo(request.resource.data.by)
+            && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent'
             && freshTime(request.resource.data))
         || (request.resource.data.kind == 'bonus'
             && request.resource.data.keys().hasOnly(['kind','title','memberId','points','complaintId','by','day','at'])
@@ -403,6 +405,7 @@ service cloud.firestore {
       // אישור או דחייה: המנהל, או הורה (לא על משימה של עצמו) שמשנה רק את שדה האישור.
       allow update: if isAdmin() || (
         resource.data.get('approved', true) == false
+        && resource.data.kind != 'bonus'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved','approvedBy'])
         && request.resource.data.approved in [true, 'rejected']
         && request.resource.data.approvedBy is string

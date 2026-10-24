@@ -116,7 +116,10 @@ const admins = members.filter(m => m.admin === true).map(m => m.id);
 {
   const fresh = allLogs.filter(l => typeof l.at === 'number' && l.at > since);
   const approvers = members.filter(m => m.admin === true || m.role === 'admin' || m.role === 'parent').map(m => m.id);
-  for (const l of fresh.filter(l => l.approved === false)) outbox.push({ to: approvers.filter(id => id !== l.memberId),
+  const adminIds = members.filter(m => m.admin === true || m.role === 'admin').map(m => m.id);
+  for (const l of fresh.filter(l => l.approved === false)) outbox.push(l.kind === 'bonus'
+    ? { to: adminIds.filter(id => id !== l.by), title: '➕➖ בקשה לשינוי נקודות', body: `${name(l.by)} → ${name(l.memberId)}: ${l.points > 0 ? '+' : ''}${l.points} · ${l.title}`, tag: `review-${l.memberId}-${l.at}` }
+    : { to: approvers.filter(id => id !== l.memberId),
     title: l.kind === 'redeem' ? '🤝 בקשת הלוואה' : 'משימה מחכה לאישור', body: `${name(l.memberId)}: ${l.title} · ${l.points} נקודות`, tag: `review-${l.memberId}-${l.at}` });
   const spent = fresh.filter(l => l.kind === 'redeem' && l.approved !== false);
   for (const l of spent) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });

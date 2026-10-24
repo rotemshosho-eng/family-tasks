@@ -65,7 +65,8 @@ const counted = l => l.approved === undefined || l.approved === true;
 const waiting = l => l.approved === false;
 const rejected = l => l.approved === 'rejected';
 // Approvers: the admin, or a parent signed in on this device (not for their own tasks).
-const canApprove = l => S.isAdmin || (!!S.boundId && isParentMember(S.boundId) && l.memberId !== S.boundId);
+// points that a parent gave (kind 'bonus' waiting) are approved only by the admin
+const canApprove = l => S.isAdmin || (l.kind !== 'bonus' && !!S.boundId && isParentMember(S.boundId) && l.memberId !== S.boundId);
 const doneCount = t => S.logs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed') && !rejected(l)).length;
 // Rotation: the turn moves to the next person each time the task is done.
 function whoseTurn(t){
@@ -905,9 +906,9 @@ function renderReview(){
   wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-'); const loan = l.kind === 'redeem';
     R.append(h('div', { class:'arow arow-wrap' },
       photoThumb(l),
-      h('div', { class:'t' }, h('strong', null, loan ? `🤝 הלוואה: ${l.title} · ${mName(l.memberId)}` : `${l.title} · ${mName(l.memberId)}`),
+      h('div', { class:'t' }, h('strong', null, loan ? `🤝 הלוואה: ${l.title} · ${mName(l.memberId)}` : l.kind === 'bonus' ? `${l.points > 0 ? '➕' : '➖'} ${mName(l.by)} ${l.by === l.memberId ? 'לעצמו/ה' : `ל${mName(l.memberId)}`}: ${l.title}` : `${l.title} · ${mName(l.memberId)}`),
         h('small', null, loan ? `יתרה עכשיו: ${walletOf(l.memberId).balance} · אחרי: ${walletOf(l.memberId).balance - l.points}` : `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
-      h('span', { class:'num ' + (loan ? 'neg' : 'gold') }, loan ? `-${l.points}` : `+${l.points}`),
+      h('span', { class:'num ' + (loan || l.points < 0 ? 'neg' : 'gold') }, loan ? `-${l.points}` : `${l.points > 0 ? '+' : ''}${l.points}`),
       h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה אושרה' : `אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
       armedBtn('rv' + l.id, loan ? 'לא מאשר' : 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה לא אושרה' : 'סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
 }
@@ -1528,7 +1529,7 @@ function renderParentPoints(){
   const on = isParentNow() && parentPointsOn();
   $('ppPanel').hidden = !on; if (!on) return;
   const sel = $('pp-member'); const keep = sel.value;
-  sel.replaceChildren(...S.members.filter(m => m.id !== S.boundId).map(m => h('option', { value:m.id }, m.name)));
+  sel.replaceChildren(...S.members.map(m => h('option', { value:m.id }, m.id === S.boundId ? `${m.name} (אני)` : m.name)));
   if (keep) sel.value = keep;
   if (S.isAdmin !== undefined && $('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn();
 }
@@ -1538,8 +1539,8 @@ async function saveParentPoints(){
   if (!memberId){ toast('בחרו למי'); return; }
   if (!Number.isFinite(points) || points === 0 || Math.abs(points) > 100){ toast('נקודות: בין -100 ל-100, לא 0'); return; }
   const btn = $('pp-save'); btn.disabled = true;
-  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, day:today(), at:Date.now() });
-    toast(`${mName(memberId)}: ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
+  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, approved:false, day:today(), at:Date.now() });
+    toast(`נשלח לאישור המנהל: ${mName(memberId)} ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function saveBonus(){
   const memberId = $('bf-member').value; const points = Math.round(Number($('bf-points').value));
