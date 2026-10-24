@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -248,6 +248,7 @@ function render(){
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
   if (typing){ const ci = $('chat-input'); if (ci){ ci.focus({ preventScroll:true }); const n = ci.value.length; try{ ci.setSelectionRange(n, n); }catch(e){} } }
+  syncCollapsibles();
   syncHistory();
 }
 function renderViewAs(){
@@ -985,7 +986,7 @@ function renderExchanges(){
   $('exEditor').hidden = !canEditRewards();
 }
 const byField = () => S.isAdmin ? {} : { by: S.boundId };
-function editExchange(r){ S.editEx = r.id; $('ex-emoji').value = r.emoji || '🎁'; $('ex-title').value = r.title; $('ex-cost').value = r.cost; $('exHead').textContent = 'עריכת החלפה'; $('ex-save').textContent = 'שמירה'; $('ex-cancel').hidden = false; $('ex-title').focus(); }
+function editExchange(r){ S.openPanels.add('exEditor'); syncCollapsibles(); S.editEx = r.id; $('ex-emoji').value = r.emoji || '🎁'; $('ex-title').value = r.title; $('ex-cost').value = r.cost; $('exHead').textContent = 'עריכת החלפה'; $('ex-save').textContent = 'שמירה'; $('ex-cancel').hidden = false; $('ex-title').focus(); }
 function resetExchange(){ S.editEx = null; $('ex-title').value = ''; $('ex-cost').value = 10; $('exHead').textContent = 'הוספת החלפה'; $('ex-save').textContent = 'הוספה'; $('ex-cancel').hidden = true; }
 async function saveExchange(){
   const title = $('ex-title').value.trim(); const cost = Math.round(Number($('ex-cost').value)); const emoji = $('ex-emoji').value || '🎁';
@@ -1290,6 +1291,8 @@ function renderComplaints(){
 function closeTop(){
   const lb = document.querySelector('.lightbox'); if (lb){ lb.remove(); return true; }
   if (S.fabMenu){ S.fabMenu = false; return true; }
+  if (S.openPanels.size){ S.openPanels.delete([...S.openPanels].pop()); return true; }
+  if (S.ppOpen){ S.ppOpen = false; return true; }
   if (S.rankOpen){ S.rankOpen = false; return true; }
   if (S.qtyAsk){ S.qtyAsk = null; return true; }
   if (S.openPick){ S.openPick = null; return true; }
@@ -1301,7 +1304,7 @@ function closeTop(){
   if (S.tab !== 'today'){ S.tab = 'today'; window.scrollTo(0, 0); return true; }
   return false;
 }
-const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.rankOpen || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
+const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.openPanels.size || S.ppOpen || S.rankOpen || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
 // Keep exactly one extra history entry while anything can be closed; at home with nothing open, "back" leaves the app as usual.
 function syncHistory(){
   try{ const trapped = history.state && history.state.ftBack;
@@ -1310,6 +1313,26 @@ function syncHistory(){
   }catch(e){}
 }
 window.addEventListener('popstate', () => { if (closeTop()) render(); syncHistory(); });
+
+/* ---------- forms that open from a button (like "+ הוספת משימה"), outside the admin tab ---------- */
+const COLLAPSIBLES = [['chEditor','+ אתגר משפחתי'], ['goalEditor','+ יעד חודשי'], ['exEditor','+ הוספת החלפה'], ['rw-use','+ השתמשתי בנקודות'], ['cpForm','+ תלונה חדשה']];
+function setupCollapsibles(){
+  for (const [id, label] of COLLAPSIBLES){
+    const panel = $(id); if (!panel) continue;
+    panel.classList.add('collapsible');
+    const wrap = h('div', { class:'cl-wrap', id:'clw-' + id }, h('button', { type:'button', class:'btn ghost', onclick:() => { S.openPanels.add(id); syncCollapsibles(); panel.querySelector('input, textarea, select')?.focus(); } }, label));
+    panel.before(wrap);
+    panel.prepend(h('button', { type:'button', class:'cl-close', 'aria-label':'סגירה', onclick:() => { S.openPanels.delete(id); syncCollapsibles(); syncHistory(); } }, '✕'));
+  }
+}
+function syncCollapsibles(){
+  for (const [id] of COLLAPSIBLES){
+    const panel = $(id), wrap = $('clw-' + id); if (!panel || !wrap) continue;
+    const open = S.openPanels.has(id);
+    panel.classList.toggle('open', open);
+    wrap.hidden = panel.hidden || open;
+  }
+}
 
 /* ---------- duplicate a task (a copy you can then edit) ---------- */
 async function duplicateTask(t){
@@ -1618,6 +1641,7 @@ function buildStatic(){
   $('bf-save').addEventListener('click', saveBonus);
   $('pp-save').addEventListener('click', saveParentPoints);
   $('pp-toggle').addEventListener('click', () => { S.ppOpen = true; render(); $('pp-points').focus(); });
+  $('ppPanel').prepend(h('button', { type:'button', class:'cl-close', 'aria-label':'סגירה', onclick:() => { S.ppOpen = false; render(); } }, '✕'));
   $('perm-parentPts').addEventListener('change', async e => { try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), parentPoints: e.target.checked }); toast(e.target.checked ? 'הורים יכולים עכשיו לשנות נקודות' : 'רק אתה יכול לשנות נקודות'); }catch(err){ fail(err); e.target.checked = !e.target.checked; } });
   $('mo-save').addEventListener('click', saveMoney);
   $('rankHint').addEventListener('click', () => { S.rankOpen = !S.rankOpen; render(); });
@@ -1640,6 +1664,7 @@ function buildStatic(){
   $('dnSend').addEventListener('click', sendDevNote); initDevNotes();
   document.querySelectorAll('input[name=cpf]').forEach(r => r.addEventListener('change', render));
   initComplaints();
+  setupCollapsibles();
   $('ag-go').addEventListener('click', adminCodeGo);
   $('ag-code').addEventListener('keydown', e => { if (e.key === 'Enter') adminCodeGo(); });
   $('ag-cancel').addEventListener('click', closeAdminGate);
