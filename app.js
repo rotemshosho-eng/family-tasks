@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -81,10 +81,12 @@ function assigneeLabel(t){
 }
 // Parents can switch between their own tasks and the whole family's (the choice is remembered on the phone).
 const isParentNow = () => !S.isAdmin && !!S.boundId && isParentMember(S.boundId);
-const seeAll = () => isParentNow() && store.get('ft-seeall') !== '0';
+const seeAll = () => isParentNow() && !S.actFor && store.get('ft-seeall') !== '0';
+// the parent picked a child at the top ("מסמן עבור"): the screen shows that child's tasks and ✓ marks for them
+const actingChild = () => isParentNow() && S.actFor && member(S.actFor) && roleOf(S.actFor) === 'child' ? S.actFor : null;
 const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all' || w === 'each'; };
 // May this phone press "done" on the task? Only for itself (or anyone, for the admin).
-const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || (isParentNow() && !isTimed(t)); };
+const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; if (actingChild() && isTimed(t)) return false; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || (isParentNow() && !isTimed(t)); };
 // A parent marking a task for a child (e.g. one without a phone): the log carries who marked it, and counts at once.
 const actingFor = memberId => (!S.isAdmin && S.boundId && memberId !== S.boundId) ? { by: S.boundId } : null;
 function renderScope(){
@@ -216,13 +218,15 @@ function render(){
   const ready = S.bindLoaded && S.adminChecked;
   const needLogin = !!S.user && !S.isAdmin && ready && !bound;
   if (bound) S.me = bound;
+  if (S.actFor && !actingChild()) S.actFor = null;
+  if (actingChild()) S.me = S.actFor;
   else if (!S.isAdmin) S.me = 'all';
   if (S.me !== 'all' && !member(S.me) && S.members.length) S.me = 'all';
   $('login').hidden = !needLogin;
   if (needLogin){ hideViews(); $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
   if (!S.isAdmin && !ready && S.user){ hideViews(); $('tabs').hidden = true; return; }
   renderHero(bound);
-  $('who').hidden = !S.isAdmin || plain;
+  $('who').hidden = !((S.isAdmin && !plain) || isParentNow());
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
@@ -448,7 +452,7 @@ async function saveSuggestion(){
     await addDoc(collection(db,'tasks'), { title, assignee, type, days, timed, check: $('sg-check').checked, ...($('sg-until').value ? { untilTime: $('sg-until').value } : {}),
       ...(assignee === 'rotate' ? { rotation } : {}),
       ...(timed ? { ratePerMin, maxMinutes } : q ? q : { points }), reviewed:false,
-      suggestedBy: S.me !== 'all' && member(S.me) ? S.me : null, createdAt: Date.now() });
+      suggestedBy: S.boundId || (S.me !== 'all' && member(S.me) ? S.me : null), createdAt: Date.now() });
     toast('המשימה נוספה');
     $('sg-title').value = ''; $('sg-check').checked = false; $('sg-rot').querySelectorAll('input').forEach(i => i.checked = false); setSgMode('fixed'); fillQty('sg'); toggleSuggest(false);
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
@@ -615,11 +619,21 @@ async function sendMessage(t){
   if (!(S.me !== 'all' && member(S.me))){ toast('בחרו למעלה מי משתמש עכשיו'); return; }
   if (!text) return;
   S.chatDraft = ''; const inp = $('chat-input'); if (inp) inp.value = '';
-  try{ await addDoc(collection(db,'messages'), { taskId:t.id, memberId:S.me, text:text.slice(0,1000), at: serverTimestamp() }); }
+  try{ await addDoc(collection(db,'messages'), { taskId:t.id, memberId: isParentNow() ? S.boundId : S.me, text:text.slice(0,1000), at: serverTimestamp() }); }
   catch(e){ S.chatDraft = text; fail(e); render(); }
 }
 function renderWho(){
-  const w = $('who'); w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
+  const w = $('who');
+  if (isParentNow()){
+    // a parent marks for a child (e.g. one without a phone); only children are listed
+    w.replaceChildren(h('span', { class:'lbl' }, 'מסמן עבור:'));
+    const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String((S.actFor || null) === id),
+      onclick:() => { S.actFor = id; S.openPick = null; S.qtyAsk = null; render(); } }, color ? h('span', { class:'dot', style:`background:${color}` }) : null, label);
+    w.append(mk(null, `אני (${mName(S.boundId)})`));
+    S.members.filter(m => roleOf(m.id) === 'child').forEach(m => w.append(mk(m.id, m.name, m.color)));
+    return;
+  }
+  w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
   const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String(S.me === id),
     onclick:() => { S.me = id; store.set('ft-me', id); S.openPick = null; render(); } },
     color ? h('span', { class:'dot', style:`background:${color}` }) : null, label);
@@ -746,7 +760,7 @@ const taskIcon = t => (ICONS.find(([re]) => re.test(t.title || '')) || [null, '�
 // One task as a card. canAct: show the finish/start control (tasks due today).
 function taskCard(t, canAct){
   const turn = whoseTurn(t); const timed = isTimed(t);
-  const who = (turn === 'all' || turn === 'each') ? (S.me !== 'all' && !(isParentNow() && !timed) ? S.me : null) : turn;
+  const who = (turn === 'all' || turn === 'each') ? (S.me !== 'all' && !(isParentNow() && !timed && !actingChild()) ? S.me : null) : turn;
   const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
   const whoRunning = who && running.some(tm => tm.memberId === who);
   const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
