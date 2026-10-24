@@ -87,7 +87,7 @@ const plainAdmin = () => S.isAdmin && S.plain && !S.viewAs;
 const actingChild = () => S.actFor && member(S.actFor) && ((isParentNow() && roleOf(S.actFor) === 'child') || plainAdmin()) ? S.actFor : null;
 const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all' || w === 'each'; };
 // May this phone press "done" on the task? Only for itself (or anyone, for the admin).
-const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; if (actingChild() && isTimed(t)) return false; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || (isParentNow() && !isTimed(t)); };
+const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || isParentNow(); };
 // A parent marking a task for a child (e.g. one without a phone): the log carries who marked it, and counts at once.
 const actingFor = memberId => (!S.isAdmin && S.boundId && memberId !== S.boundId) ? { by: S.boundId } : null;
 function renderScope(){
@@ -167,7 +167,7 @@ async function startTimer(t, memberId){
   const id = timerId(t.id, memberId);
   if (!db || S.busy.has(id)) return; S.busy.add(id); S.openPick = null; render();
   try{
-    await setDoc(doc(db,'timers',id), { taskId:t.id, memberId, startedAt: serverTimestamp() });
+    await setDoc(doc(db,'timers',id), { taskId:t.id, memberId, startedAt: serverTimestamp(), ...(actingFor(memberId) || {}) });
     toast(`הטיימר של ${mName(memberId)} התחיל`);
   }catch(e){ fail(e); } finally{ S.busy.delete(id); render(); }
 }
@@ -179,7 +179,7 @@ async function finishTimer(t, tm){
   try{
     const b = writeBatch(db);
     b.set(doc(collection(db,'logs')), { kind:'timed', taskId:t.id, title:t.title, memberId:tm.memberId,
-      minutes:r.minutes, points:r.points, timerId:tm.id, ...(t.check ? { approved:false } : {}), day:today(), at:Date.now() });
+      minutes:r.minutes, points:r.points, timerId:tm.id, ...(t.check && !actingFor(tm.memberId) ? { approved:false } : {}), ...(actingFor(tm.memberId) || {}), day:today(), at:Date.now() });
     b.delete(doc(db,'timers',tm.id));
     await b.commit();
     toast(`${mName(tm.memberId)}: ${r.minutes} דקות, ${r.points} נקודות`); confetti(t.check ? 40 : 90);
@@ -761,8 +761,8 @@ const taskIcon = t => (ICONS.find(([re]) => re.test(t.title || '')) || [null, '�
 // One task as a card. canAct: show the finish/start control (tasks due today).
 function taskCard(t, canAct){
   const turn = whoseTurn(t); const timed = isTimed(t);
-  const who = (turn === 'all' || turn === 'each') ? (S.me !== 'all' && !(isParentNow() && !timed && !actingChild()) ? S.me : null) : turn;
-  const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || tm.memberId === S.me)) : [];
+  const who = (turn === 'all' || turn === 'each') ? (S.me !== 'all' && !(isParentNow() && !actingChild()) ? S.me : null) : turn;
+  const running = timed ? S.timers.filter(tm => tm.taskId === t.id && member(tm.memberId) && (S.me === 'all' || seeAll() || tm.memberId === S.me)) : [];
   const whoRunning = who && running.some(tm => tm.memberId === who);
   const busy = S.busy.has(t.id) || (who && S.busy.has(timerId(t.id, who)));
   const act = timed ? (m => startTimer(t, m)) : t.qtyPer ? (m => askQty(t, m)) : (m => complete(t, m));
@@ -816,7 +816,7 @@ function taskCard(t, canAct){
       h('button', { type:'button', class:'btn ghost small', onclick:() => { S.qtyAsk = null; render(); } }, 'ביטול')));
   }
   if (canAct && S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
-    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || !timed || m.id === S.boundId) && (t.assignee !== 'each' || isDueFor(t, m.id))).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
+    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || m.id === S.boundId || roleOf(m.id) === 'child') && (t.assignee !== 'each' || isDueFor(t, m.id))).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
       h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
   return card;
 }

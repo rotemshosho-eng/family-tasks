@@ -82,7 +82,7 @@ service cloud.firestore {
       let timerPath = /databases/$(database)/documents/timers/$(d.timerId);
       let timer = get(timerPath).data;
       let task = taskDoc(d.taskId).data;
-      return d.keys().hasOnly(['kind','taskId','title','memberId','points','minutes','timerId','approved','day','at'])
+      return d.keys().hasOnly(['kind','taskId','title','memberId','points','minutes','timerId','approved','by','day','at'])
         && d.kind == 'timed'
         && approvalOk(d)
         && d.timerId == d.taskId + '__' + d.memberId
@@ -267,14 +267,14 @@ service cloud.firestore {
     match /timers/{id} {
       allow read: if signedIn();
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['taskId','memberId','startedAt'])
+        && request.resource.data.keys().hasOnly(['taskId','memberId','startedAt','by'])
         && id == request.resource.data.taskId + '__' + request.resource.data.memberId
         && request.resource.data.startedAt == request.time
         && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
         && taskDoc(request.resource.data.taskId).data.get('timed', false) == true
         && memberExists(request.resource.data.memberId)
-        && (isAdmin() || boundTo(request.resource.data.memberId));
-      allow delete: if isAdmin() || boundTo(resource.data.memberId);
+        && (isAdmin() || (!('by' in request.resource.data) && boundTo(request.resource.data.memberId)) || parentFor(request.resource.data));
+      allow delete: if isAdmin() || boundTo(resource.data.memberId) || parentDevice();
     }
     // החלפות נקודות: כולם רואים. המנהל והורים מוסיפים ועורכים (הסרה = archived).
     match /rewards/{id} {
@@ -372,7 +372,8 @@ service cloud.firestore {
         || (request.resource.data.kind == 'redeem' && validRedeem(request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && !('by' in request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'task' && validFixed(request.resource.data) && parentFor(request.resource.data))
-        || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && boundTo(request.resource.data.memberId))
+        || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && !('by' in request.resource.data) && boundTo(request.resource.data.memberId))
+        || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && parentFor(request.resource.data))
         || (request.resource.data.kind == 'bonus'
             && request.resource.data.keys().hasOnly(['kind','title','memberId','points','complaintId','by','day','at'])
             && request.resource.data.points is int && request.resource.data.points != 0
