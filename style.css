@@ -509,3 +509,15 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 @keyframes stampIn{0%{opacity:0;transform:rotate(-6deg) scale(2.4)}60%{opacity:1;transform:rotate(-6deg) scale(.92)}100%{transform:rotate(-6deg) scale(1)}}
 .splash-roast.stamp.long{font-size:clamp(1.15rem,5.4vw,1.6rem);max-width:17ch;transform:rotate(-4deg)}
 .splash-setup{font-size:clamp(1.15rem,5vw,1.5rem);color:#E3EAF6}
+/* ===== splash, grown-up version: clean typography, no rays / bowing emojis ===== */
+.splash{background:linear-gradient(160deg,#0D1322 0%,#141D33 55%,#1B2645 100%);gap:8px;padding-inline:28px;align-items:flex-start;text-align:start;justify-content:center}
+.splash-rays,.splash-bows{display:none!important}
+.splash-crown{font-size:34px;filter:none;animation:rise .5s both;margin-bottom:6px}
+.splash-kicker{color:#8E9BB8;font-size:.82rem;font-weight:600;letter-spacing:.08em;margin:0;animation:rise .5s .1s both}
+.splash-title{font:800 clamp(2rem,9vw,3rem)/1.05 var(--display);max-width:none;text-shadow:none;animation:rise .55s .2s both}
+.splash-setup{color:#B9C4DA;margin-top:14px;font:500 clamp(1.1rem,5vw,1.4rem)/1.4 var(--body);max-width:24ch;animation:rise .5s .35s both}
+.splash-roast.stamp,.splash-roast.stamp.long{margin-top:6px;padding:12px 16px;border:0;border-radius:14px;background:#FF4D57;color:#fff;text-shadow:none;transform:none;
+  font:800 clamp(1.25rem,6vw,1.8rem)/1.25 var(--display);max-width:22ch;box-shadow:0 10px 30px rgb(255 77 87 / .35);animation:punchIn .4s cubic-bezier(.2,1.4,.4,1) both}
+.splash-roast.stamp.long{font-size:clamp(1.1rem,5vw,1.45rem)}
+@keyframes punchIn{0%{opacity:0;transform:translateY(14px) scale(.96)}100%{opacity:1;transform:none}}
+.splash-roast.stamp{width:fit-content}
