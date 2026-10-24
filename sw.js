@@ -1,5 +1,5 @@
 // Keeps the app opening even without internet. Same-origin files only; Firebase handles its own data cache.
-const CACHE = 'family-tasks-v74';
+const CACHE = 'family-tasks-v75';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'firebase-config.js', 'manifest.json',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
