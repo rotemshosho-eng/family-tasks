@@ -214,7 +214,7 @@
     <section class="goal-card" data-goal hidden></section>
     <section class="panel" id="ppPanel" hidden>
       <h2>➕➖ שינוי נקודות</h2>
-      <p class="sub">בונוס על עזרה, או הורדה על משהו שלא בסדר. כל שינוי נכנס רק אחרי שהמנהל מאשר.</p>
+      <p class="sub">בונוס על עזרה, או הורדה על משהו שלא בסדר. הנקודות נכנסות מיד. המנהל רואה כל שינוי ויכול לשנות או לבטל אותו.</p>
       <div class="row">
         <div class="field"><label for="pp-member">למי</label><select id="pp-member"></select></div>
         <div class="field"><label for="pp-points">כמה (מינוס כדי להוריד)</label><input type="number" id="pp-points" value="5" inputmode="numeric" min="-100" max="100"></div>
@@ -324,7 +324,11 @@
       </div>
       <div class="field"><label for="bf-reason">סיבה</label><input type="text" id="bf-reason" maxlength="60" placeholder="למשל: עזרה בלי שביקשו"></div>
       <div><button type="button" class="btn" id="bf-save">עדכון נקודות</button></div>
-      <label class="check"><input type="checkbox" id="perm-parentPts"> הורים יכולים לבקש לתת או להוריד נקודות, גם לעצמם (עד 100 בכל פעם). כל בקשה מחכה לאישור שלך.</label>
+      <label class="check"><input type="checkbox" id="perm-parentPts"> הורים יכולים לתת ולהוריד נקודות, גם לעצמם (עד 100 בכל פעם). אתה רואה כל שינוי ויכול לשנות, למחוק או לסמן במעקב.</label>
+      <div id="ppAdmin" hidden>
+        <div class="section-head"><h2>שינויים של הורים</h2><span class="count" id="ppCount"></span></div>
+        <div id="ppList"></div>
+      </div>
     </section>
 
     <section class="panel">

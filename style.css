@@ -541,3 +541,6 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 /* home: the joke under the greeting, set-up and punchline styled differently */
 .hero-roast .hr-setup{color:var(--muted);font-weight:500}
 .hero-roast .hr-punch{color:#E8434D;font-weight:700}
+.pp-edit{width:5.5em;font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--sunk);text-align:center}
+.arow.flagged{background:rgb(255 77 87 / .07);border-radius:10px;padding-inline:8px}
+#ppList .pp-edit{width:5.5em!important;flex:none;padding:6px 8px}

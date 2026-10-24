@@ -375,8 +375,7 @@ service cloud.firestore {
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && !('by' in request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && parentFor(request.resource.data))
         || (request.resource.data.kind == 'bonus'
-            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','by','approved','day','at'])
-            && request.resource.data.approved == false
+            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','by','day','at'])
             && get(/databases/$(database)/documents/settings/perms).data.get('parentPoints', false) == true
             && request.resource.data.points is int && request.resource.data.points != 0
             && request.resource.data.points >= -100 && request.resource.data.points <= 100

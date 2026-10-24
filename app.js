@@ -238,7 +238,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || (S.isAdmin && !plain) || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); renderParentPointsAdmin(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -525,7 +525,7 @@ function renderProfileSheet(){
     own ? notifPanel(m.id) : null,
     h('section', { class:'panel' }, h('h2', null, 'מה נעשה לאחרונה'),
       st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
-        return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
+        return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}${l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.flag ? ' 🚩' : ''}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
           h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p)); }))
       : h('p', { class:'sub' }, 'עוד לא בוצעו משימות.'))].filter(Boolean));
 }
@@ -1427,7 +1427,7 @@ function renderAdminLists(){
   if (!hist.length) H.append(h('p', { class:'sub' }, 'כאן יופיע כל מה שבוצע וכל שינוי נקודות.'));
   hist.forEach(l => { const p = (l.kind === 'redeem' ? -1 : 1) * (Number(l.points) || 0); const [, mo, da] = (l.day || '--').split('-');
     H.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.kind === 'bonus' && l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
+      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.kind === 'bonus' && l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.flag ? ' 🚩 במעקב' : ''}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
       h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p),
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
@@ -1533,14 +1533,31 @@ function renderParentPoints(){
   if (keep) sel.value = keep;
   if (S.isAdmin !== undefined && $('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn();
 }
+// Admin: every change a parent made, with edit / delete / "under watch" tag.
+function renderParentPointsAdmin(){
+  const box = $('ppAdmin'); if (!box) return;
+  const list = S.logs.filter(l => l.kind === 'bonus' && l.by && !l.complaintId).sort((a,b) => b.at - a.at).slice(0, 40);
+  box.hidden = !S.isAdmin || !list.length; if (box.hidden) return;
+  $('ppCount').textContent = String(list.length);
+  const L = $('ppList'); L.replaceChildren();
+  list.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
+    const inp = h('input', { type:'number', class:'pp-edit', value:String(l.points), inputmode:'numeric', 'aria-label':'נקודות' });
+    L.append(h('div', { class:'arow arow-wrap' + (l.flag ? ' flagged' : '') },
+      h('div', { class:'t' }, h('strong', null, `${l.flag ? '🚩 ' : ''}${mName(l.by)} ← ${l.by === l.memberId ? 'לעצמו/ה' : mName(l.memberId)}`), h('small', null, `${+da}.${+mo} · ${l.title}`)),
+      inp,
+      h('button', { type:'button', class:'btn ghost small', onclick: async () => { const v = Math.round(Number(inp.value)); if (!Number.isFinite(v) || v === 0){ toast('מספר לא 0'); return; }
+        try{ await updateDoc(doc(db,'logs',l.id), { points:v }); toast('עודכן'); }catch(e){ fail(e); } } }, 'שמירה'),
+      h('button', { type:'button', class:'btn ghost small', 'aria-pressed':String(!!l.flag), onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { flag: !l.flag }); toast(l.flag ? 'הוסר מהמעקב' : 'סומן במעקב 🚩'); }catch(e){ fail(e); } } }, l.flag ? 'בטל מעקב' : '🚩 מעקב'),
+      armedBtn('ppd' + l.id, 'מחיקה', () => removeLog(l)))); });
+}
 async function saveParentPoints(){
   const memberId = $('pp-member').value; const points = Math.round(Number($('pp-points').value));
   const reason = $('pp-reason').value.trim() || (points < 0 ? 'הורדת נקודות' : 'בונוס');
   if (!memberId){ toast('בחרו למי'); return; }
   if (!Number.isFinite(points) || points === 0 || Math.abs(points) > 100){ toast('נקודות: בין -100 ל-100, לא 0'); return; }
   const btn = $('pp-save'); btn.disabled = true;
-  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, approved:false, day:today(), at:Date.now() });
-    toast(`נשלח לאישור המנהל: ${mName(memberId)} ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
+  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, day:today(), at:Date.now() });
+    toast(`${mName(memberId)}: ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function saveBonus(){
   const memberId = $('bf-member').value; const points = Math.round(Number($('bf-points').value));
