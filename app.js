@@ -83,7 +83,8 @@ function assigneeLabel(t){
 const isParentNow = () => !S.isAdmin && !!S.boundId && isParentMember(S.boundId);
 const seeAll = () => isParentNow() && !S.actFor && store.get('ft-seeall') !== '0';
 // the parent picked a child at the top ("מסמן עבור"): the screen shows that child's tasks and ✓ marks for them
-const actingChild = () => isParentNow() && S.actFor && member(S.actFor) && roleOf(S.actFor) === 'child' ? S.actFor : null;
+const plainAdmin = () => S.isAdmin && S.plain && !S.viewAs;
+const actingChild = () => S.actFor && member(S.actFor) && ((isParentNow() && roleOf(S.actFor) === 'child') || plainAdmin()) ? S.actFor : null;
 const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all' || w === 'each'; };
 // May this phone press "done" on the task? Only for itself (or anyone, for the admin).
 const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; if (actingChild() && isTimed(t)) return false; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || (isParentNow() && !isTimed(t)); };
@@ -226,7 +227,7 @@ function render(){
   if (needLogin){ hideViews(); $('tabs').hidden = true; S.chatOpen = null; S.profileOpen = null; renderChatSheet(); renderProfileSheet(); renderLogin(); }
   if (!S.isAdmin && !ready && S.user){ hideViews(); $('tabs').hidden = true; return; }
   renderHero(bound);
-  $('who').hidden = !((S.isAdmin && !plain) || isParentNow());
+  $('who').hidden = !(S.isAdmin || isParentNow());
   $('meBar').hidden = !bound;
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
@@ -624,13 +625,13 @@ async function sendMessage(t){
 }
 function renderWho(){
   const w = $('who');
-  if (isParentNow()){
-    // a parent marks for a child (e.g. one without a phone); only children are listed
+  if (isParentNow() || plainAdmin()){
+    // a parent marks for a child (e.g. one without a phone); only children are listed. The admin in plain mode can pick anyone.
     w.replaceChildren(h('span', { class:'lbl' }, 'מסמן עבור:'));
     const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String((S.actFor || null) === id),
       onclick:() => { S.actFor = id; S.openPick = null; S.qtyAsk = null; render(); } }, color ? h('span', { class:'dot', style:`background:${color}` }) : null, label);
     w.append(mk(null, `אני (${mName(S.boundId)})`));
-    S.members.filter(m => roleOf(m.id) === 'child').forEach(m => w.append(mk(m.id, m.name, m.color)));
+    S.members.filter(m => m.id !== S.boundId && (plainAdmin() || roleOf(m.id) === 'child')).forEach(m => w.append(mk(m.id, m.name, m.color)));
     return;
   }
   w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
