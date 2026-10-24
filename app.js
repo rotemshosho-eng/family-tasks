@@ -902,7 +902,7 @@ function renderReview(){
   $('reviewPanel').hidden = !wait.length; $('reviewCount').textContent = wait.length ? String(wait.length) : '';
   const by = S.isAdmin ? {} : { approvedBy: S.boundId };
   wait.forEach(l => { const [, mo, da] = (l.day || '--').split('-'); const loan = l.kind === 'redeem';
-    R.append(h('div', { class:'arow wrap' },
+    R.append(h('div', { class:'arow arow-wrap' },
       photoThumb(l),
       h('div', { class:'t' }, h('strong', null, loan ? `🤝 הלוואה: ${l.title} · ${mName(l.memberId)}` : `${l.title} · ${mName(l.memberId)}`),
         h('small', null, loan ? `יתרה עכשיו: ${walletOf(l.memberId).balance} · אחרי: ${walletOf(l.memberId).balance - l.points}` : `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
@@ -1388,7 +1388,7 @@ function renderAdminLists(){
   S.tasks.slice().sort((a,b) => (!!b.pinned - !!a.pinned) || (isNew(b) - isNew(a)) || (a.title||'').localeCompare(b.title||'','he')).forEach(t => {
     const doneOnce = t.type === 'once' && S.logs.some(l => l.taskId === t.id);
     const by = t.suggestedBy && member(t.suggestedBy) ? ` · נוספה ע״י ${mName(t.suggestedBy)}` : '';
-    const row = h('div', { class:'arow wrap' },
+    const row = h('div', { class:'arow arow-wrap' },
       h('div', { class:'t' }, h('strong', null, t.title),
         h('small', null, `${t.pinned ? 'נעוצה · ' : ''}${t.pending ? 'מחכה לניקוד · ' : (t.reviewed === false ? 'חדשה · ' : '')}${assigneeLabel(t)} · ${recLabel(t)}${t.check ? ' · צריך אישור' : ''}${isTimed(t) ? ` · לפי זמן, עד ${t.maxMinutes} דק׳` : ''}${by}${doneOnce ? ' · בוצעה' : ''}`)),
       t.pending ? null : h('span', { class:'pts-pill' + (isTimed(t) ? '' : ' ltr') }, pill(t)),
