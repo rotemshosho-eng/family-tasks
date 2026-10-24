@@ -910,7 +910,7 @@ function renderReview(){
         h('small', null, loan ? `יתרה עכשיו: ${walletOf(l.memberId).balance} · אחרי: ${walletOf(l.memberId).balance - l.points}` : `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
       h('span', { class:'num ' + (loan || l.points < 0 ? 'neg' : 'gold') }, loan ? `-${l.points}` : `${l.points > 0 ? '+' : ''}${l.points}`),
       h('button', { type:'button', class:'btn small', onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:true, ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה אושרה' : `אושר: ${mName(l.memberId)} קיבל/ה ${l.points} נקודות`); }catch(e){ fail(e); } } }, 'אישור'),
-      armedBtn('rv' + l.id, loan ? 'לא מאשר' : 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה לא אושרה' : 'סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
+      armedBtn('rv' + l.id, loan || l.kind === 'bonus' ? 'לא מאשר' : 'לא בוצע', async () => { try{ await updateDoc(doc(db,'logs',l.id), { approved:'rejected', ...by }); dropPhoto(l.id); toast(loan ? 'ההלוואה לא אושרה' : l.kind === 'bonus' ? 'השינוי לא אושר' : 'סומן כלא בוצע. המשימה חוזרת לרשימה.'); }catch(e){ fail(e); } }))); });
 }
 
 /* ---------- ready-made household tasks ---------- */
