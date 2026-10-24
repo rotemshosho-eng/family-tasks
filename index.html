@@ -81,6 +81,7 @@
 
   <!-- TODAY -->
   <main id="view-today" class="section stack">
+    <div class="watchbar" id="watchBar" hidden>🚩 החשבון שלך במעקב: כל פעולה מחכה לאישור המנהל.</div>
     <div class="who" id="who"></div>
     <section class="section" id="bossSec" hidden>
       <div class="section-head"><h2>🐉 משימת בוס</h2><span class="sub">הראשון שעושה מקבל פי 3</span></div>
@@ -212,6 +213,7 @@
   </div>
     <section class="goal-card challenge" data-challenge hidden></section>
     <section class="goal-card" data-goal hidden></section>
+    <div id="ppToggleWrap" hidden><button type="button" class="btn ghost" id="pp-toggle" aria-expanded="false">+ הוספת נקודות</button></div>
     <section class="panel" id="ppPanel" hidden>
       <h2>➕➖ שינוי נקודות</h2>
       <p class="sub">בונוס על עזרה, או הורדה על משהו שלא בסדר. הנקודות נכנסות מיד. המנהל רואה כל שינוי ויכול לשנות או לבטל אותו.</p>
@@ -324,7 +326,7 @@
       </div>
       <div class="field"><label for="bf-reason">סיבה</label><input type="text" id="bf-reason" maxlength="60" placeholder="למשל: עזרה בלי שביקשו"></div>
       <div><button type="button" class="btn" id="bf-save">עדכון נקודות</button></div>
-      <label class="check"><input type="checkbox" id="perm-parentPts"> הורים יכולים לתת ולהוריד נקודות, גם לעצמם (עד 100 בכל פעם). אתה רואה כל שינוי ויכול לשנות, למחוק או לסמן במעקב.</label>
+      <label class="check"><input type="checkbox" id="perm-parentPts"> הורים יכולים לתת ולהוריד נקודות, גם לעצמם (עד 100 בכל פעם). אתה רואה כל שינוי ויכול לשנות או למחוק. הורה במעקב (🚩, בעריכת בן משפחה) צריך אישור שלך על כל פעולה.</label>
       <div id="ppAdmin" hidden>
         <div class="section-head"><h2>שינויים של הורים</h2><span class="count" id="ppCount"></span></div>
         <div id="ppList"></div>
@@ -358,6 +360,10 @@
           <option value="parent">הורה: יכול גם לקבוע ולשנות את היעד המשפחתי</option>
           <option value="admin">מנהל: תג "מנהל" ותמונות מיוחדות (רק אתה)</option>
         </select></div>
+      <label class="check"><input type="checkbox" id="mf-watch"> 🚩 במעקב: כל פעולה שלו (סימון משימה, החלפת נקודות, נקודות, סימון בשם אחרים) מחכה לאישור שלך</label>
+      <div id="mf-parentOpts" hidden>
+        <div class="field"><span class="lab">יכול לסמן עבור (גם הורים ומנהלים)</span><div class="days" id="mf-markfor"></div></div>
+      </div>
       <div class="row">
         <button type="button" class="btn" id="mf-save">הוספה</button>
         <button type="button" class="btn ghost" id="mf-cancel" hidden>ביטול עריכה</button>

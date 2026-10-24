@@ -46,10 +46,17 @@ service cloud.firestore {
             && d.qtyUnit is string && d.qtyUnit.size() > 0 && d.qtyUnit.size() <= 20);
     }
 
+    // a parent acting for someone else: by default only children; the admin can set exactly who (canMarkFor)
     function parentFor(d) {
+      let p = get(/databases/$(database)/documents/members/$(d.by)).data;
       return d.by is string && d.by != d.memberId && boundTo(d.by)
-        && get(/databases/$(database)/documents/members/$(d.by)).data.get('role', '') == 'parent';
+        && p.get('role', '') == 'parent'
+        && (p.get('canMarkFor', null) == null
+            ? get(/databases/$(database)/documents/members/$(d.memberId)).data.get('role', '') == 'child'
+            : d.memberId in p.canMarkFor);
     }
+    // "under watch": every action of this member waits for the admin's approval
+    function watchedId(x) { return get(/databases/$(database)/documents/members/$(x)).data.get('watch', false) == true; }
     // this phone is signed in (with a code) as a parent
     function parentDevice() {
       let bPath = /databases/$(database)/documents/bindings/$(request.auth.uid);
@@ -57,9 +64,11 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/members/$(get(bPath).data.memberId)).data.get('role', '') == 'parent';
     }
     function approvalOk(d) {
-      return ('by' in d && !('approved' in d))
-        || (taskDoc(d.taskId).data.get('check', false) == true && d.get('approved', true) == false)
-        || (taskDoc(d.taskId).data.get('check', false) != true && !('approved' in d));
+      return watchedId(d.get('by', d.memberId))
+        ? d.get('approved', true) == false
+        : (('by' in d && !('approved' in d))
+          || (!('by' in d) && taskDoc(d.taskId).data.get('check', false) == true && d.get('approved', true) == false)
+          || (!('by' in d) && taskDoc(d.taskId).data.get('check', false) != true && !('approved' in d)));
     }
 
     function validFixed(d) {
@@ -100,8 +109,9 @@ service cloud.firestore {
     function validRedeem(d) {
       return d.keys().hasOnly(['kind','title','memberId','points','rewardId','approved','loan','day','at'])
         && d.kind == 'redeem'
-        && (!('approved' in d) || (d.approved == false && d.get('loan', false) == true))
-        && (!('loan' in d) || (d.loan == true && d.get('approved', true) == false))
+        && (watchedId(d.memberId) ? d.get('approved', true) == false
+            : ((!('approved' in d) || (d.approved == false && d.get('loan', false) == true))
+               && (!('loan' in d) || (d.loan == true && d.get('approved', true) == false))))
         && d.title is string && d.title.size() > 0 && d.title.size() <= 60
         && d.points is int && d.points >= 1 && d.points <= 100000
         && memberExists(d.memberId)
@@ -375,7 +385,8 @@ service cloud.firestore {
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && !('by' in request.resource.data) && boundTo(request.resource.data.memberId))
         || (request.resource.data.kind == 'timed' && validTimed(request.resource.data) && parentFor(request.resource.data))
         || (request.resource.data.kind == 'bonus'
-            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','by','day','at'])
+            && request.resource.data.keys().hasOnly(['kind','title','memberId','points','by','approved','day','at'])
+            && (watchedId(request.resource.data.by) ? request.resource.data.get('approved', true) == false : !('approved' in request.resource.data))
             && get(/databases/$(database)/documents/settings/perms).data.get('parentPoints', false) == true
             && request.resource.data.points is int && request.resource.data.points != 0
             && request.resource.data.points >= -100 && request.resource.data.points <= 100
@@ -405,6 +416,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         resource.data.get('approved', true) == false
         && resource.data.kind != 'bonus'
+        && !watchedId(resource.data.get('by', resource.data.memberId))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved','approvedBy'])
         && request.resource.data.approved in [true, 'rejected']
         && request.resource.data.approvedBy is string

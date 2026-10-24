@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -66,7 +66,11 @@ const waiting = l => l.approved === false;
 const rejected = l => l.approved === 'rejected';
 // Approvers: the admin, or a parent signed in on this device (not for their own tasks).
 // points that a parent gave (kind 'bonus' waiting) are approved only by the admin
-const canApprove = l => S.isAdmin || (l.kind !== 'bonus' && !!S.boundId && isParentMember(S.boundId) && l.memberId !== S.boundId);
+const isWatched = id => member(id)?.watch === true;
+const actorOfLog = l => l.by || l.memberId;
+// who a parent may mark for: the list the admin set, or (by default) the children
+const markableBy = pid => { const p = member(pid); return Array.isArray(p?.canMarkFor) ? p.canMarkFor.filter(id => member(id) && id !== pid) : S.members.filter(m => roleOf(m.id) === 'child').map(m => m.id); };
+const canApprove = l => S.isAdmin || (l.kind !== 'bonus' && !isWatched(actorOfLog(l)) && !!S.boundId && isParentMember(S.boundId) && l.memberId !== S.boundId);
 const doneCount = t => S.logs.filter(l => l.taskId === t.id && (l.kind === 'task' || l.kind === 'timed') && !rejected(l)).length;
 // Rotation: the turn moves to the next person each time the task is done.
 function whoseTurn(t){
@@ -85,7 +89,7 @@ const isParentNow = () => !S.isAdmin && !!S.boundId && isParentMember(S.boundId)
 const seeAll = () => isParentNow() && !S.actFor && store.get('ft-seeall') !== '0';
 // the parent picked a child at the top ("מסמן עבור"): the screen shows that child's tasks and ✓ marks for them
 const plainAdmin = () => S.isAdmin && S.plain && !S.viewAs;
-const actingChild = () => S.actFor && member(S.actFor) && ((isParentNow() && roleOf(S.actFor) === 'child') || plainAdmin()) ? S.actFor : null;
+const actingChild = () => S.actFor && member(S.actFor) && ((isParentNow() && markableBy(S.boundId).includes(S.actFor)) || plainAdmin()) ? S.actFor : null;
 const isMine = t => { const w = whoseTurn(t); return S.me === 'all' || seeAll() || w === S.me || w === 'all' || w === 'each'; };
 // May this phone press "done" on the task? Only for itself (or anyone, for the admin).
 const canDoTask = t => { if (pastDeadline(t)) return false; if (S.isAdmin || !S.boundId) return true; const w = whoseTurn(t); return w === 'all' || w === 'each' || w === S.boundId || isParentNow(); };
@@ -143,9 +147,9 @@ async function complete(t, memberId){
   if (!db || S.busy.has(t.id)) return; S.busy.add(t.id); S.openPick = null; render();
   try{
     const pts = ptsOf(t);
-    const by = actingFor(memberId); const check = t.check && !by;
+    const by = actingFor(memberId); const check = isWatched(by ? by.by : memberId) || (t.check && !by);
     await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points:pts, ...(check ? { approved:false } : {}), ...(by || {}), day:today(), at:Date.now() });
-    if (by){ toast(`סומן בשם ${mName(memberId)}: ${pts} נקודות`); confetti(60); return; }
+    if (by){ toast(check ? `נשלח לאישור המנהל: ${mName(memberId)} ${pts} נקודות` : `סומן בשם ${mName(memberId)}: ${pts} נקודות`); confetti(60); return; }
     toast(t.check ? `נשלח לאישור: ${pts} נקודות יתווספו אחרי בדיקה. אפשר לצרף תמונה ב"בוצע היום" 📷` : t.boss ? `🐉 ${mName(memberId)} ניצח/ה את הבוס! ${pts} נקודות` : `${mName(memberId)} קיבל/ה ${pts} נקודות`);
     confetti(t.boss ? 200 : t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
@@ -159,7 +163,7 @@ async function completeQty(t, memberId, n){
   const points = qtyPoints(t, n);
   try{
     const by = actingFor(memberId);
-    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points, count:n, ...(t.check && !by ? { approved:false } : {}), ...(by || {}), day:today(), at:Date.now() });
+    await addDoc(collection(db,'logs'), { kind:'task', taskId:t.id, title:t.title, memberId, points, count:n, ...(isWatched(by ? by.by : memberId) || (t.check && !by) ? { approved:false } : {}), ...(by || {}), day:today(), at:Date.now() });
     toast(t.check ? `נשלח לאישור: ${n} ${t.qtyUnit} = ${points} נקודות` : `${mName(memberId)}: ${n} ${t.qtyUnit} = ${points} נקודות`); confetti(t.check ? 40 : 90);
   }catch(e){ fail(e); } finally{ S.busy.delete(t.id); render(); }
 }
@@ -180,7 +184,7 @@ async function finishTimer(t, tm){
   try{
     const b = writeBatch(db);
     b.set(doc(collection(db,'logs')), { kind:'timed', taskId:t.id, title:t.title, memberId:tm.memberId,
-      minutes:r.minutes, points:r.points, timerId:tm.id, ...(t.check && !actingFor(tm.memberId) ? { approved:false } : {}), ...(actingFor(tm.memberId) || {}), day:today(), at:Date.now() });
+      minutes:r.minutes, points:r.points, timerId:tm.id, ...(isWatched(actingFor(tm.memberId)?.by || tm.memberId) || (t.check && !actingFor(tm.memberId)) ? { approved:false } : {}), ...(actingFor(tm.memberId) || {}), day:today(), at:Date.now() });
     b.delete(doc(db,'timers',tm.id));
     await b.commit();
     toast(`${mName(tm.memberId)}: ${r.minutes} דקות, ${r.points} נקודות`); confetti(t.check ? 40 : 90);
@@ -230,6 +234,7 @@ function render(){
   renderHero(bound);
   $('who').hidden = !(S.isAdmin || isParentNow());
   $('meBar').hidden = !bound;
+  { const wb = $('watchBar'); if (wb) wb.hidden = !(bound && isWatched(bound) && !S.isAdmin); }
   if (bound){ const m = member(bound); $('meName').textContent = `שלום, ${m.name}`; $('meAva').textContent = avatarOf(m.id); $('meAva').style.background = m.color; }
   const nPend = S.tasks.filter(t => t.pending || t.reviewed === false).length + (S.isAdmin ? S.joins.length : 0);
   { const nRev = S.logs.filter(l => waiting(l) && canApprove(l)).length; const tb = $('tabs').querySelector('[data-tab="tasks"]');
@@ -632,7 +637,8 @@ function renderWho(){
     const mk = (id, label, color) => h('button', { type:'button', class:'chip', 'aria-pressed':String((S.actFor || null) === id),
       onclick:() => { S.actFor = id; S.openPick = null; S.qtyAsk = null; render(); } }, color ? h('span', { class:'dot', style:`background:${color}` }) : null, label);
     w.append(mk(null, `אני (${mName(S.boundId)})`));
-    S.members.filter(m => m.id !== S.boundId && (plainAdmin() || roleOf(m.id) === 'child')).forEach(m => w.append(mk(m.id, m.name, m.color)));
+    const allowed = plainAdmin() ? null : new Set(markableBy(S.boundId));
+    S.members.filter(m => m.id !== S.boundId && (!allowed || allowed.has(m.id))).forEach(m => w.append(mk(m.id, m.name, m.color)));
     return;
   }
   w.replaceChildren(h('span', { class:'lbl' }, 'מי משתמש עכשיו:'));
@@ -818,7 +824,7 @@ function taskCard(t, canAct){
       h('button', { type:'button', class:'btn ghost small', onclick:() => { S.qtyAsk = null; render(); } }, 'ביטול')));
   }
   if (canAct && S.openPick === t.id) card.append(h('div', { class:'pickwho' }, h('span', { class:'lbl' }, timed ? 'מי מתחיל?' : 'מי עשה?'),
-    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || m.id === S.boundId || roleOf(m.id) === 'child') && (t.assignee !== 'each' || isDueFor(t, m.id))).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
+    S.members.filter(m => !running.some(tm => tm.memberId === m.id) && (!isParentNow() || m.id === S.boundId || markableBy(S.boundId).includes(m.id)) && (t.assignee !== 'each' || isDueFor(t, m.id))).map(m => h('button', { type:'button', class:'chip', onclick:() => act(m.id) },
       h('span', { class:'dot', style:`background:${m.color}` }), m.name))));
   return card;
 }
@@ -851,8 +857,9 @@ async function redeem(memberId, title, cost, rewardId, force){
   if (!(cost >= 1)){ toast('כמות נקודות: לפחות 1'); return false; }
   if (cost > w.balance && !force){ toast(`אין מספיק נקודות: יש ${w.balance}, צריך ${cost}`); return false; }
   try{
-    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, ...(rewardId ? { rewardId } : {}), day:today(), at:Date.now() }); confetti(70);
-    toast(`${mName(memberId)}: ירדו ${cost} נקודות`); return true;
+    const w = !S.isAdmin && isWatched(memberId);
+    await addDoc(collection(db,'logs'), { kind:'redeem', title, memberId, points:cost, ...(rewardId ? { rewardId } : {}), ...(w ? { approved:false } : {}), day:today(), at:Date.now() }); confetti(70);
+    toast(w ? `נשלח לאישור המנהל: ${title}` : `${mName(memberId)}: ירדו ${cost} נקודות`); return true;
   }catch(e){ fail(e); return false; }
 }
 function renderRewards(){
@@ -1499,12 +1506,20 @@ async function saveTask(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 function editMember(m){
-  S.editMember = m.id; $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-gender').value = m.gender === 'f' ? 'f' : 'm'; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false;
+  S.editMember = m.id; $('mf-watch').checked = m.watch === true; $('mf-markfor').dataset.want = JSON.stringify(Array.isArray(m.canMarkFor) ? m.canMarkFor : null); $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-gender').value = m.gender === 'f' ? 'f' : 'm'; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false; fillMarkFor();
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
 function resetMemberForm(){
-  S.editMember = null; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-gender').value = 'm'; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
+  S.editMember = null; $('mf-watch').checked = false; $('mf-markfor').dataset.want = 'null'; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-gender').value = 'm'; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
   const used = new Set(S.members.map(m => m.color)); const i = Math.max(0, COLORS.findIndex(c => !used.has(c))); $('mf-color-'+i).checked = true;
+  fillMarkFor();
+}
+function fillMarkFor(){
+  const box = $('mf-markfor'); let want = null; try{ want = JSON.parse(box.dataset.want || 'null'); }catch(e){}
+  const self = S.editMember;
+  const checked = want ? new Set(want) : new Set(S.members.filter(m => roleOf(m.id) === 'child').map(m => m.id));
+  box.replaceChildren(...S.members.filter(m => m.id !== self).map(m => h('label', null, h('input', { type:'checkbox', value:m.id, checked: checked.has(m.id) }), m.name)));
+  $('mf-parentOpts').hidden = $('mf-role').value !== 'parent';
 }
 async function saveMember(){
   const name = $('mf-name').value.trim(); const color = (document.querySelector('input[name=mf-color]:checked') || {}).value || COLORS[0];
@@ -1516,7 +1531,8 @@ async function saveMember(){
     const b = writeBatch(db);
     const ref = S.editMember ? doc(db,'members',S.editMember) : doc(collection(db,'members'));
     const role = $('mf-role').value || 'child'; const admin = role === 'admin'; const gender = $('mf-gender').value === 'f' ? 'f' : 'm';
-    if (S.editMember) b.update(ref, { name, color, role, admin, gender }); else b.set(ref, { name, color, role, admin, gender, order: Date.now() });
+    const extra = { watch: $('mf-watch').checked, ...(role === 'parent' ? { canMarkFor: [...$('mf-markfor').querySelectorAll('input:checked')].map(i => i.value) } : {}) };
+    if (S.editMember) b.update(ref, { name, color, role, admin, gender, ...extra }); else b.set(ref, { name, color, role, admin, gender, ...extra, order: Date.now() });
     if (pin) b.set(doc(db,'pins',ref.id), { pin });
     await b.commit();
     toast(S.editMember ? 'נשמר' : `${name} נוסף/ה` + (pin ? '' : '. בלי קוד אי אפשר להיכנס בשמו/ה.'));
@@ -1527,7 +1543,7 @@ async function saveMember(){
 const parentPointsOn = () => S.perms && S.perms.parentPoints === true;
 function renderParentPoints(){
   const on = isParentNow() && parentPointsOn();
-  $('ppPanel').hidden = !on; if (!on) return;
+  $('ppToggleWrap').hidden = !on || S.ppOpen; $('ppPanel').hidden = !on || !S.ppOpen; if (!on) return;
   const sel = $('pp-member'); const keep = sel.value;
   sel.replaceChildren(...S.members.map(m => h('option', { value:m.id }, m.id === S.boundId ? `${m.name} (אני)` : m.name)));
   if (keep) sel.value = keep;
@@ -1543,11 +1559,10 @@ function renderParentPointsAdmin(){
   list.forEach(l => { const [, mo, da] = (l.day || '--').split('-');
     const inp = h('input', { type:'number', class:'pp-edit', value:String(l.points), inputmode:'numeric', 'aria-label':'נקודות' });
     L.append(h('div', { class:'arow arow-wrap' + (l.flag ? ' flagged' : '') },
-      h('div', { class:'t' }, h('strong', null, `${l.flag ? '🚩 ' : ''}${mName(l.by)} ← ${l.by === l.memberId ? 'לעצמו/ה' : mName(l.memberId)}`), h('small', null, `${+da}.${+mo} · ${l.title}`)),
+      h('div', { class:'t' }, h('strong', null, `${isWatched(l.by) ? '🚩 ' : ''}${mName(l.by)} ← ${l.by === l.memberId ? 'לעצמו/ה' : mName(l.memberId)}`), h('small', null, `${+da}.${+mo} · ${l.title}`)),
       inp,
       h('button', { type:'button', class:'btn ghost small', onclick: async () => { const v = Math.round(Number(inp.value)); if (!Number.isFinite(v) || v === 0){ toast('מספר לא 0'); return; }
         try{ await updateDoc(doc(db,'logs',l.id), { points:v }); toast('עודכן'); }catch(e){ fail(e); } } }, 'שמירה'),
-      h('button', { type:'button', class:'btn ghost small', 'aria-pressed':String(!!l.flag), onclick: async () => { try{ await updateDoc(doc(db,'logs',l.id), { flag: !l.flag }); toast(l.flag ? 'הוסר מהמעקב' : 'סומן במעקב 🚩'); }catch(e){ fail(e); } } }, l.flag ? 'בטל מעקב' : '🚩 מעקב'),
       armedBtn('ppd' + l.id, 'מחיקה', () => removeLog(l)))); });
 }
 async function saveParentPoints(){
@@ -1556,8 +1571,9 @@ async function saveParentPoints(){
   if (!memberId){ toast('בחרו למי'); return; }
   if (!Number.isFinite(points) || points === 0 || Math.abs(points) > 100){ toast('נקודות: בין -100 ל-100, לא 0'); return; }
   const btn = $('pp-save'); btn.disabled = true;
-  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, day:today(), at:Date.now() });
-    toast(`${mName(memberId)}: ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
+  const w = isWatched(S.boundId);
+  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, ...(w ? { approved:false } : {}), day:today(), at:Date.now() });
+    toast(w ? `נשלח לאישור המנהל: ${mName(memberId)} ${points > 0 ? '+' : ''}${points}` : `${mName(memberId)}: ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function saveBonus(){
   const memberId = $('bf-member').value; const points = Math.round(Number($('bf-points').value));
@@ -1597,9 +1613,11 @@ function buildStatic(){
   document.querySelectorAll('input[name=tf-type]').forEach(r => r.addEventListener('change', () => { $('tf-dayswrap').hidden = $('tf-type-once').checked; }));
   $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; S.openPick = null; render(); window.scrollTo(0, 0); });
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
-  $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
+  $('mf-save').addEventListener('click', saveMember);
+  $('mf-role').addEventListener('change', fillMarkFor); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('pp-save').addEventListener('click', saveParentPoints);
+  $('pp-toggle').addEventListener('click', () => { S.ppOpen = true; render(); $('pp-points').focus(); });
   $('perm-parentPts').addEventListener('change', async e => { try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), parentPoints: e.target.checked }); toast(e.target.checked ? 'הורים יכולים עכשיו לשנות נקודות' : 'רק אתה יכול לשנות נקודות'); }catch(err){ fail(err); e.target.checked = !e.target.checked; } });
   $('mo-save').addEventListener('click', saveMoney);
   $('rankHint').addEventListener('click', () => { S.rankOpen = !S.rankOpen; render(); });
