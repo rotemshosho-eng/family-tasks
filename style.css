@@ -551,3 +551,5 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .cl-close{position:absolute;top:10px;inset-inline-end:10px;border:0;background:var(--sunk);color:var(--muted);width:30px;height:30px;border-radius:50%;font-size:.9rem;cursor:pointer}
 #ppPanel{position:relative}
 .cl-wrap{display:flex}
+input[type=date],input[type=time]{font:inherit;font-size:16px;color:var(--ink);background:var(--sunk);border:2px solid transparent;border-radius:var(--r-md);padding:9px 12px;width:100%;min-height:44px;color-scheme:light dark}
+input[type=date]:focus,input[type=time]:focus{border-color:var(--accent);outline:none}
