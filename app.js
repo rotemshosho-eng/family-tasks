@@ -1643,8 +1643,15 @@ function updateSplash(){
   splashState.personalized = true;
   $('splashKicker').textContent = 'הודעה מהמלך רותם 👑';
   $('splashTitle').textContent = `${greeting()}, ${m.name}`;
-  const r = $('splashRoast'); r.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`; r.hidden = false;
-  clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, 3200); // give the new text time on screen
+  // two beats: a set-up line that sounds nice, then the punchline lands in a different style
+  const f = m.gender === 'f';
+  const SETUPS = f
+    ? ['רציתי להגיד לך משהו מהלב…', 'אחרי התייעצות עם כל המשפחה, הוחלט שאת…', 'המלך בדק, וזה רשמי. את…', 'את יודעת מה את?', 'יש לי חדשות טובות בשבילך…', 'את נראית מעולה היום, ממש…']
+    : ['רציתי להגיד לך משהו מהלב…', 'אחרי התייעצות עם כל המשפחה, הוחלט שאתה…', 'המלך בדק, וזה רשמי. אתה…', 'אתה יודע מה אתה?', 'יש לי חדשות טובות בשבילך…', 'אתה נראה מעולה היום, ממש…'];
+  const su = $('splashSetup'); su.textContent = SETUPS[Math.floor(Math.random() * SETUPS.length)]; su.hidden = false;
+  const r = $('splashRoast'); r.hidden = true; r.textContent = roastOf(m).replace(/^יא /, '') + '!';
+  setTimeout(() => { if (!splashState.gone){ r.hidden = false; r.classList.add('stamp'); } }, 1400);
+  clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, 4400); // time for the set-up and the punchline
 }
 (function splash(){
   const el = $('splash'); if (!el) return;

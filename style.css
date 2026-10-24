@@ -501,3 +501,9 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 #reviewList .arow .t{flex:1 1 140px}
 #reviewList .arow > .btn{flex:none}
 .cj-chip.on,.cj-chip.on[aria-pressed="true"]{color:var(--ink);border-color:#39B980}
+/* splash: set-up line, then the insult stamped in a different style */
+.splash-setup{position:relative;margin:6px 0 0;font:500 clamp(1.05rem,4.6vw,1.35rem)/1.35 var(--body);color:#C9D4E8;max-width:22ch;text-wrap:balance;animation:rise .5s .2s both}
+.splash-roast.stamp{display:inline-block;margin-top:10px;padding:10px 18px;border:3px solid #FF5A5F;border-radius:14px;color:#FF5A5F;background:rgb(255 90 95 / .1);
+  font:800 clamp(1.5rem,7.5vw,2.3rem)/1.15 var(--display);letter-spacing:.01em;transform:rotate(-6deg);text-shadow:0 2px 0 rgb(0 0 0 / .25);
+  animation:stampIn .45s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes stampIn{0%{opacity:0;transform:rotate(-6deg) scale(2.4)}60%{opacity:1;transform:rotate(-6deg) scale(.92)}100%{transform:rotate(-6deg) scale(1)}}
