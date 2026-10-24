@@ -521,3 +521,23 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .splash-roast.stamp.long{font-size:clamp(1.1rem,5vw,1.45rem)}
 @keyframes punchIn{0%{opacity:0;transform:translateY(14px) scale(.96)}100%{opacity:1;transform:none}}
 .splash-roast.stamp{width:fit-content}
+/* ===== splash v3: lively but grown-up ===== */
+.splash{background:#0B1020;isolation:isolate}
+.splash::before,.splash::after{content:"";position:absolute;z-index:-1;width:70vmax;height:70vmax;border-radius:50%;filter:blur(60px);opacity:.55;animation:blob 9s ease-in-out infinite alternate}
+.splash::before{background:radial-gradient(circle,#7B5CFF 0%,transparent 65%);top:-25vmax;right:-20vmax}
+.splash::after{background:radial-gradient(circle,#FF4D7A 0%,transparent 65%);bottom:-28vmax;left:-22vmax;animation-delay:-4s}
+@keyframes blob{0%{transform:translate(0,0) scale(1)}100%{transform:translate(-6vmax,5vmax) scale(1.15)}}
+.splash-crown{font-size:40px;animation:crownIn .7s cubic-bezier(.2,1.5,.4,1) both;filter:drop-shadow(0 6px 16px rgb(255 184 77 / .5))}
+@keyframes crownIn{0%{opacity:0;transform:translateY(-20px) rotate(-20deg)}100%{opacity:1;transform:none}}
+.splash-kicker{color:#C9B8FF;letter-spacing:.12em;font-size:.78rem;text-transform:none}
+.splash-title{background:linear-gradient(90deg,#FFFFFF,#FFD9E6 60%,#C9B8FF);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:clamp(2.2rem,10vw,3.3rem)}
+.splash-setup{color:#E4E0F5;border-inline-start:3px solid #7B5CFF;padding-inline-start:12px}
+.splash-roast.stamp,.splash-roast.stamp.long{position:relative;background:linear-gradient(120deg,#FF4D57,#FF7A3D);transform:rotate(-2deg);
+  box-shadow:0 14px 40px rgb(255 77 87 / .45), inset 0 1px 0 rgb(255 255 255 / .25);padding:14px 18px 14px 46px;animation:punchIn2 .5s cubic-bezier(.2,1.6,.4,1) both}
+.splash-roast.stamp::after{content:"😂";position:absolute;left:10px;top:50%;translate:0 -50%;font-size:1.5rem;animation:wobble 1.2s .5s ease-in-out infinite}
+@keyframes punchIn2{0%{opacity:0;transform:rotate(-2deg) translateY(18px) scale(.9)}70%{transform:rotate(-2deg) scale(1.04)}100%{opacity:1;transform:rotate(-2deg)}}
+@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}}
+@media (prefers-reduced-motion: reduce){.splash::before,.splash::after{animation:none}}
+/* home: the joke under the greeting, set-up and punchline styled differently */
+.hero-roast .hr-setup{color:var(--muted);font-weight:500}
+.hero-roast .hr-punch{color:#E8434D;font-weight:700}

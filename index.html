@@ -212,6 +212,16 @@
   </div>
     <section class="goal-card challenge" data-challenge hidden></section>
     <section class="goal-card" data-goal hidden></section>
+    <section class="panel" id="ppPanel" hidden>
+      <h2>➕➖ שינוי נקודות</h2>
+      <p class="sub">בונוס על עזרה, או הורדה על משהו שלא בסדר. המנהל רואה כל שינוי ויכול לבטל אותו.</p>
+      <div class="row">
+        <div class="field"><label for="pp-member">למי</label><select id="pp-member"></select></div>
+        <div class="field"><label for="pp-points">כמה (מינוס כדי להוריד)</label><input type="number" id="pp-points" value="5" inputmode="numeric" min="-100" max="100"></div>
+      </div>
+      <div class="field"><label for="pp-reason">סיבה</label><input type="text" id="pp-reason" maxlength="60" placeholder="למשל: עזר לאחים בלי שביקשו"></div>
+      <div><button type="button" class="btn" id="pp-save">עדכון נקודות</button></div>
+    </section>
     <section class="panel" id="chEditor" hidden>
       <h2>⚡ אתגר משפחתי</h2>
       <p class="sub">כל המשפחה ביחד, מול השעון: כמה משימות עד תאריך מסוים. כדי לבטל, שומרים 0.</p>
@@ -314,6 +324,7 @@
       </div>
       <div class="field"><label for="bf-reason">סיבה</label><input type="text" id="bf-reason" maxlength="60" placeholder="למשל: עזרה בלי שביקשו"></div>
       <div><button type="button" class="btn" id="bf-save">עדכון נקודות</button></div>
+      <label class="check"><input type="checkbox" id="perm-parentPts"> הורים יכולים לתת ולהוריד נקודות (עד 100 בכל פעם, לא לעצמם)</label>
     </section>
 
     <section class="panel">

@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -237,7 +237,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || (S.isAdmin && !plain) || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -698,7 +698,8 @@ function renderHero(bound){
   $('appTitle').textContent = m ? `${greeting()}, ${m.name}!` : `${greeting()}!`;
   const hr = $('heroRoast'); const king = S.isAdmin || (!!m && roleOf(m.id) === 'admin');
   hr.hidden = !m && !king;
-  if (king) hr.textContent = `👑 ${praiseOf()}`; else if (m) hr.textContent = `${greeting()} ${m.name}, ${roastOf(m)}`;
+  if (king) hr.textContent = `👑 ${praiseOf()}`;
+  else if (m){ const j = jokeFor(m); hr.replaceChildren(h('span', { class:'hr-setup' }, j.setup + ' '), h('span', { class:'hr-punch' }, j.punch)); }
   const btn = $('heroMe'); btn.hidden = !m;
   if (m){ $('heroAva').textContent = avatarOf(m.id); $('heroAva').style.background = m.color; btn.onclick = () => openProfile(m.id); }
 }
@@ -1425,7 +1426,7 @@ function renderAdminLists(){
   if (!hist.length) H.append(h('p', { class:'sub' }, 'כאן יופיע כל מה שבוצע וכל שינוי נקודות.'));
   hist.forEach(l => { const p = (l.kind === 'redeem' ? -1 : 1) * (Number(l.points) || 0); const [, mo, da] = (l.day || '--').split('-');
     H.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
+      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.kind === 'bonus' && l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
       h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p),
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
@@ -1521,6 +1522,25 @@ async function saveMember(){
     resetMemberForm();
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
+// Parents may give or take points when the admin allows it (settings/perms.parentPoints). Each change carries who made it.
+const parentPointsOn = () => S.perms && S.perms.parentPoints === true;
+function renderParentPoints(){
+  const on = isParentNow() && parentPointsOn();
+  $('ppPanel').hidden = !on; if (!on) return;
+  const sel = $('pp-member'); const keep = sel.value;
+  sel.replaceChildren(...S.members.filter(m => m.id !== S.boundId).map(m => h('option', { value:m.id }, m.name)));
+  if (keep) sel.value = keep;
+  if (S.isAdmin !== undefined && $('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn();
+}
+async function saveParentPoints(){
+  const memberId = $('pp-member').value; const points = Math.round(Number($('pp-points').value));
+  const reason = $('pp-reason').value.trim() || (points < 0 ? 'הורדת נקודות' : 'בונוס');
+  if (!memberId){ toast('בחרו למי'); return; }
+  if (!Number.isFinite(points) || points === 0 || Math.abs(points) > 100){ toast('נקודות: בין -100 ל-100, לא 0'); return; }
+  const btn = $('pp-save'); btn.disabled = true;
+  try{ await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, by:S.boundId, day:today(), at:Date.now() });
+    toast(`${mName(memberId)}: ${points > 0 ? '+' : ''}${points}`); $('pp-reason').value = ''; }catch(e){ fail(e); } finally{ btn.disabled = false; }
+}
 async function saveBonus(){
   const memberId = $('bf-member').value; const points = Math.round(Number($('bf-points').value));
   const reason = $('bf-reason').value.trim() || (points < 0 ? 'הורדת נקודות' : 'בונוס');
@@ -1561,6 +1581,8 @@ function buildStatic(){
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
   $('mf-save').addEventListener('click', saveMember); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
+  $('pp-save').addEventListener('click', saveParentPoints);
+  $('perm-parentPts').addEventListener('change', async e => { try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), parentPoints: e.target.checked }); toast(e.target.checked ? 'הורים יכולים עכשיו לשנות נקודות' : 'רק אתה יכול לשנות נקודות'); }catch(err){ fail(err); e.target.checked = !e.target.checked; } });
   $('mo-save').addEventListener('click', saveMoney);
   $('rankHint').addEventListener('click', () => { S.rankOpen = !S.rankOpen; render(); });
   $('viewAsExit').addEventListener('click', stopViewAs);
@@ -1621,6 +1643,17 @@ function praiseOf(){
   return praiseNow = PRAISE.list[i];
 }
 const roastFor = {};
+// One joke per person each time the app opens: the splash and the home screen show the same one.
+const jokeCache = {};
+function jokeFor(m){
+  if (jokeCache[m.id]) return jokeCache[m.id];
+  const f = m.gender === 'f';
+  const pool = SPLASH_JOKES.filter(j => roleOf(m.id) === 'child' || j[4] !== 'k');
+  let ji = Math.floor(Math.random() * pool.length);
+  try{ const last = localStorage.getItem('ft-joke'); if (pool[ji][1] === last) ji = (ji + 1) % pool.length; localStorage.setItem('ft-joke', pool[ji][1]); }catch(e){}
+  const j = pool[ji];
+  return jokeCache[m.id] = { setup: f ? j[2] : j[0], punch: f ? j[3] : j[1] };
+}
 function roastOf(m){ return roastFor[m.id] || (roastFor[m.id] = pickRoast(m.gender)); }
 function pickRoast(g){
   const list = ROASTS[g === 'f' ? 'f' : 'm'];
@@ -1646,14 +1679,9 @@ function updateSplash(){
   $('splashKicker').textContent = 'הודעה מהמלך רותם';
   $('splashTitle').textContent = `${greeting()}, ${m.name}`;
   // two beats: a set-up line that sounds nice, then the punchline lands in a different style
-  const f = m.gender === 'f';
-  // a joke: a set-up that sounds like a compliment, then the twist (never the same one twice in a row)
-  const pool = SPLASH_JOKES.filter(j => roleOf(m.id) === 'child' || j[4] !== 'k');
-  let ji = Math.floor(Math.random() * pool.length);
-  try{ const last = localStorage.getItem('ft-joke'); if (pool[ji][1] === last) ji = (ji + 1) % pool.length; localStorage.setItem('ft-joke', pool[ji][1]); }catch(e){}
-  const jk = pool[ji];
-  const su = $('splashSetup'); su.textContent = f ? jk[2] : jk[0]; su.hidden = false;
-  const r = $('splashRoast'); r.hidden = true; r.textContent = f ? jk[3] : jk[1]; r.classList.toggle('long', r.textContent.length > 18);
+  const jk = jokeFor(m);
+  const su = $('splashSetup'); su.textContent = jk.setup; su.hidden = false;
+  const r = $('splashRoast'); r.hidden = true; r.textContent = jk.punch; r.classList.toggle('long', r.textContent.length > 18);
   setTimeout(() => { if (!splashState.gone){ r.hidden = false; r.classList.add('stamp'); } }, 1400);
   clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, r.textContent.length > 18 ? 5200 : 4400); // time for the set-up and the punchline
 }
@@ -1804,6 +1832,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
       if (c && !['ch-title','ch-target','ch-until','ch-prize','ch-bonus'].includes(document.activeElement?.id)){ $('ch-bonus').value = c.bonus || ''; $('ch-title').value = c.title || ''; $('ch-target').value = c.target || ''; $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
       render();
     }, e => console.error(e)));
+    unsubs.push(onSnapshot(doc(db,'settings','perms'), s => { S.perms = s.exists() ? s.data() : {}; render(); }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
       const m = s.exists() ? s.data() : { points:100, shekels:0 };
       S.money = { points:Number(m.points) || 100, shekels:Number(m.shekels) || 0 };
