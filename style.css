@@ -553,3 +553,13 @@ body.royal .bottomnav button[aria-pressed="true"]{background:linear-gradient(135
 .cl-wrap{display:flex}
 input[type=date],input[type=time]{font:inherit;font-size:16px;color:var(--ink);background:var(--sunk);border:2px solid transparent;border-radius:var(--r-md);padding:9px 12px;width:100%;min-height:44px;color-scheme:light dark}
 input[type=date]:focus,input[type=time]:focus{border-color:var(--accent);outline:none}
+/* admin accordion */
+section.acc{padding-top:0;padding-bottom:0}
+.acc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:0;background:none;color:inherit;font:inherit;text-align:start;padding:16px 0;cursor:pointer}
+.acc-head h2{margin:0}
+.acc-head .section-head{flex:1;margin:0}
+.acc-caret{font-size:1.3rem;color:var(--muted);transition:transform .2s;line-height:1}
+section.acc.open .acc-caret{transform:rotate(180deg)}
+section.acc:not(.open) .acc-body{display:none}
+section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:column;gap:12px}
+#view-admin{gap:10px}

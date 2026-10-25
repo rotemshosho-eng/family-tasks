@@ -1334,6 +1334,26 @@ function syncCollapsibles(){
   }
 }
 
+/* ---------- admin tab as an accordion: tap a heading to open that section ---------- */
+let accOpen = new Set(); try{ accOpen = new Set(JSON.parse(localStorage.getItem('ft-acc') || '[]')); }catch(e){}
+const saveAcc = () => { try{ localStorage.setItem('ft-acc', JSON.stringify([...accOpen])); }catch(e){} };
+function setupAdminAccordion(){
+  [...$('view-admin').querySelectorAll(':scope > section.panel')].forEach((sec, i) => {
+    const head = sec.querySelector(':scope > .section-head') || sec.querySelector(':scope > h2'); if (!head) return;
+    const key = sec.id || 'acc' + i; sec.dataset.acc = key; sec.classList.add('acc');
+    const btn = h('button', { type:'button', class:'acc-head', 'aria-expanded':'false' }); head.before(btn); btn.append(head, h('span', { class:'acc-caret', 'aria-hidden':'true' }, '⌄'));
+    const body = h('div', { class:'acc-body' }); while (btn.nextSibling) body.append(btn.nextSibling); sec.append(body);
+    btn.addEventListener('click', () => { accOpen.has(key) ? accOpen.delete(key) : accOpen.add(key); saveAcc(); syncAccordion(); });
+  });
+  syncAccordion();
+}
+function syncAccordion(){
+  $('view-admin').querySelectorAll('section.acc').forEach(sec => { const open = accOpen.has(sec.dataset.acc) || sec.id === 'joinsPanel';
+    sec.classList.toggle('open', open); sec.querySelector('.acc-head')?.setAttribute('aria-expanded', String(open)); });
+}
+// open the section that holds this element (e.g. when editing a task or a family member)
+function openAccFor(el){ const sec = el && el.closest('section.acc'); if (sec && !accOpen.has(sec.dataset.acc)){ accOpen.add(sec.dataset.acc); saveAcc(); syncAccordion(); } }
+
 /* ---------- duplicate a task (a copy you can then edit) ---------- */
 async function duplicateTask(t){
   const keys = ['assignee','type','days','timed','points','ratePerMin','maxMinutes','qtyPer','qtyUnit','qtyMax','check','rotation','untilTime'];
@@ -1462,6 +1482,7 @@ function renderAdminLists(){
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
 function editTask(t){
+  openAccFor($('tfHead'));
   S.editTask = t.id; $('tfHead').textContent = t.pending ? `קביעת ניקוד: ${t.title}` : 'עריכת משימה'; $('tf-save').textContent = 'שמירת שינויים'; $('tf-cancel').hidden = false;
   $('tf-title').value = t.title; $('tf-assignee').dataset.want = ['rotate','each'].includes(t.assignee) ? t.assignee : (member(t.assignee) ? t.assignee : 'all'); $('tf-until').value = t.untilTime || '';
   $('tf-rot').dataset.want = JSON.stringify(t.rotation || []); $('tf-rot').querySelectorAll('input').forEach(i => i.checked = false); $('tf-check').checked = !!t.check; $('tf-boss').checked = !!t.boss; syncSelects();
@@ -1529,6 +1550,7 @@ async function saveTask(){
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 function editMember(m){
+  openAccFor($('mf-name'));
   S.editMember = m.id; $('mf-watch').checked = m.watch === true; $('mf-markfor').dataset.want = JSON.stringify(Array.isArray(m.canMarkFor) ? m.canMarkFor : null); $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-gender').value = m.gender === 'f' ? 'f' : 'm'; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false; fillMarkFor();
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
@@ -1665,6 +1687,7 @@ function buildStatic(){
   document.querySelectorAll('input[name=cpf]').forEach(r => r.addEventListener('change', render));
   initComplaints();
   setupCollapsibles();
+  setupAdminAccordion();
   $('ag-go').addEventListener('click', adminCodeGo);
   $('ag-code').addEventListener('keydown', e => { if (e.key === 'Enter') adminCodeGo(); });
   $('ag-cancel').addEventListener('click', closeAdminGate);
