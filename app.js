@@ -64,6 +64,8 @@ const isTimed = t => t.timed === true;
 const counted = l => l.approved === undefined || l.approved === true;
 const waiting = l => l.approved === false;
 const rejected = l => l.approved === 'rejected';
+// Counts in the weekly race: everything earned except points the admin put straight into the wallet (wallet: true).
+const inRace = l => l.kind !== 'redeem' && l.wallet !== true;
 // Approvers: the admin, or a parent signed in on this device (not for their own tasks).
 // points that a parent gave (kind 'bonus' waiting) are approved only by the admin
 const isWatched = id => member(id)?.watch === true;
@@ -275,8 +277,10 @@ function renderLogin(){
     $('login-google').hidden = true; box.hidden = true; $('login-pin').hidden = true; $('login-empty').hidden = true;
     $('login-title').textContent = S.myJoin ? 'מחכה לאישור' : 'הצטרפות ללוח';
     $('join-email').textContent = `נכנסת בתור ${S.user.email || S.user.displayName || ''}`;
-    if (S.myJoin) $('wait-name').textContent = S.myJoin.name;
-    else if (!$('join-name').value && S.user.displayName && document.activeElement !== $('join-name')) $('join-name').value = S.user.displayName.split(' ')[0].slice(0, 20);
+    if (S.myJoin){ $('wait-name').textContent = S.myJoin.name; $('wait-link').textContent = S.myJoin.linkTo ? ` לחבר את הגוגל הזה ל${mName(S.myJoin.linkTo)}` : ''; }
+    else fillJoinLink();
+    if (!S.myJoin && $('join-link').value) return;
+    if (!S.myJoin && !$('join-name').value && S.user.displayName && document.activeElement !== $('join-name')) $('join-name').value = S.user.displayName.split(' ')[0].slice(0, 20);
     return;
   }
   $('login-empty').hidden = S.members.length > 0;
@@ -352,31 +356,59 @@ async function switchUser(){
 }
 
 /* ---------- joining with a Google account ---------- */
+// Members a Google account can be linked to: on the board already (with a code), with no Google account yet.
+const linkable = () => S.members.filter(m => !m.uid && roleOf(m.id) !== 'admin');
+function fillJoinLink(){
+  const sel = $('join-link'); const keep = sel.value; const list = linkable();
+  $('join-linkwrap').hidden = !list.length;
+  if (document.activeElement !== sel){
+    sel.replaceChildren(h('option', { value:'' }, 'לא, אני חדש/ה בלוח'), ...list.map(m => h('option', { value:m.id }, `כן, אני ${m.name}`)));
+    sel.value = list.some(m => m.id === keep) ? keep : '';
+  }
+  const link = !!sel.value; $('join-namewrap').hidden = link; $('join-colorwrap').hidden = link;
+  $('join-go').textContent = link ? 'חיבור הגוגל לשם הזה' : 'הצטרפות';
+}
 async function sendJoin(){
-  const name = $('join-name').value.trim(); const color = (document.querySelector('input[name=join-color]:checked') || {}).value || COLORS[0];
+  const linkTo = $('join-link').value; const lm = linkTo ? member(linkTo) : null;
+  const name = lm ? lm.name.slice(0, 20) : $('join-name').value.trim(); const color = lm ? lm.color : (document.querySelector('input[name=join-color]:checked') || {}).value || COLORS[0];
   if (!name){ toast('כתבו איך לקרוא לך'); $('join-name').focus(); return; }
   const btn = $('join-go'); btn.disabled = true;
-  try{ await setDoc(doc(db,'joinRequests',S.user.uid), { name, color, email: S.user.email || '', at: Date.now() }); toast('הבקשה נשלחה'); }
+  try{ await setDoc(doc(db,'joinRequests',S.user.uid), { name, color, email: S.user.email || '', ...(lm ? { linkTo } : {}), at: Date.now() }); toast(lm ? 'הבקשה נשלחה. אחרי אישור המנהל תיכנס/י עם הגוגל הזה.' : 'הבקשה נשלחה'); }
   catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 async function cancelJoin(){ try{ await deleteDoc(doc(db,'joinRequests',S.user.uid)); }catch(e){ fail(e); } }
-async function approveJoin(j){
+// linkTo: an existing member gets this Google account (keeps its points, history and code); otherwise a new member.
+async function approveJoin(j, linkTo){
+  const lm = linkTo ? member(linkTo) : null;
+  if (linkTo && !lm){ toast('בן המשפחה הזה כבר לא קיים'); return; }
+  if (lm && lm.uid){ toast(`ל${lm.name} כבר מחובר חשבון גוגל. קודם מנתקים אותו.`); return; }
   try{
     const b = writeBatch(db);
-    b.set(doc(collection(db,'members')), { name: j.name, color: j.color || COLORS[0], order: Date.now(), uid: j.id, email: j.email || '' });
+    if (lm) b.update(doc(db,'members',lm.id), { uid: j.id, email: j.email || '' });
+    else b.set(doc(collection(db,'members')), { name: j.name, color: j.color || COLORS[0], order: Date.now(), uid: j.id, email: j.email || '' });
     b.delete(doc(db,'joinRequests',j.id));
-    await b.commit(); toast(`${j.name} הצטרף/ה ללוח`);
+    await b.commit(); toast(lm ? `הגוגל ${j.email || ''} חובר ל${lm.name}` : `${j.name} הצטרף/ה ללוח`);
   }catch(e){ fail(e); }
+}
+async function unlinkGoogle(m){
+  try{ await updateDoc(doc(db,'members',m.id), { uid: deleteField(), email: deleteField() }); toast(`הגוגל נותק מ${m.name}${S.pins[m.id] ? '. הכניסה עם הקוד ממשיכה לעבוד.' : '. אין לו/ה קוד, אז כרגע אי אפשר להיכנס בשמו/ה.'}`); }catch(e){ fail(e); }
 }
 async function rejectJoin(j){ try{ await deleteDoc(doc(db,'joinRequests',j.id)); toast('הבקשה נדחתה'); }catch(e){ fail(e); } }
 function renderJoins(){
   $('joinsPanel').hidden = !S.joins.length; $('joinsCount').textContent = S.joins.length ? String(S.joins.length) : '';
   const L = $('joinsList'); L.replaceChildren();
-  S.joins.slice().sort((a,b) => (a.at||0) - (b.at||0)).forEach(j => L.append(h('div', { class:'arow' },
-    h('div', { class:'ava sm', style:`background:${j.color || COLORS[0]}` }, (j.name || '?').charAt(0)),
-    h('div', { class:'t' }, h('strong', null, j.name), h('small', null, j.email || '')),
-    h('button', { type:'button', class:'btn small', onclick:() => approveJoin(j) }, 'אישור'),
-    armedBtn('j'+j.id, 'דחייה', () => rejectJoin(j)))));
+  S.joins.slice().sort((a,b) => (a.at||0) - (b.at||0)).forEach(j => {
+    // the admin decides: a new member, or this Google account goes to someone already on the board
+    const sel = h('select', { 'aria-label':'חיבור ל' }, h('option', { value:'' }, 'בן משפחה חדש'),
+      linkable().map(m => h('option', { value:m.id }, `לחבר ל${m.name}`)));
+    if (j.linkTo && linkable().some(m => m.id === j.linkTo)) sel.value = j.linkTo;
+    L.append(h('div', { class:'arow arow-wrap' },
+      h('div', { class:'ava sm', style:`background:${j.color || COLORS[0]}` }, (j.name || '?').charAt(0)),
+      h('div', { class:'t' }, h('strong', null, j.linkTo && member(j.linkTo) ? `${j.email || j.name} ← ${mName(j.linkTo)}` : j.name),
+        h('small', null, j.linkTo && member(j.linkTo) ? 'ביקש/ה לחבר את הגוגל לשם שכבר בלוח' : (j.email || ''))),
+      sel,
+      h('button', { type:'button', class:'btn small', onclick:() => approveJoin(j, sel.value) }, 'אישור'),
+      armedBtn('j'+j.id, 'דחייה', () => rejectJoin(j)))); });
 }
 function renderPending(){
   const mine = t => isMine(t) || t.suggestedBy === S.me;
@@ -658,7 +690,7 @@ function renderBoard(){
   }
   const ws = weekStart();
   const rows = S.members.map(m => { let wk = 0, tot = 0;
-    for (const l of S.logs){ if (l.memberId !== m.id || l.kind === 'redeem' || !counted(l)) continue; const p = Number(l.points) || 0; tot += p; if (l.day >= ws) wk += p; }
+    for (const l of S.logs){ if (l.memberId !== m.id || l.kind === 'redeem' || !counted(l)) continue; const p = Number(l.points) || 0; tot += p; if (l.day >= ws && inRace(l)) wk += p; }
     return { m, wk, tot }; }).sort((a,b) => b.wk - a.wk);
   const top = rows[0].wk;
   rows.forEach(r => { const lead = top > 0 && r.wk === top;
@@ -744,7 +776,7 @@ function renderProgress(){
   const L = $('rankList'); L.replaceChildren();
   $('progress').hidden = !S.members.length;
   const ws = weekStart();
-  const rows = S.members.map(m => ({ m, pts: S.logs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= ws).reduce((s, l) => s + (Number(l.points) || 0), 0) }))
+  const rows = S.members.map(m => ({ m, pts: S.logs.filter(l => l.memberId === m.id && inRace(l) && counted(l) && l.day >= ws).reduce((s, l) => s + (Number(l.points) || 0), 0) }))
     .sort((a, b) => b.pts - a.pts || (a.m.name || '').localeCompare(b.m.name || '', 'he'));
   const top = rows.length ? rows[0].pts : 0;
   // the first view shows the top 3; tapping the table (or the button under it) shows everyone
@@ -1041,13 +1073,24 @@ const BADGES = [
   { id:'shop', e:'🛍️', t:'קנייה ראשונה', d:'החלפת נקודות ראשונה', ok: s => s.redeems >= 1 }];
 const weekOf = day => { const d = new Date(day + 'T12:00:00'); d.setDate(d.getDate() - d.getDay()); return dstr(d); };
 const dayGap = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
-function weeklyWins(){
+// Race points per finished week: { '2026-10-18': { memberId: points } }
+function weekTotals(){
   const cur = weekStart(); const by = {};
-  for (const l of S.logs){ if (l.kind === 'redeem' || !counted(l) || !l.day) continue; const w = weekOf(l.day); if (w >= cur) continue;
+  for (const l of S.logs){ if (!inRace(l) || !counted(l) || !l.day) continue; const w = weekOf(l.day); if (w >= cur) continue;
     (by[w] ||= {})[l.memberId] = (by[w][l.memberId] || 0) + (Number(l.points) || 0); }
+  return by;
+}
+function weeklyWins(){
   const wins = {};
-  for (const w of Object.values(by)){ const max = Math.max(...Object.values(w)); if (max > 0) for (const [m, p] of Object.entries(w)) if (p === max) wins[m] = (wins[m] || 0) + 1; }
+  for (const w of Object.values(weekTotals())){ const max = Math.max(...Object.values(w)); if (max > 0) for (const [m, p] of Object.entries(w)) if (p === max) wins[m] = (wins[m] || 0) + 1; }
   return wins;
+}
+// Last week's winner(s), for the opening splash. Ties share the title.
+function lastWeekWinners(){
+  const d = new Date(weekStart() + 'T12:00:00'); d.setDate(d.getDate() - 7);
+  const w = weekTotals()[dstr(d)]; if (!w) return null;
+  const ids = Object.keys(w).filter(id => member(id)); const max = Math.max(0, ...ids.map(id => w[id]));
+  return max > 0 ? { ids: ids.filter(id => w[id] === max), pts: max } : null;
 }
 function badgeStats(id){
   const L = S.logs.filter(l => l.memberId === id && counted(l)); const work = L.filter(l => l.kind === 'task' || l.kind === 'timed');
@@ -1468,6 +1511,7 @@ function renderAdminLists(){
       h('div', { class:'t' }, h('strong', null, m.name),
         h('small', { class: (pin || m.uid) ? '' : 'err' }, [isAdminMember(m.id) ? 'מנהל' : (isParentMember(m.id) ? 'הורה' : 'ילד'), m.uid ? `גוגל: ${m.email || 'מחובר'}` : null, pin ? `קוד כניסה: ${pin}` : (m.uid ? null : 'אין קוד ואין גוגל: לא יכול/ה להיכנס')].filter(Boolean).join(' · '))),
       h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
+      m.uid && roleOf(m.id) !== 'admin' ? armedBtn('ug'+m.id, 'ניתוק גוגל', () => unlinkGoogle(m)) : null,
       armedBtn('m'+m.id, 'הסרה', async () => { try{
         const b = writeBatch(db); b.delete(doc(db,'members',m.id)); b.delete(doc(db,'pins',m.id)); await b.commit(); toast(`${m.name} הוסר/ה`);
       }catch(e){ fail(e); } }))); });
@@ -1477,7 +1521,7 @@ function renderAdminLists(){
   if (!hist.length) H.append(h('p', { class:'sub' }, 'כאן יופיע כל מה שבוצע וכל שינוי נקודות.'));
   hist.forEach(l => { const p = (l.kind === 'redeem' ? -1 : 1) * (Number(l.points) || 0); const [, mo, da] = (l.day || '--').split('-');
     H.append(h('div', { class:'arow' },
-      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.kind === 'bonus' && l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.flag ? ' 🚩 במעקב' : ''}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
+      h('div', { class:'t' }, h('strong', null, mName(l.memberId)), h('small', null, `${+da}.${+mo} · ${l.kind === 'bonus' ? 'עדכון: ' : l.kind === 'redeem' ? 'שימוש: ' : ''}${l.title}${l.kind === 'bonus' && l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.wallet ? ' 🐷 רק לארנק' : ''}${l.flag ? ' 🚩 במעקב' : ''}${l.minutes ? ` (${l.minutes} דק׳)` : ''}${l.count ? ` (${l.count} יח׳)` : ''}`)),
       h('span', { class:'num ' + (p < 0 ? 'neg' : 'gold') }, (p > 0 ? '+' : '') + p),
       armedBtn('l'+l.id, 'מחיקה', () => removeLog(l)))); });
 }
@@ -1625,10 +1669,11 @@ async function saveBonus(){
   const reason = $('bf-reason').value.trim() || (points < 0 ? 'הורדת נקודות' : 'בונוס');
   if (!memberId){ toast('קודם הוסיפו בני משפחה'); return; }
   if (!Number.isFinite(points) || points === 0){ toast('כתבו מספר נקודות (לא 0)'); return; }
+  const wallet = $('bf-wallet').checked;
   const btn = $('bf-save'); btn.disabled = true;
   try{
-    await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, day:today(), at:Date.now() });
-    toast(`${mName(memberId)}: ${points > 0 ? '+' : ''}${points}`); $('bf-reason').value = '';
+    await addDoc(collection(db,'logs'), { kind:'bonus', title:reason, memberId, points, ...(wallet ? { wallet:true } : {}), day:today(), at:Date.now() });
+    toast(`${mName(memberId)}: ${points > 0 ? '+' : ''}${points}${wallet ? ' לארנק, בלי התחרות' : ''}`); $('bf-reason').value = ''; $('bf-wallet').checked = false;
   }catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
 
@@ -1760,7 +1805,16 @@ function pickRoast(g){
 // [set-up (m), twist (m), set-up (f), twist (f), 'k' = only for children]
 const SPLASH_JOKES = [["חשבנו להציג אותך במוזיאון…", "באגף של מינים שלא התפתחו.", "חשבנו להציג אותך במוזיאון…", "באגף של מינים שלא התפתחו."], ["אתה מאוד חשוב למשפחה…", "בלעדיך לא היה לנו על מי לצחוק.", "את מאוד חשובה למשפחה…", "בלעדייך לא היה לנו על מי לצחוק."], ["המורה אמרה שיש לך פוטנציאל…", "היא אמרה את זה גם על העציץ בכיתה. הוא כבר עקף אותך.", "המורה אמרה שיש לך פוטנציאל…", "היא אמרה את זה גם על העציץ בכיתה. הוא כבר עקף אותך.", "k"], ["אמא אומרת שאתה מתנה משמיים…", "אבא עדיין מחפש את הקבלה.", "אמא אומרת שאת מתנה משמיים…", "אבא עדיין מחפש את הקבלה.", "k"], ["אתה כמו הודעה בקבוצה של המשפחה…", "כולם רואים, אף אחד לא עונה.", "את כמו הודעה בקבוצה של המשפחה…", "כולם רואים, אף אחד לא עונה."], ["אם הייתה אליפות בהתבכיינות…", "היית מתלונן שהגביע כבד מדי.", "אם הייתה אליפות בהתבכיינות…", "היית מתלוננת שהגביע כבד מדי."], ["כשאתה נכנס לחדר…", "הוויי-פיי נחלש ממבוכה.", "כשאת נכנסת לחדר…", "הוויי-פיי נחלש ממבוכה."], ["אתה ממש לא טיפש…", "פשוט יש לך רק שתי דעות: לא יודע, ולא אכפת לי.", "את ממש לא טיפשה…", "פשוט יש לך רק שתי דעות: לא יודעת, ולא אכפת לי."], ["אומרים שאתה דומה לאבא…", "אבא נעלב.", "אומרים שאת דומה לאבא…", "אבא נעלב.", "k"], ["ניסיתי לראות את העולם מנקודת המבט שלך…", "לא הצלחתי להוציא את הראש מהטלפון.", "ניסיתי לראות את העולם מנקודת המבט שלך…", "לא הצלחתי להוציא את הראש מהטלפון."], ["אתה כמו עדכון של המחשב…", "מגיע בזמן הכי גרוע ולא משפר כלום.", "את כמו עדכון של המחשב…", "מגיעה בזמן הכי גרוע ולא משפרת כלום."], ["אם היית ירק…", "היית הברוקולי שתמיד נשאר בצלחת.", "אם היית ירק…", "היית הברוקולי שתמיד נשאר בצלחת."], ["עשינו הצבעה משפחתית…", "מחליפים אותך בשואב אבק רובוטי. הוא לפחות מנקה.", "עשינו הצבעה משפחתית…", "מחליפים אותך בשואב אבק רובוטי. הוא לפחות מנקה."], ["רציתי להעליב אותך…", "אבל החדר שלך כבר עשה את זה יותר טוב.", "רציתי להעליב אותך…", "אבל החדר שלך כבר עשה את זה יותר טוב."], ["שאלתי את סירי מי הכי מבולגן בבית…", "היא שלחה לי את המיקום שלך.", "שאלתי את סירי מי הכי מבולגנת בבית…", "היא שלחה לי את המיקום שלך."], ["אתה כמו פאזל…", "חסרים לך כמה חלקים.", "את כמו פאזל…", "חסרים לך כמה חלקים."], ["אם היו נותנים נקודות על תירוצים…", "כבר היית קונה את הבית.", "אם היו נותנים נקודות על תירוצים…", "כבר היית קונה את הבית."], ["אתה תמיד מביא שמחה לבית…", "כשאתה יוצא ממנו.", "את תמיד מביאה שמחה לבית…", "כשאת יוצאת ממנו."], ["יש לך דקה להקשיב לי?", "ברור שיש לך. אתה הרי לא עושה כלום.", "יש לך דקה להקשיב לי?", "ברור שיש לך. את הרי לא עושה כלום."], ["אתה כמו מכונת כביסה…", "מסתובב במקום, רועש, ובסוף הכל עדיין מלוכלך.", "את כמו מכונת כביסה…", "מסתובבת במקום, רועשת, ובסוף הכל עדיין מלוכלך."], ["המלך רצה לתת לך עצה…", "אבל הוא לא מבזבז חוכמה על מי שלא יקשיב.", "המלך רצה לתת לך עצה…", "אבל הוא לא מבזבז חוכמה על מי שלא תקשיב."], ["אתה הסיבה שיש על השמפו הוראות…", "גם אז לא קראת.", "את הסיבה שיש על השמפו הוראות…", "גם אז לא קראת."], ["קראנו את היומן שלך…", "שלושה עמודים של 'עוד חמש דקות'.", "קראנו את היומן שלך…", "שלושה עמודים של 'עוד חמש דקות'."], ["אתה כמו האינטרנט בבית ספר…", "איטי, נתקע, ובסוף כולם מוותרים.", "את כמו האינטרנט בבית ספר…", "איטית, נתקעת, ובסוף כולם מוותרים."], ["יש לך כישרון נדיר…", "להפוך חדר לפח זבל בעשר דקות.", "יש לך כישרון נדיר…", "להפוך חדר לפח זבל בעשר דקות."], ["רצינו לעשות לך מסיבת הפתעה…", "אף אחד לא הסכים לבוא.", "רצינו לעשות לך מסיבת הפתעה…", "אף אחד לא הסכים לבוא."], ["אתה כמו השלט של המזגן…", "תמיד נעלם בדיוק כשצריך אותך.", "את כמו השלט של המזגן…", "תמיד נעלמת בדיוק כשצריך אותך."], ["אם היו מחלקים פרס על מאמץ…", "היית מתעצל לבוא לקחת אותו.", "אם היו מחלקים פרס על מאמץ…", "היית מתעצלת לבוא לקחת אותו."], ["הצל שלך ביקש לשמור מרחק…", "הוא אומר שאתה מביך אותו.", "הצל שלך ביקש לשמור מרחק…", "הוא אומר שאת מביכה אותו."], ["אתה כמו פרסומת ביוטיוב…", "כולם רק מחכים שתיגמר.", "את כמו פרסומת ביוטיוב…", "כולם רק מחכים שתיגמרי."], ["מדדנו כמה זמן לוקח לך לסדר את החדר…", "השעון עדיין רץ. מאז 2023.", "מדדנו כמה זמן לוקח לך לסדר את החדר…", "השעון עדיין רץ. מאז 2023."], ["אתה הבן הכי טוב שיש לנו…", "בתחרות של מתמודד אחד.", "את הבת הכי טובה שיש לנו…", "בתחרות של מתמודדת אחת.", "k"], ["המחשבון שלך ביקש לפרוש…", "נמאס לו לעשות לך את שיעורי הבית.", "המחשבון שלך ביקש לפרוש…", "נמאס לו לעשות לך את שיעורי הבית.", "k"], ["אתה כמו יום ראשון בבוקר…", "אף אחד לא שמח לראות אותך.", "את כמו יום ראשון בבוקר…", "אף אחד לא שמח לראות אותך."], ["אם היית אפליקציה…", "היו מוחקים אותך כדי לפנות מקום.", "אם היית אפליקציה…", "היו מוחקים אותך כדי לפנות מקום."], ["אתה כמו קבוצת וואטסאפ של ועד הבית…", "רועש, מעצבן, ואין דרך לצאת.", "את כמו קבוצת וואטסאפ של ועד הבית…", "רועשת, מעצבנת, ואין דרך לצאת."], ["ביקשנו מבינה מלאכותית לתאר אותך…", "היא ביקשה הפסקה.", "ביקשנו מבינה מלאכותית לתאר אותך…", "היא ביקשה הפסקה."], ["אתה בדיוק כמו ממתק…", "מזיק, מיותר, ואף אחד לא צריך אותך באמת.", "את בדיוק כמו ממתק…", "מזיקה, מיותרת, ואף אחד לא צריך אותך באמת."]];
 const splashState = { gone: false, close: null, personalized: false, timer: null };
+// Last week's winner on the splash, once the logs are in (it can arrive after the personal line).
+function splashWinner(){
+  const el = $('splashWinner'); if (!el || splashState.gone || !S.logsLoaded || !el.hidden) return;
+  const w = lastWeekWinners(); if (!w) return;
+  const f = w.ids.length === 1 && member(w.ids[0])?.gender === 'f';
+  el.textContent = `🏆 ${w.ids.length > 1 ? 'המנצחים' : f ? 'המנצחת' : 'המנצח'} של השבוע שעבר: ${w.ids.map(mName).join(' ו')} · ${w.pts} נקודות`;
+  el.hidden = false;
+}
 function updateSplash(){
+  splashWinner();
   if (splashState.gone || splashState.personalized) return;
   const id = S.boundId; const m = id ? member(id) : null;
   if (S.isAdmin || (m && roleOf(id) === 'admin')){
@@ -1856,6 +1910,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   $('login-gfallback').addEventListener('click', adminSignIn);
   $('join-go').addEventListener('click', sendJoin);
   $('join-name').addEventListener('keydown', e => { if (e.key === 'Enter') sendJoin(); });
+  $('join-link').addEventListener('change', () => { $('join-link').blur(); render(); });
   $('join-out').addEventListener('click', () => signOut(auth));
   $('wait-out').addEventListener('click', () => signOut(auth));
   $('wait-cancel').addEventListener('click', cancelJoin);

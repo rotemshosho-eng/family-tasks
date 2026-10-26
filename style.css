@@ -563,3 +563,6 @@ section.acc.open .acc-caret{transform:rotate(180deg)}
 section.acc:not(.open) .acc-body{display:none}
 section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:column;gap:12px}
 #view-admin{gap:10px}
+
+/* last week's winner on the opening splash */
+.splash-winner{position:relative;margin:14px 0 0;padding:8px 16px;border-radius:999px;background:rgb(255 184 77 / .16);border:1px solid rgb(255 184 77 / .5);color:#FFD27A;font:600 clamp(.95rem,4.2vw,1.15rem)/1.35 var(--body);max-width:26ch;text-wrap:balance;animation:rise .5s both}

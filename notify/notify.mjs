@@ -184,7 +184,7 @@ for (const m of members) {
 // 5. Saturday night: who won the week (Sunday to Saturday), once a week
 if (dow === 6 && hour >= 20 && state.ceremonyDay !== today) {
   const weekStart = daysAgo(6);
-  const totals = members.map(m => ({ m, pts: allLogs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && counted(l) && l.day >= weekStart && l.day <= today)
+  const totals = members.map(m => ({ m, pts: allLogs.filter(l => l.memberId === m.id && l.kind !== 'redeem' && l.wallet !== true && counted(l) && l.day >= weekStart && l.day <= today)
     .reduce((s, l) => s + (Number(l.points) || 0), 0) })).sort((a, b) => b.pts - a.pts);
   if (totals.length && totals[0].pts > 0) {
     const top = totals.filter(x => x.pts === totals[0].pts).map(x => x.m.name);

@@ -1,12 +1,14 @@
 // Full render test: fake signed-in user and fake family data, then render every tab. ADMIN=1 for admin, PLAIN=1 for plain mode.
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 const ADMIN = process.argv[2] === 'admin', PLAIN = process.argv[3] === 'plain', PARENT = process.argv[2] === 'parent';
-let src = fs.readFileSync(process.argv[4] || new URL('../app.js', import.meta.url).pathname,'utf8');
+let src = fs.readFileSync(process.argv[4] || fileURLToPath(new URL('../app.js', import.meta.url)),'utf8');
 src = src.replace(/^import \* as cfg from .*$/m, "const cfg = { firebaseConfig:{}, vapidKey:'', googleClientId:'' };")
          .replace(/^import \{[\s\S]*?\} from 'https:[^']+';$/gm, '');
 const stub = `
 const P = new Proxy(function(){}, { get:(t,k)=> k==='then'?undefined:P, apply:()=>P, construct:()=>P });
 const __now=new Date(); const d=new Date(__now.getTime()-__now.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const lw=new Date(__now.getTime()-7*864e5-__now.getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const DATA = {
   members:[{id:'m1',name:'רותם',color:'#2A7F9E',role:'admin',admin:true,gender:'m',order:0},{id:'m2',name:'נועה',color:'#C0504D',role:'child',gender:'f',order:1},{id:'m3',name:'אמא',color:'#7B5EA7',role:'parent',gender:'f',order:2,watch:true,canMarkFor:['m2','m4']},{id:'m4',name:'אבא',color:'#3B8C4A',role:'parent',gender:'m',order:3}],
   tasks:[{id:'t1',title:'לסדר את החדר',assignee:'all',type:'repeat',days:[0,1,2,3,4,5,6],timed:false,points:10,createdAt:1},
@@ -16,9 +18,10 @@ const DATA = {
          {id:'t5',title:'מחסן',assignee:'all',type:'once',days:[],timed:false,points:50,boss:true,createdAt:5}],
   logs:[{id:'l1',kind:'task',taskId:'t1',title:'לסדר את החדר',memberId:'m2',points:10,day:d,at:Date.now()-3600e3},
         {id:'l2',kind:'task',taskId:'t3',title:'גרביים',memberId:'m2',points:3,count:5,approved:false,day:d,at:Date.now()-60e3},
-        {id:'l4',kind:'bonus',title:'עזרה',memberId:'m3',by:'m3',points:20,flag:true,day:d,at:Date.now()},{id:'l3',kind:'redeem',title:'טלוויזיה',memberId:'m2',points:10,approved:false,loan:true,day:d,at:Date.now()}],
+        {id:'l4',kind:'bonus',title:'עזרה',memberId:'m3',by:'m3',points:20,flag:true,day:d,at:Date.now()},{id:'l3',kind:'redeem',title:'טלוויזיה',memberId:'m2',points:10,approved:false,loan:true,day:d,at:Date.now()},
+        {id:'l5',kind:'bonus',title:'דמי כיס',memberId:'m4',points:500,wallet:true,day:d,at:Date.now()},{id:'l6',kind:'task',taskId:'t1',title:'לסדר את החדר',memberId:'m2',points:10,day:lw,at:Date.now()-7*864e5}],
   timers:[], messages:[], profiles:[], rewards:[{id:'r1',title:'15 דקות טלוויזיה',cost:10,emoji:'📺',createdAt:1}],
-  complaints:[{id:'c1',text:'בדיקה',cat:'fun',by:'m2',about:'',status:'open',agree:[],at:Date.now()}], cpComments:[], challengeJoins:[], photos:[], devNotes:[{id:'n1',text:'x',kind:'bug',by:'m2',status:'doing',at:1}], joinRequests:[], pins:[]
+  complaints:[{id:'c1',text:'בדיקה',cat:'fun',by:'m2',about:'',status:'open',agree:[],at:Date.now()}], cpComments:[], challengeJoins:[], photos:[], devNotes:[{id:'n1',text:'x',kind:'bug',by:'m2',status:'doing',at:1}], joinRequests:[{id:'g1',name:'אבא',color:'#3B8C4A',email:'dad@example.com',linkTo:'m4',at:1}], pins:[]
 };
 const DOCS = { 'settings/goal':{target:100,prize:'פיצה'}, 'settings/challenge':{title:'חג',target:10,start:d,until:d,prize:'',bonus:5}, 'settings/money':{points:100,shadows:0}, 'settings/perms':{parentPoints:true},
   'bindings/u1': ${ADMIN ? 'null' : PARENT ? "{memberId:'m3',pin:'1'}" : "{memberId:'m2',pin:'1234'}"}, 'adminSessions/u1': ${ADMIN ? "{code:'x'}" : 'null'} };

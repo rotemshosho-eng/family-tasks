@@ -26,6 +26,7 @@
   <h1 class="splash-title" id="splashTitle">השתחוו לרותם המלך</h1>
   <p class="splash-setup" id="splashSetup" hidden></p>
   <p class="splash-roast" id="splashRoast" hidden></p>
+  <p class="splash-winner" id="splashWinner" hidden></p>
   <div class="splash-bows" aria-hidden="true"><span>🙇</span><span>🙇‍♀️</span><span>🙇</span></div>
 </div>
 <div class="wrap">
@@ -50,7 +51,7 @@
     <h2 id="login-title">מי אתה?</h2>
 
     <div id="login-google" class="stack-sm">
-      <p class="sub">נכנסים עם חשבון הגוגל. בפעם הראשונה בוחרים שם, ואחרי אישור אפשר להתחיל.</p>
+      <p class="sub">נכנסים עם חשבון הגוגל. בפעם הראשונה בוחרים שם, או את השם שכבר יש לך בלוח, ואחרי אישור אפשר להתחיל.</p>
       <div class="gbtn" id="login-gbtn"></div>
       <button type="button" class="btn ghost" id="login-gfallback" hidden>כניסה עם Google</button>
       <div class="or"><span>או עם קוד</span></div>
@@ -58,13 +59,14 @@
 
     <div id="login-join" class="stack-sm" hidden>
       <p class="sub" id="join-email"></p>
-      <div class="field"><label for="join-name">איך לקרוא לך?</label><input type="text" id="join-name" maxlength="20" placeholder="השם שיופיע בלוח"></div>
-      <div class="field"><span class="lab">צבע</span><div class="swatches" id="join-colors"></div></div>
+      <div class="field" id="join-linkwrap"><label for="join-link">כבר יש לך שם בלוח?</label><select id="join-link"></select></div>
+      <div class="field" id="join-namewrap"><label for="join-name">איך לקרוא לך?</label><input type="text" id="join-name" maxlength="20" placeholder="השם שיופיע בלוח"></div>
+      <div class="field" id="join-colorwrap"><span class="lab">צבע</span><div class="swatches" id="join-colors"></div></div>
       <div class="row"><button type="button" class="btn" id="join-go">הצטרפות</button><button type="button" class="btn ghost" id="join-out">יציאה</button></div>
     </div>
 
     <div id="login-wait" class="stack-sm" hidden>
-      <p><strong id="wait-name"></strong>, הבקשה שלך נשלחה. ברגע שמנהל הלוח יאשר, הלוח ייפתח כאן.</p>
+      <p><strong id="wait-name"></strong>, הבקשה שלך נשלחה<span id="wait-link"></span>. ברגע שמנהל הלוח יאשר, הלוח ייפתח כאן.</p>
       <div class="row"><button type="button" class="btn ghost" id="wait-cancel">ביטול הבקשה</button><button type="button" class="btn ghost" id="wait-out">יציאה</button></div>
     </div>
 
@@ -325,6 +327,7 @@
         <div class="field"><label for="bf-points">כמה (מינוס כדי להוריד)</label><input type="number" id="bf-points" value="5" inputmode="numeric"></div>
       </div>
       <div class="field"><label for="bf-reason">סיבה</label><input type="text" id="bf-reason" maxlength="60" placeholder="למשל: עזרה בלי שביקשו"></div>
+      <label class="check"><input type="checkbox" id="bf-wallet"> רק לארנק 🐷: הנקודות נכנסות ליתרה ואפשר להחליף אותן, אבל לא נספרות בתחרות השבועית</label>
       <div><button type="button" class="btn" id="bf-save">עדכון נקודות</button></div>
       <label class="check"><input type="checkbox" id="perm-parentPts"> הורים יכולים לתת ולהוריד נקודות, גם לעצמם (עד 100 בכל פעם). אתה רואה כל שינוי ויכול לשנות או למחוק. הורה במעקב (🚩, בעריכת בן משפחה) צריך אישור שלך על כל פעולה.</label>
       <div id="ppAdmin" hidden>

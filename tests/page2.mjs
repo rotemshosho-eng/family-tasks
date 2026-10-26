@@ -2,7 +2,8 @@
 // Usage:  node tests/run2.mjs <kid|parent|admin> [plain]  &&  node tests/page2.mjs <label>
 import { chromium } from 'playwright';
 import fs from 'fs';
-const ROOT = new URL('../', import.meta.url).pathname, HERE = new URL('./', import.meta.url).pathname;
+import { fileURLToPath } from 'url';
+const ROOT = fileURLToPath(new URL('../', import.meta.url)), HERE = fileURLToPath(new URL('./', import.meta.url));
 const b = await chromium.launch(); const p = await b.newPage({ viewport:{ width:390, height:900 } }); const errs = [];
 p.on('pageerror', e => errs.push(String(e.stack || e)));
 await p.route('**/*', r => r.request().url().startsWith('http://t/') ? r.continue() : r.abort());

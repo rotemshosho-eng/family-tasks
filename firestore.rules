@@ -196,11 +196,13 @@ service cloud.firestore {
     }
 
     // בקשות הצטרפות עם חשבון גוגל: כל אחד שולח בקשה בשם עצמו, רק המנהל רואה את כולן ומאשר.
+    // linkTo: "אני כבר בלוח" — בקשה לחבר את הגוגל לבן משפחה קיים. רק המנהל מחבר בפועל (members נכתב רק על ידו).
     match /joinRequests/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.auth.token.firebase.sign_in_provider == 'google.com'
-        && request.resource.data.keys().hasOnly(['name','color','email','at'])
+        && request.resource.data.keys().hasOnly(['name','color','email','linkTo','at'])
+        && (!('linkTo' in request.resource.data) || (request.resource.data.linkTo is string && memberExists(request.resource.data.linkTo)))
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 20
         && request.resource.data.color is string && request.resource.data.color.size() <= 9
