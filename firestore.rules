@@ -328,7 +328,10 @@ service cloud.firestore {
 
     // הערות למפתח: כל אחד שולח בשמו, רק המנהל קורא ומטפל.
     match /devNotes/{id} {
-      allow read, update, delete: if isAdmin();
+      allow update: if isAdmin();
+      // the writer sees their own notes, and deletes them once handled ("טופל") and seen
+      allow read: if isAdmin() || (signedIn() && boundTo(resource.data.by));
+      allow delete: if isAdmin() || (resource.data.status == 'done' && boundTo(resource.data.by));
       allow create: if request.resource.data.keys().hasOnly(['text','kind','by','status','at'])
         && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 800
         && request.resource.data.kind in ['bug','idea','ux','other']

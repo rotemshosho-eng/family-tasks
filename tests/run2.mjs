@@ -30,7 +30,7 @@ const snapCol=name=>({ docs:(DATA[name]||[]).map(x=>({id:x.id,data:()=>{const {i
 const onSnapshot=(ref,ok)=>{ setTimeout(()=>{ try{ if(ref.kind==='col') ok(snapCol(ref.name)); else { const v=DOCS[ref.path]; ok({exists:()=>!!v,data:()=>v}); } }catch(e){ window.__errs.push('snapshot '+(ref.name||ref.path)+': '+e.stack); } },0); return ()=>{}; };
 const getDoc=async ref=>{ if(${ADMIN} && ref.path==='private/admin') return {exists:()=>true,data:()=>({code:'x'})}; throw Object.assign(new Error('denied'),{code:'permission-denied'}); };
 const onAuthStateChanged=(auth,cb)=>{ setTimeout(()=>cb({uid:'u1',isAnonymous:true}),0); return ()=>{}; };
-const initializeApp=P,deleteField=P,initializeFirestore=P,persistentLocalCache=P,persistentMultipleTabManager=P,_addDoc=async()=>({id:'x'}),_updateDoc=async()=>{},_deleteDoc=async()=>{},_setDoc=async()=>{},_writeBatch=()=>({set(){},delete(){},update(){},commit:async()=>{}}),serverTimestamp=P,arrayUnion=P,arrayRemove=P,
+const initializeApp=P,deleteField=P,initializeFirestore=P,persistentLocalCache=P,persistentMultipleTabManager=P,_addDoc=async()=>({id:'x'}),_updateDoc=async()=>{},_deleteDoc=async()=>{},_setDoc=async()=>{},_writeBatch=()=>({set(){},delete(){},update(){},commit:async()=>{}}),serverTimestamp=P,arrayUnion=P,arrayRemove=P,query=(r)=>r,where=P,
 getAuth=()=>({}),signInAnonymously=P,GoogleAuthProvider=P,signInWithPopup=P,signInWithRedirect=P,getRedirectResult=async()=>null,signOut=P,signInWithCredential=P,getMessaging=P,getToken=P,onMessage=P,isSupported=async()=>false;
 try{ localStorage.setItem('ft-plain','${PLAIN ? '1' : '0'}'); }catch(e){}
 `;

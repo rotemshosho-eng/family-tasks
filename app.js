@@ -2,7 +2,7 @@ import * as cfg from './firebase-config.js';
 const firebaseConfig = cfg.firebaseConfig;
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { deleteField, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, addDoc as _addDoc, updateDoc as _updateDoc, deleteDoc as _deleteDoc, setDoc as _setDoc, getDoc, writeBatch as _writeBatch, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  collection, doc, onSnapshot, addDoc as _addDoc, updateDoc as _updateDoc, deleteDoc as _deleteDoc, setDoc as _setDoc, getDoc, writeBatch as _writeBatch, serverTimestamp, arrayUnion, arrayRemove, query, where } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1377,7 +1377,7 @@ function closeTop(){
   if (S.openPick){ S.openPick = null; return true; }
   if (S.chatOpen){ if (typeof markSeen_chat === 'function') markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; return true; }
   if (S.profileOpen){ S.profileOpen = null; return true; }
-  if (S.dnOpen){ S.dnOpen = false; return true; }
+  if (S.dnOpen){ S.dnOpen = false; const seen = [...S.dnSeen]; S.dnSeen.clear(); if (seen.length) clearSeenNotes(seen); return true; }
   if (S.cpOpen){ S.cpOpen = false; return true; }
   if (S.viewAs){ S.viewAs = null; S.tab = 'admin'; return true; }
   if (S.tab !== 'today'){ S.tab = 'today'; window.scrollTo(0, 0); return true; }
@@ -1463,7 +1463,34 @@ async function sendDevNote(){
   try{ await addDoc(collection(db,'devNotes'), { text, kind:dnKind, by, status:'new', at:Date.now() }); $('dnText').value = ''; toast('נשלח למנהל. תודה! 🛠️'); }
   catch(e){ fail(e); } finally{ btn.disabled = false; }
 }
+// The writer of a note sees its status; once it's handled and they've seen it, it deletes itself.
+let myNotesUnsub = null;
+function watchMyNotes(){
+  const id = (!S.isAdmin && S.boundId && !S.viewAs) ? S.boundId : null;
+  if (id === S.myNotesFor) return;
+  if (myNotesUnsub){ myNotesUnsub(); myNotesUnsub = null; } S.myNotes = []; S.myNotesFor = id;
+  if (!id || !db) return;
+  myNotesUnsub = onSnapshot(query(collection(db,'devNotes'), where('by', '==', id)), s => { S.myNotes = s.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, e => console.error(e));
+}
+async function clearSeenNotes(ids){
+  for (const id of ids){ try{ await _deleteDoc(doc(db,'devNotes',id)); }catch(e){ console.error(e); } }
+}
+function renderMyNotes(){
+  const done = S.myNotes.filter(n => n.status === 'done');
+  const bar = $('dnDoneBar'); bar.hidden = !done.length || S.dnOpen;
+  if (done.length){ bar.replaceChildren(h('span', null, `✓ ${done.length === 1 ? 'ההערה שלך למפתח טופלה' : `${done.length} הערות שלך למפתח טופלו`}: ${done.map(n => n.text.slice(0, 40)).join(' · ')}`),
+    h('button', { type:'button', class:'btn small', onclick:() => clearSeenNotes(done.map(n => n.id)) }, 'ראיתי')); }
+  const sec = $('dnMine'); sec.hidden = S.isAdmin || !S.myNotes.length;
+  const L = $('dnMineList'); L.replaceChildren();
+  const rank = { done:0, doing:1, new:2 };
+  S.myNotes.slice().sort((a,b) => (rank[a.status] ?? 2) - (rank[b.status] ?? 2) || b.at - a.at).forEach(n => {
+    if (S.dnOpen && n.status === 'done') S.dnSeen.add(n.id);
+    L.append(h('div', { class:'cp' + (n.status === 'done' ? ' cp-done' : n.status === 'doing' ? ' cp-doing' : '') },
+      h('div', { class:'cp-head' }, h('div', { class:'cp-who' }, h('strong', null, n.text)), h('span', { class:'cp-status' }, n.status === 'done' ? '✓ טופל' : n.status === 'doing' ? '🔧 בטיפול' : 'נשלח'))));
+  });
+}
 function renderDevNotes(){
+  watchMyNotes(); renderMyNotes();
   const fresh = S.realAdmin ? S.devNotes.filter(n => n.status === 'new').length : 0;
   $('dnFab').hidden = true; // one button opens both (see fabMenu)
   $('fabMenu').hidden = !S.fabMenu || $('cpFab').hidden;
@@ -1764,7 +1791,7 @@ function buildStatic(){
   $('cpSend').addEventListener('click', sendComplaint);
   $('dnFab').addEventListener('click', () => { S.dnOpen = true; render(); });
   $('fmCp').addEventListener('click', () => { S.fabMenu = false; openComplaints(); });
-  $('fmDn').addEventListener('click', () => { S.fabMenu = false; S.dnOpen = true; render(); }); $('dnBack').addEventListener('click', () => { S.dnOpen = false; render(); });
+  $('fmDn').addEventListener('click', () => { S.fabMenu = false; S.dnOpen = true; render(); }); $('dnBack').addEventListener('click', () => { S.dnOpen = false; const seen = [...S.dnSeen]; S.dnSeen.clear(); if (seen.length) clearSeenNotes(seen); render(); });
   $('dnSend').addEventListener('click', sendDevNote); initDevNotes();
   document.querySelectorAll('input[name=cpf]').forEach(r => r.addEventListener('change', render));
   initComplaints();

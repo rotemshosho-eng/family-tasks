@@ -83,6 +83,7 @@
 
   <!-- TODAY -->
   <main id="view-today" class="section stack">
+    <div class="donebar" id="dnDoneBar" hidden></div>
     <div class="watchbar" id="watchBar" hidden>🚩 החשבון שלך במעקב: כל פעולה מחכה לאישור המנהל.</div>
     <div class="who" id="who"></div>
     <section class="section" id="bossSec" hidden>
@@ -431,6 +432,11 @@
       <div class="chips" id="dnKinds"></div>
       <div class="field"><label for="dnText">ההערה</label><textarea id="dnText" rows="4" maxlength="800" placeholder="למשל: הכפתור של הטיימר קטן מדי"></textarea></div>
       <div><button type="button" class="btn" id="dnSend">שליחה למנהל</button></div>
+    </section>
+    <section class="section" id="dnMine" hidden>
+      <div class="section-head"><h2>ההערות שלי</h2></div>
+      <p class="sub">הערה שטופלה נמחקת מעצמה אחרי שראית אותה.</p>
+      <div class="list" id="dnMineList"></div>
     </section>
     <section class="section" id="dnInbox" hidden>
       <div class="section-head"><h2>תיבת ההערות</h2><span class="count" id="dnCount"></span></div>
