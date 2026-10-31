@@ -260,7 +260,8 @@ service cloud.firestore {
     match /settings/{id} {
       allow read: if signedIn();
       allow write: if isAdmin() || (id == 'challenge'
-        && request.resource.data.keys().hasOnly(['title','target','items','start','until','prize','bonus','by'])
+        && request.resource.data.keys().hasOnly(['title','target','items','cid','start','until','prize','bonus','by'])
+        && (!('cid' in request.resource.data) || (request.resource.data.cid is string && request.resource.data.cid.size() <= 60))
         && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
         && (!('bonus' in request.resource.data) || (request.resource.data.bonus is int && request.resource.data.bonus >= 0 && request.resource.data.bonus <= 1000))
         && request.resource.data.title is string && request.resource.data.title.size() <= 40
@@ -362,7 +363,8 @@ service cloud.firestore {
         && request.resource.data.itemId == itemId
         && request.resource.data.at is int
         && memberExists(request.resource.data.memberId)
-        && request.resource.data.key == get(/databases/$(database)/documents/settings/challenge).data.start + '|' + get(/databases/$(database)/documents/settings/challenge).data.title
+        && request.resource.data.key == get(/databases/$(database)/documents/settings/challenge).data.get('cid',
+             get(/databases/$(database)/documents/settings/challenge).data.start + '|' + get(/databases/$(database)/documents/settings/challenge).data.title)
         && ((!('by' in request.resource.data) && boundTo(request.resource.data.memberId))
           || (request.resource.data.by is string && boundTo(request.resource.data.by)
               && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent')));

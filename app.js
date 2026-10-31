@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1138,7 +1138,8 @@ function renderBoss(){
 /* ---------- family challenge with a deadline ---------- */
 // The challenge has its own task list (c.items), separate from the regular tasks. Each item is marked done once
 // (challengeItems/<itemId>), by whoever did it. Who takes part: marked themselves (or marked by a parent), or did an item.
-const challengeKey = c => `${c.start}|${c.title}`;
+// cid: the challenge's id, kept when it is edited (older challenges: start|title)
+const challengeKey = c => c.cid || `${c.start}|${c.title}`;
 const chItems = c => Array.isArray(c?.items) ? c.items.filter(i => i && i.id && i.title) : [];
 const itemDone = (c, it) => { const d = S.citems[it.id]; return d && d.key === challengeKey(c) ? d : null; };
 const didInChallenge = (c, id) => chItems(c).some(it => itemDone(c, it)?.memberId === id);
@@ -1160,7 +1161,9 @@ async function unmarkItem(it){ try{ await deleteDoc(doc(db,'challengeItems',it.i
 const canUnmark = d => S.isAdmin || d.memberId === S.boundId || isParentNow();
 function challengeCount(c){ return chItems(c).filter(it => itemDone(c, it)).length; }
 function renderChallenge(){
-  $('chEditor').hidden = !canEditGoal();
+  const canEd = canEditGoal(); if (!canEd) S.chEdit = null;
+  $('chEditor').hidden = !S.chEdit; $('chNewWrap').hidden = !canEd || !!S.chEdit;
+  $('chEndWrap').replaceChildren(S.chEdit === 'edit' ? armedBtn('chEnd', 'סיום האתגר', endChallenge) : '');
   const c = S.challenge; const td = today(); const items = chItems(c);
   const on = !!c && items.length > 0 && c.until && dayGap(c.until, td) <= 2;
   document.querySelectorAll('[data-challenge]').forEach(el => {
@@ -1191,26 +1194,46 @@ function renderChallenge(){
             title: auto ? 'סימן/ה משימה באתגר' : '', onclick: () => toggleJoin(c, m.id) },
             h('span', { class:'dot', style:`background:${m.color}` }), m.name, on ? ' ✓' : ''); })),
       (!done && !over && S.boundId && !didInChallenge(c, S.boundId) && !markedIn(c, S.boundId))
-        ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : '');
+        ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : '',
+      canEditGoal() ? h('button', { type:'button', class:'linkbtn ch-edit', onclick: () => openChallengeEdit('edit') }, '✏️ עריכת האתגר') : '');
   });
 }
 const itemsText = c => chItems(c).map(i => i.title).join('\n');
+// mode 'edit': the current challenge, filled in; 'new': an empty form (saving replaces the current challenge)
+function openChallengeEdit(mode){
+  const c = mode === 'edit' && chItems(S.challenge).length ? S.challenge : null;
+  S.chEdit = c ? 'edit' : 'new';
+  $('ch-title').value = c?.title || ''; $('ch-items').value = c ? itemsText(c) : ''; $('ch-until').value = c?.until || '';
+  $('ch-prize').value = c?.prize || ''; $('ch-bonus').value = c?.bonus || '';
+  $('chHead').textContent = c ? '✏️ עריכת האתגר' : '⚡ אתגר משפחתי חדש';
+  $('chIntro').textContent = c ? 'משימות שלא שינית שומרות את הסימון שלהן. משימה שמחקת נמחקת עם הסימון שלה.'
+    : chItems(S.challenge).length ? 'שמירה של אתגר חדש מחליפה את האתגר הנוכחי.' : 'כל המשפחה ביחד, מול השעון: רשימת משימות של האתגר עצמו, נפרדת מהמשימות הרגילות, עד תאריך מסוים.';
+  S.tab = 'family'; render();
+  setTimeout(() => { $('chEditor').scrollIntoView({ behavior:'smooth', block:'start' }); $('ch-title').focus({ preventScroll:true }); }, 0);
+}
+function closeChallengeEdit(){ S.chEdit = null; render(); }
+async function endChallenge(){
+  const c = S.challenge;
+  try{ await setDoc(doc(db,'settings','challenge'), { title: c?.title || '', target: 0, items: [], start: c?.start || today(), until: c?.until || today(), prize: '', bonus: 0, ...(S.isAdmin ? {} : { by: S.boundId }) });
+    S.chEdit = null; toast('האתגר הסתיים'); render(); }catch(e){ fail(e); }
+}
 async function saveChallenge(){
   const title = $('ch-title').value.trim(); const bonus = Math.round(Number($('ch-bonus').value)) || 0; const until = $('ch-until').value; const prize = $('ch-prize').value.trim();
   const lines = [...new Set($('ch-items').value.split('\n').map(x => x.trim().slice(0, 60)).filter(Boolean))];
   if (!canEditGoal()){ toast('רק הורה או מנהל'); return; }
   if (lines.length > 30){ toast('עד 30 משימות באתגר'); return; }
-  if (lines.length){
-    if (!title){ toast('כתבו שם לאתגר'); return; }
-    if (!(bonus >= 0 && bonus <= 1000)){ toast('בונוס: בין 0 ל-1000 נקודות'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today()){ toast('בחרו תאריך סיום מהיום והלאה'); return; }
-  }
-  const old = S.challenge; const same = old && chItems(old).length > 0 && old.until >= today() && old.title === title;
+  if (!lines.length){ toast(S.chEdit === 'edit' ? 'כתבו לפחות משימה אחת. כדי לסיים את האתגר יש כפתור "סיום האתגר".' : 'כתבו לפחות משימה אחת'); $('ch-items').focus(); return; }
+  if (!title){ toast('כתבו שם לאתגר'); return; }
+  if (!(bonus >= 0 && bonus <= 1000)){ toast('בונוס: בין 0 ל-1000 נקודות'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || (until < today() && !(S.chEdit === 'edit' && until === S.challenge?.until))){ toast('בחרו תאריך סיום מהיום והלאה'); return; }
+  const old = S.challenge; const same = S.chEdit === 'edit' && old && chItems(old).length > 0;
   // an edited list keeps the ids (and the done marks) of tasks whose text didn't change
   const prev = same ? chItems(old) : [];
   const items = lines.map(t => prev.find(i => i.title === t) || { id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4), title: t });
-  const data = { title, target: items.length, items, start: same ? old.start : today(), until: until || today(), prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
-  try{ await setDoc(doc(db,'settings','challenge'), data); toast(items.length ? 'האתגר נשמר. בהצלחה!' : 'האתגר בוטל'); }catch(e){ fail(e); }
+  // editing keeps the id (marks and joins stay); a new challenge gets a fresh one
+  const cid = same ? challengeKey(old) : `${today()}|${Math.random().toString(36).slice(2, 10)}`;
+  const data = { title, target: items.length, items, cid, start: same ? old.start : today(), until, prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
+  try{ await setDoc(doc(db,'settings','challenge'), data); toast(same ? 'השינויים נשמרו' : 'האתגר נשמר. בהצלחה!'); S.chEdit = null; render(); }catch(e){ fail(e); }
 }
 
 /* ---------- loans: ask for a reward before having enough points; a parent approves ---------- */
@@ -1394,7 +1417,7 @@ function syncHistory(){
 window.addEventListener('popstate', () => { if (closeTop()) render(); syncHistory(); });
 
 /* ---------- forms that open from a button (like "+ הוספת משימה"), outside the admin tab ---------- */
-const COLLAPSIBLES = [['chEditor','+ אתגר משפחתי'], ['goalEditor','+ יעד חודשי'], ['exEditor','+ הוספת החלפה'], ['rw-use','+ השתמשתי בנקודות'], ['cpForm','+ תלונה חדשה']];
+const COLLAPSIBLES = [['goalEditor','+ יעד חודשי'], ['exEditor','+ הוספת החלפה'], ['rw-use','+ השתמשתי בנקודות'], ['cpForm','+ תלונה חדשה']];
 function setupCollapsibles(){
   for (const [id, label] of COLLAPSIBLES){
     const panel = $(id); if (!panel) continue;
@@ -1784,6 +1807,8 @@ function buildStatic(){
   $('sg-assignee').addEventListener('change', () => { $('sg-rotwrap').hidden = $('sg-assignee').value !== 'rotate'; });
   $('gl-save').addEventListener('click', saveGoal);
   $('ch-save').addEventListener('click', saveChallenge);
+  $('ch-cancel').addEventListener('click', closeChallengeEdit);
+  $('ch-new').addEventListener('click', () => openChallengeEdit('new'));
   $('tf-assignee').addEventListener('change', () => { $('tf-rotwrap').hidden = $('tf-assignee').value !== 'rotate'; });
   $('ru-save').addEventListener('click', saveUse);
   $('chatBack').addEventListener('click', closeChat);
@@ -2057,7 +2082,6 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','challenge'), s => {
       S.challenge = s.exists() ? s.data() : null; const c = S.challenge;
-      if (c && !['ch-title','ch-items','ch-until','ch-prize','ch-bonus'].includes(document.activeElement?.id)){ $('ch-bonus').value = c.bonus || ''; $('ch-title').value = c.title || ''; $('ch-items').value = itemsText(c); $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
       render();
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','perms'), s => { S.perms = s.exists() ? s.data() : {}; render(); }, e => console.error(e)));

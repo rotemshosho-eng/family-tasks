@@ -166,7 +166,7 @@ for (const m of members) {
   // the challenge has its own task list (c.items); done marks live in challengeItems/<itemId>
   const items = Array.isArray(c?.items) ? c.items.filter(i => i && i.id) : [];
   if (c && items.length && c.bonus > 0 && c.start && c.until) {
-    const key = `${c.start}|${c.title}`;
+    const key = c.cid || `${c.start}|${c.title}`;
     const marks = (await db.collection('challengeItems').get()).docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.key === key && items.some(i => i.id === d.id));
     const paid = allLogs.some(l => l.auto === 'challenge' && l.key === key);
     if (marks.length >= items.length && !paid) {

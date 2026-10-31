@@ -590,3 +590,7 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .splash-roast.stamp.praise{background:linear-gradient(120deg,#F5B400,#FFD36B);color:#2A1C00;box-shadow:0 14px 40px rgb(245 180 0 / .4), inset 0 1px 0 rgb(255 255 255 / .35)}
 .splash-roast.stamp.praise::after{content:"👑"}
 .hero-roast .hr-punch.praise{color:#B7791F}
+.ch-edit{display:block;margin-top:10px}
+#chNewWrap{display:flex}
+#ch-items{font:inherit;font-size:16px;line-height:1.6;color:var(--ink);background:var(--sunk);border:2px solid transparent;border-radius:var(--r-md);padding:9px 12px;width:100%;resize:vertical}
+#ch-items:focus{border-color:var(--accent);outline:none}

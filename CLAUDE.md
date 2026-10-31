@@ -42,7 +42,7 @@ It caught a real blank-screen bug (using `store` before it was defined). Run it 
 - Tasks: fixed points, timed (`ratePerMin`, `maxMinutes`), quantity (`qtyPer`, `qtyUnit`), boss (×3, once), `assignee` = member id / `all` / `each` / `rotate`, optional `untilTime`, optional `check` (needs approval).
 - Splash/home jokes: `SPLASH_JOKES` (set-up + twist, `'k'` = kids only), `SILLY_NAMES` + `SILLY_INTROS`; 50/50 between them. Admin gets `PRAISE_POOL`.
 - Settings docs: `settings/goal`, `settings/challenge`, `settings/money`, `settings/perms` (`parentPoints`).
-- Challenge: its own task list `settings/challenge.items` (`{id,title}`, max 30), separate from regular tasks. Done marks in `challengeItems/<itemId>` (`key` = `start|title`, `memberId`, optional `by`). Bonus paid by notify.mjs when all items are done.
+- Challenge: its own task list `settings/challenge.items` (`{id,title}`, max 30), separate from regular tasks. Done marks in `challengeItems/<itemId>` (`key` = `cid`, or `start|title` for older challenges; editing keeps `cid`, `memberId`, optional `by`). Bonus paid by notify.mjs when all items are done.
 
 ## Working with Rotem
 - He writes in Hebrew (sometimes typed on an English keyboard layout — decode it).
