@@ -38,7 +38,13 @@ jobs:
           echo "Firestore: $LOC -> functions region: $R"
           echo "FN_REGION=$R" >> "$GITHUB_ENV"
       - name: Deploy
-        run: npx --yes firebase-tools@15.34.2 deploy --only functions --project family-tasks-b0fa7 --non-interactive --force
+        run: |
+          set -o pipefail
+          if ! npx --yes firebase-tools@15.34.2 deploy --only functions --project family-tasks-b0fa7 --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/deploy.log"; then
+            # surface the error as annotations, so it can be read without downloading the log
+            grep -iE "error|denied|permission|billing|enable|failed|required" "$RUNNER_TEMP/deploy.log" | tail -n 25 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+            exit 1
+          fi
       - name: Tell the GitHub notifier to leave real-time pushes to the functions
         working-directory: functions
         run: |
