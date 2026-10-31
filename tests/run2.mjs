@@ -10,7 +10,7 @@ const P = new Proxy(function(){}, { get:(t,k)=> k==='then'?undefined:P, apply:()
 const __now=new Date(); const d=new Date(__now.getTime()-__now.getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const lw=new Date(__now.getTime()-7*864e5-__now.getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const DATA = {
-  members:[{id:'m1',name:'רותם',color:'#2A7F9E',role:'admin',admin:true,gender:'m',order:0},{id:'m2',name:'נועה',color:'#C0504D',role:'child',gender:'f',order:1,canNudge:true},{id:'m3',name:'אמא',color:'#7B5EA7',role:'parent',gender:'f',order:2,watch:true,canMarkFor:['m2','m4']},{id:'m4',name:'אבא',color:'#3B8C4A',role:'parent',gender:'m',order:3}],
+  members:[{id:'m1',name:'רותם',color:'#2A7F9E',role:'admin',admin:true,gender:'m',order:0},{id:'m2',name:'נועה',color:'#C0504D',role:'child',gender:'f',order:1,canNudge:true,nudgeEveryMin:5},{id:'m3',name:'אמא',color:'#7B5EA7',role:'parent',gender:'f',order:2,watch:true,canMarkFor:['m2','m4']},{id:'m4',name:'אבא',color:'#3B8C4A',role:'parent',gender:'m',order:3}],
   tasks:[{id:'t1',title:'לסדר את החדר',assignee:'all',type:'repeat',days:[0,1,2,3,4,5,6],timed:false,points:10,createdAt:1},
          {id:'t2',title:'לקום',assignee:'each',type:'repeat',days:[0,1,2,3,4,5,6],timed:false,points:5,untilTime:'07:30',createdAt:2},
          {id:'t3',title:'גרביים',assignee:'m2',type:'repeat',days:[0,1,2,3,4,5,6],timed:false,points:3,qtyPer:5,qtyUnit:'גרביים',createdAt:3},

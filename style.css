@@ -594,3 +594,6 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 #chNewWrap{display:flex}
 #ch-items{font:inherit;font-size:16px;line-height:1.6;color:var(--ink);background:var(--sunk);border:2px solid transparent;border-radius:var(--r-md);padding:9px 12px;width:100%;resize:vertical}
 #ch-items:focus{border-color:var(--accent);outline:none}
+.nudge-min{display:inline-flex;align-items:center;gap:4px;font-size:.9rem;color:var(--muted)}
+.nudge-min input{width:4.5em!important;padding:6px 8px!important;text-align:center}
+#nudgeRights .arow{flex-wrap:wrap}

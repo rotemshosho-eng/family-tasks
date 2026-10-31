@@ -1558,7 +1558,11 @@ function renderNudgeAdmin(){
   S.members.filter(m => roleOf(m.id) !== 'admin').forEach(m => R.append(h('div', { class:'arow' },
     h('div', { class:'t' }, h('strong', null, m.name)),
     h('label', { class:'check' }, h('input', { type:'checkbox', checked: m.canNudge === true, onchange: e => updateDoc(doc(db,'members',m.id), { canNudge: e.target.checked }).catch(fail) }), ' יכול להקפיץ'),
-    h('label', { class:'check' }, h('input', { type:'checkbox', checked: m.nudgeLimited !== false, disabled: m.canNudge !== true, onchange: e => updateDoc(doc(db,'members',m.id), { nudgeLimited: e.target.checked }).catch(fail) }), ' עם הגבלה'))));
+    h('label', { class:'check' }, h('input', { type:'checkbox', checked: m.nudgeLimited !== false, disabled: m.canNudge !== true, onchange: e => updateDoc(doc(db,'members',m.id), { nudgeLimited: e.target.checked }).catch(fail) }), ' עם הגבלה'),
+    // own interval for this person (empty = the general one)
+    (m.canNudge === true && m.nudgeLimited !== false) ? h('label', { class:'nudge-min' }, 'כל ',
+      h('input', { type:'number', min:'1', max:'1440', inputmode:'numeric', value: m.nudgeEveryMin ? String(m.nudgeEveryMin) : '', placeholder: String(nudgeEveryMin()),
+        onchange: e => { const v = Math.round(Number(e.target.value)); updateDoc(doc(db,'members',m.id), { nudgeEveryMin: v >= 1 && v <= 1440 ? v : deleteField() }).then(() => toast(v >= 1 ? `${m.name}: פעם ב-${v} דקות` : `${m.name}: לפי ההגדרה הכללית`)).catch(fail); } }), ' דק׳') : null)));
   if (document.activeElement !== $('nudgeEvery')) $('nudgeEvery').value = nudgeEveryMin();
 }
 async function nudgePeople(){
@@ -1574,7 +1578,8 @@ function challengeNudgeState(){
   const allowed = S.isAdmin || (me && me.canNudge === true);
   if (!allowed) return { allowed:false };
   const limited = !S.isAdmin && me.nudgeLimited !== false;
-  const last = S.nudgeCh?.at || 0; const wait = limited ? last + nudgeEveryMin() * 60000 - Date.now() : 0;
+  const every = Number(me?.nudgeEveryMin) >= 1 ? Number(me.nudgeEveryMin) : nudgeEveryMin();
+  const last = S.nudgeCh?.at || 0; const wait = limited ? last + every * 60000 - Date.now() : 0;
   return { allowed:true, wait: Math.max(0, wait) };
 }
 async function nudgeChallenge(){
