@@ -745,7 +745,7 @@ function renderHero(bound){
   $('appTitle').textContent = m ? `${greeting()}, ${m.name}!` : `${greeting()}!`;
   const hr = $('heroRoast'); const king = S.isAdmin || (!!m && roleOf(m.id) === 'admin');
   hr.hidden = !m && !king;
-  if (king) hr.textContent = `👑 ${praiseOf()}`;
+  if (king){ const pj = praiseJokeOf(); hr.replaceChildren(h('span', { class:'hr-setup' }, '👑 ' + pj.setup + ' '), h('span', { class:'hr-punch praise' }, pj.punch)); }
   else if (m){ const j = jokeFor(m); hr.replaceChildren(j.setup ? h('span', { class:'hr-setup' }, j.setup + ' ') : `${greeting()} ${m.name}, `, h('span', { class:'hr-punch' }, j.punch)); }
   const btn = $('heroMe'); btn.hidden = !m;
   if (m){ $('heroAva').textContent = avatarOf(m.id); $('heroAva').style.background = m.color; btn.onclick = () => openProfile(m.id); }
@@ -1828,13 +1828,23 @@ const ofTheWeek = pool => { const n = 8, sets = Math.ceil(pool.length / n), k = 
 const ROASTS = { get m(){ return ofTheWeek(ROAST_POOL).map(x => x[0]); }, get f(){ return ofTheWeek(ROAST_POOL).map(x => x[1]); } };
 const PRAISE = { get list(){ return ofTheWeek(PRAISE_POOL); } };
 let praiseNow = null;
-function praiseOf(){
-  if (praiseNow) return praiseNow;
-  let last = -1; try{ last = Number(localStorage.getItem('ft-praise')); }catch(e){}
-  let i = Math.floor(Math.random() * PRAISE.list.length); if (i === last) i = (i + 1) % PRAISE.list.length;
-  try{ localStorage.setItem('ft-praise', String(i)); }catch(e){}
-  return praiseNow = PRAISE.list[i];
+// The king's opening line: different every time, like the jokes. Half the time a set-up and twist, half a praise line from the whole pool.
+const PRAISE_JOKES = [["בדקנו מי הכי חכם בבית…", "זה אתה. הכלב במקום השני."], ["ההורים התייעצו מי יירש את הבית…", "הם בחרו בך. השאר יגורו במחסן."], ["גוגל חיפש את המילה 'גאון'…", "ויצאה תמונה שלך."], ["המדיח רצה להגיד משהו…", "הוא מתגעגע רק אליך."], ["המלך הסתכל במראה הבוקר…", "והמראה השתחוותה."], ["ניסינו למצוא מישהו טוב ממך…", "החיפוש עדיין נמשך. כבר שלוש שנים."], ["נאסא התקשרו…", "הם רוצים לקרוא לכוכב על שמך."], ["הטבלה של השבוע מבולבלת…", "היא לא מבינה איך כולם מתחתיך."], ["הנתינים התכנסו לישיבה דחופה…", "והחליטו שאתה מושלם. פה אחד."], ["שאלנו בינה מלאכותית מי המלך הכי טוב בעולם…", "היא ענתה: רותם. ואז ביקשה חתימה."], ["החדר שלך נבחר…", "לחדר הכי מסודר בממלכה. שוב."], ["מחר יוצא בול דואר חדש…", "עם הפרצוף שלך."], ["הכתר ביקש להגיד תודה…", "הוא אף פעם לא ישב על ראש כל כך חכם."], ["אם היה פרס על להיות מלך…", "היית מקבל אותו, ואז נותן אותו לעצמך שוב."], ["האחים שלך מנסים להשיג אותך בנקודות…", "בהצלחה להם. באמת."], ["ההיסטוריה תזכור את היום הזה…", "כעוד יום שבו צדקת."]];
+const PRAISE_INTROS = ["הודעה רשמית מהממלכה:", "המדענים אישרו:", "בשורה טובה לממלכה:", "ועדת הנתינים קבעה:", "להלן העובדות:"];
+let praiseJoke = null;
+function praiseJokeOf(){
+  if (praiseJoke) return praiseJoke;
+  let last = null; try{ last = localStorage.getItem('ft-praise'); }catch(e){}
+  let pick;
+  for (let tries = 0; tries < 5; tries++){
+    if (Math.random() < 0.5){ const j = PRAISE_JOKES[Math.floor(Math.random() * PRAISE_JOKES.length)]; pick = { setup:j[0], punch:j[1] }; }
+    else pick = { setup: PRAISE_INTROS[Math.floor(Math.random() * PRAISE_INTROS.length)], punch: PRAISE_POOL[Math.floor(Math.random() * PRAISE_POOL.length)] };
+    if (pick.punch !== last) break;
+  }
+  try{ localStorage.setItem('ft-praise', pick.punch); }catch(e){}
+  return praiseJoke = pick;
 }
+function praiseOf(){ return praiseJokeOf().punch; }
 const roastFor = {};
 // One joke per person each time the app opens: the splash and the home screen show the same one.
 const SILLY_NAMES = [["יא פיצה בלי תוספות", "יא פיצה בלי תוספות"], ["יא שניצל קפוא", "יא שניצל קפוא"], ["יא במבה מעוכה", "יא במבה מעוכה"], ["יא מלפפון חמוץ", "יא מלפפון חמוץ"], ["יא פיתה בלי חומוס", "יא פיתה בלי חומוס"], ["יא קוטלט שרוף", "יא קציצה שרופה"], ["יא טוסט בלי גבינה", "יא טוסט בלי גבינה"], ["יא תפוח אדמה עם רגליים", "יא תפוח אדמה עם רגליים"], ["יא גרב בלי זוג", "יא גרב בלי זוג"], ["יא חלזון בחופשה", "יא חלזונית בחופשה"], ["יא פינגווין מבולבל", "יא פינגווינית מבולבלת"], ["יא ספוג כלים יבש", "יא ספוג כלים יבש"], ["יא קרואסון מעוך", "יא קרואסון מעוך"], ["יא ביצה קשה מדי", "יא ביצה קשה מדי"], ["יא אטריה רטובה", "יא אטריה רטובה"], ["יא ג׳לי רועד", "יא ג׳לי רועד"], ["יא כרובית מבולבלת", "יא כרובית מבולבלת"], ["יא בורקס בלי מילוי", "יא בורקס בלי מילוי"], ["יא פופקורן שלא התפוצץ", "יא פופקורן שלא התפוצץ"], ["יא חביתה בלי מלח", "יא חביתה בלי מלח"], ["יא קיפוד מנומנם", "יא קיפודה מנומנמת"], ["יא ארטיק נמס", "יא ארטיק נמס"], ["יא בלון בלי אוויר", "יא בלון בלי אוויר"], ["יא שקית במבה ריקה", "יא שקית במבה ריקה"], ["יא עגבנייה מדברת", "יא עגבנייה מדברת"], ["יא שוקו בלי שוקו", "יא שוקו בלי שוקו"], ["יא מטען בלי כבל", "יא מטען בלי כבל"], ["יא נעל בית מסריחה", "יא נעל בית מסריחה"], ["יא סופגנייה בלי ריבה", "יא סופגנייה בלי ריבה"], ["יא דג זהב עם קפוצ׳ון", "יא דג זהב עם קפוצ׳ון"], ["יא פסטה בלי רוטב", "יא פסטה בלי רוטב"], ["יא כדור פינג פונג מקומט", "יא כדור פינג פונג מקומט"], ["יא ראש כרובית", "יא ראש כרובית"], ["יא גמבה שמתחפשת לבן אדם", "יא גמבה שמתחפשת לבת אדם"], ["יא ענן בצורת גרב", "יא ענן בצורת גרב"], ["יא מנכ\"ל של שום דבר", "יא מנכ\"לית של שום דבר"], ["יא רובוט עם באג", "יא רובוטית עם באג"], ["יא בננה עם רישיון נהיגה", "יא בננה עם רישיון נהיגה"], ["יא ברווז שמדבר עם קירות", "יא ברווזה שמדברת עם קירות"], ["יא פלאפל עם חרדות", "יא פלאפל עם חרדות"], ["יא פינגווין שנכשל בטיסה", "יא פינגווינית שנכשלה בטיסה"], ["יא צנצנת חמוצים מדברת", "יא צנצנת חמוצים מדברת"], ["יא מלך החניון", "יא מלכת החניון"], ["יא נמלה בחליפה", "יא נמלה בחליפה"], ["יא דוב קוטב בחמסין", "יא דובת קוטב בחמסין"], ["יא ראש בצל", "יא ראש בצל"], ["יא חציל עם ביטחון עצמי", "יא חציל עם ביטחון עצמי"], ["יא קומקום שורק", "יא קומקום שורק"], ["יא חמור עם אוזניות", "יא חמורה עם אוזניות"], ["יא צב על רולרבליידס", "יא צבה על רולרבליידס"], ["יא סבון שהחליק", "יא סבון שהחליק"], ["יא מטאטא עם דעות", "יא מטאטא עם דעות"], ["יא גבינה צהובה מזיעה", "יא גבינה צהובה מזיעה"], ["יא פטרייה עם וויי-פיי", "יא פטרייה עם וויי-פיי"], ["יא סנדל עם אגו", "יא סנדל עם אגו"], ["יא תרנגול בפיג׳מה", "יא תרנגולת בפיג׳מה"], ["יא שעון מעורר בלי סוללות", "יא שעון מעורר בלי סוללות"], ["יא מקרר שמתלונן", "יא מקרר שמתלונן"], ["יא גמל שהתבלבל במדבר", "יא גמלה שהתבלבלה במדבר"], ["יא עוגייה שנפלה לחלב", "יא עוגייה שנפלה לחלב"], ["יא ג׳ירפה עם פחד גבהים", "יא ג׳ירפה עם פחד גבהים"], ["יא זיקית שנתקעה על בז׳", "יא זיקית שנתקעה על בז׳"]];
@@ -1883,8 +1893,11 @@ function updateSplash(){
   const id = S.boundId; const m = id ? member(id) : null;
   if (S.isAdmin || (m && roleOf(id) === 'admin')){
     splashState.personalized = true;
-    const r = $('splashRoast'); r.textContent = praiseOf(); r.hidden = false;
-    clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, 3200);
+    const pj = praiseJokeOf();
+    const su = $('splashSetup'); su.textContent = pj.setup; su.hidden = false;
+    const r = $('splashRoast'); r.hidden = true; r.textContent = pj.punch; r.classList.add('praise'); r.classList.toggle('long', pj.punch.length > 18);
+    setTimeout(() => { if (!splashState.gone){ r.hidden = false; r.classList.add('stamp'); } }, 1400);
+    clearTimeout(splashState.timer); splashState.timer = setTimeout(splashState.close, pj.punch.length > 18 ? 5200 : 4400);
     return;
   }
   if (!m) return;

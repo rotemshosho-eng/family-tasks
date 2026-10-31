@@ -586,3 +586,7 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .ch-caret{font-size:.8rem;color:var(--muted)}
 .donebar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#E7F7EF;color:#1F7A52;border-radius:12px;padding:10px 14px;font-weight:600;font-size:.9rem}
 @media (prefers-color-scheme: dark){.donebar{background:#173A2B;color:#8EE0B8}}
+/* the king's line: gold instead of red */
+.splash-roast.stamp.praise{background:linear-gradient(120deg,#F5B400,#FFD36B);color:#2A1C00;box-shadow:0 14px 40px rgb(245 180 0 / .4), inset 0 1px 0 rgb(255 255 255 / .35)}
+.splash-roast.stamp.praise::after{content:"👑"}
+.hero-roast .hr-punch.praise{color:#B7791F}
