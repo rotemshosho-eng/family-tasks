@@ -566,3 +566,8 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 
 /* last week's winner on the opening splash */
 .splash-winner{position:relative;margin:14px 0 0;padding:8px 16px;border-radius:999px;background:rgb(255 184 77 / .16);border:1px solid rgb(255 184 77 / .5);color:#FFD27A;font:600 clamp(.95rem,4.2vw,1.15rem)/1.35 var(--body);max-width:26ch;text-wrap:balance;animation:rise .5s both}
+/* ± next to fields that take negative points (phone keypads have no minus key) */
+.signed{display:flex;align-items:stretch;gap:6px;min-width:0}
+.signed input{flex:1;min-width:0}
+.sign-btn{flex:none;min-width:44px;font-size:1.15rem;font-weight:700;padding-inline:10px}
+#ppList .signed,.cp-pts-row .signed{flex:none}

@@ -23,7 +23,7 @@ const DATA = {
   timers:[], messages:[], profiles:[], rewards:[{id:'r1',title:'15 דקות טלוויזיה',cost:10,emoji:'📺',createdAt:1}],
   complaints:[{id:'c1',text:'בדיקה',cat:'fun',by:'m2',about:'',status:'open',agree:[],at:Date.now()}], cpComments:[], challengeJoins:[], photos:[], devNotes:[{id:'n1',text:'x',kind:'bug',by:'m2',status:'doing',at:1}], joinRequests:[{id:'g1',name:'אבא',color:'#3B8C4A',email:'dad@example.com',linkTo:'m4',at:1}], pins:[]
 };
-const DOCS = { 'settings/goal':{target:100,prize:'פיצה'}, 'settings/challenge':{title:'חג',target:10,start:d,until:d,prize:'',bonus:5}, 'settings/money':{points:100,shadows:0}, 'settings/perms':{parentPoints:true},
+const DOCS = { 'settings/goal':{target:100,prize:'פיצה'}, 'settings/challenge':{title:'חג',target:1,start:d,startAt:Date.now()-60e3,until:d,prize:'',bonus:5}, 'settings/money':{points:100,shadows:0}, 'settings/perms':{parentPoints:true},
   'bindings/u1': ${ADMIN ? 'null' : PARENT ? "{memberId:'m3',pin:'1'}" : "{memberId:'m2',pin:'1234'}"}, 'adminSessions/u1': ${ADMIN ? "{code:'x'}" : 'null'} };
 const collection=(db,name)=>({kind:'col',name}); const doc=(a,...p)=>{ if (a && a.kind==='col' && p.length===0) return {kind:'doc',path:a.name+'/new'}; if (a && a.kind==='col') return {kind:'doc',path:a.name+'/'+p[0]}; return {kind:'doc',path:p.join('/')}; };
 const snapCol=name=>({ docs:(DATA[name]||[]).map(x=>({id:x.id,data:()=>{const {id,...r}=x; return r;}})) });

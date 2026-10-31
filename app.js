@@ -31,6 +31,13 @@ function h(tag, attrs, ...kids){
   return e;
 }
 const pad = n => String(n).padStart(2,'0');
+// Phone number pads have no minus key: a ± button next to fields that take negative points flips the sign.
+function signBtn(inp){
+  return h('button', { type:'button', class:'btn ghost small sign-btn', 'aria-label':'פלוס או מינוס', onclick:() => {
+    const v = Number(inp.value); if (inp.value === '' || !Number.isFinite(v) || v === 0){ toast('קודם כתבו מספר, ואז ± הופך אותו למינוס'); inp.focus(); return; }
+    inp.value = String(-v); inp.dispatchEvent(new Event('input', { bubbles:true })); } }, '±');
+}
+const signed = inp => h('span', { class:'signed' }, inp, signBtn(inp));
 const dstr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today = () => dstr(new Date());
 const dow = () => new Date().getDay();
@@ -1131,7 +1138,9 @@ function renderBoss(){
 /* ---------- family challenge with a deadline ---------- */
 // Who takes part: marked themselves (or marked by a parent), or did at least one task during the challenge.
 const challengeKey = c => `${c.start}|${c.title}`;
-const didInChallenge = (c, id) => S.logs.some(l => l.memberId === id && (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until);
+// A task counts only if it was done after the challenge was created (startAt), not earlier that same day.
+const inChallenge = (c, l) => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until && (!(c.startAt > 0) || (l.at || 0) >= c.startAt);
+const didInChallenge = (c, id) => S.logs.some(l => l.memberId === id && inChallenge(c, l));
 const markedIn = (c, id) => S.cjoins[id]?.key === challengeKey(c);
 const canMarkFor = id => S.isAdmin || id === S.boundId || (!!S.boundId && isParentMember(S.boundId));
 async function toggleJoin(c, id){
@@ -1139,7 +1148,7 @@ async function toggleJoin(c, id){
   try{ await setDoc(doc(db,'challengeJoins',id), { key: on ? '' : challengeKey(c), memberId:id, at:Date.now(), ...(S.isAdmin || id === S.boundId ? {} : { by:S.boundId }) });
     toast(on ? `${mName(id)} הוסר/ה מהאתגר` : `${mName(id)} משתתף/ת באתגר 💪`); }catch(e){ fail(e); }
 }
-function challengeCount(c){ return S.logs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until).length; }
+function challengeCount(c){ return S.logs.filter(l => inChallenge(c, l)).length; }
 function renderChallenge(){
   $('chEditor').hidden = !canEditGoal();
   const c = S.challenge; const td = today();
@@ -1161,7 +1170,7 @@ function renderChallenge(){
             title: auto ? 'עשה/תה משימה באתגר' : '', onclick: () => toggleJoin(c, m.id) },
             h('span', { class:'dot', style:`background:${m.color}` }), m.name, on ? ' ✓' : ''); })),
       (!done && !over && S.boundId && !didInChallenge(c, S.boundId) && !markedIn(c, S.boundId))
-        ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : null);
+        ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : '');
   });
 }
 async function saveChallenge(){
@@ -1172,8 +1181,9 @@ async function saveChallenge(){
     if (!(bonus >= 0 && bonus <= 1000)){ toast('בונוס: בין 0 ל-1000 נקודות'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today()){ toast('בחרו תאריך סיום מהיום והלאה'); return; }
   }
-  const old = S.challenge; const start = old && old.target > 0 && old.until >= today() && old.title === title ? old.start : today();
-  const data = { title, target: Math.max(0, target || 0), start, until: until || today(), prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
+  const old = S.challenge; const same = old && old.target > 0 && old.until >= today() && old.title === title;
+  const start = same ? old.start : today(); const startAt = same ? old.startAt : Date.now();
+  const data = { title, target: Math.max(0, target || 0), start, ...(startAt > 0 ? { startAt } : {}), until: until || today(), prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
   try{ await setDoc(doc(db,'settings','challenge'), data); toast(data.target ? 'האתגר נשמר. בהצלחה!' : 'האתגר בוטל'); }catch(e){ fail(e); }
 }
 
@@ -1313,7 +1323,7 @@ function renderComplaints(){
         h('div', { class:'cp-pts-row' },
           h('select', { class:'cp-target', 'aria-label':'למי נקודות' }, h('option', { value:'' }, 'בלי נקודות'),
             S.members.filter(m => m.id !== S.boundId).map(m => h('option', { value:m.id, selected: m.id === (c.about || '') }, m.name))),
-          h('input', { type:'number', class:'cp-pts', inputmode:'numeric', placeholder:'+10 / -10', 'aria-label':'כמה נקודות' })),
+          signed(h('input', { type:'number', class:'cp-pts', inputmode:'numeric', placeholder:'+10 / -10', 'aria-label':'כמה נקודות' }))),
         h('div', { class:'cp-pts-row' },
           h('button', { type:'button', class:'btn small', onclick:() => handleComplaint(c, 'done', box) }, '✓ טופל'),
           h('button', { type:'button', class:'btn ghost small', onclick:() => handleComplaint(c, 'rejected', box) }, '✗ נדחה')));
@@ -1649,7 +1659,7 @@ function renderParentPointsAdmin(){
     const inp = h('input', { type:'number', class:'pp-edit', value:String(l.points), inputmode:'numeric', 'aria-label':'נקודות' });
     L.append(h('div', { class:'arow arow-wrap' + (l.flag ? ' flagged' : '') },
       h('div', { class:'t' }, h('strong', null, `${isWatched(l.by) ? '🚩 ' : ''}${mName(l.by)} ← ${l.by === l.memberId ? 'לעצמו/ה' : mName(l.memberId)}`), h('small', null, `${+da}.${+mo} · ${l.title}`)),
-      inp,
+      signed(inp),
       h('button', { type:'button', class:'btn ghost small', onclick: async () => { const v = Math.round(Number(inp.value)); if (!Number.isFinite(v) || v === 0){ toast('מספר לא 0'); return; }
         try{ await updateDoc(doc(db,'logs',l.id), { points:v }); toast('עודכן'); }catch(e){ fail(e); } } }, 'שמירה'),
       armedBtn('ppd' + l.id, 'מחיקה', () => removeLog(l)))); });
@@ -1697,6 +1707,7 @@ function tick(){
   }
 }
 function buildStatic(){
+  for (const id of ['bf-points','pp-points']){ const inp = $(id); const wrap = h('span', { class:'signed' }); inp.replaceWith(wrap); wrap.append(inp, signBtn(inp)); }
   const dw = $('tf-days'); DAYS.forEach((d, i) => dw.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'tf-day-'+i, value:i, checked:true }), d)));
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
   const jc = $('join-colors'); COLORS.forEach((c, i) => jc.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'join-color', id:'join-color-'+i, value:c, checked: i === 0 }))));

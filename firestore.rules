@@ -260,7 +260,8 @@ service cloud.firestore {
     match /settings/{id} {
       allow read: if signedIn();
       allow write: if isAdmin() || (id == 'challenge'
-        && request.resource.data.keys().hasOnly(['title','target','start','until','prize','bonus','by'])
+        && request.resource.data.keys().hasOnly(['title','target','start','startAt','until','prize','bonus','by'])
+        && (!('startAt' in request.resource.data) || request.resource.data.startAt is int)
         && (!('bonus' in request.resource.data) || (request.resource.data.bonus is int && request.resource.data.bonus >= 0 && request.resource.data.bonus <= 1000))
         && request.resource.data.title is string && request.resource.data.title.size() <= 40
         && request.resource.data.target is int && request.resource.data.target >= 0 && request.resource.data.target <= 100000
