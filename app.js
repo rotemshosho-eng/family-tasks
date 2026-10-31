@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1173,8 +1173,11 @@ function renderChallenge(){
             `עוד ${total - n} משימות · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}${c.bonus ? ` · ${c.bonus} נקודות לכל משתתף` : ''}`)),
         h('span', { class:'progress-pct' }, `${pct}%`)),
       h('div', { class:'progress-bar' }, h('span', { style:`width:${pct}%` })),
-      // the challenge's own tasks: tap to mark done; the name of who did it shows on the row
-      h('div', { class:'ch-items' }, items.map(it => { const d = itemDone(c, it);
+      // the challenge's own tasks, folded: the button says how many are left; tap to open, then tap a task to mark it done
+      h('button', { type:'button', class:'ch-toggle', 'aria-expanded':String(S.chOpen), onclick:() => { S.chOpen = !S.chOpen; render(); } },
+        h('span', null, S.chOpen ? 'משימות האתגר' : done ? 'כל משימות האתגר בוצעו ✓' : total - n === 1 ? 'נשארה משימה אחת באתגר' : `נשארו ${total - n} משימות באתגר`),
+        h('span', { class:'ch-caret', 'aria-hidden':'true' }, S.chOpen ? '▲' : '▼')),
+      !S.chOpen ? '' : h('div', { class:'ch-items' }, items.map(it => { const d = itemDone(c, it);
         return h('div', { class:'ch-item' + (d ? ' ch-ok' : '') },
           d ? h('span', { class:'ch-check', 'aria-hidden':'true' }, '✓')
             : h('button', { type:'button', class:'donecheck ch-do', disabled: over, 'aria-label':`סיימתי: ${it.title}`, onclick:() => markItem(c, it) }),
