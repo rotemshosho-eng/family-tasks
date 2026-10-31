@@ -102,6 +102,61 @@ for (const [taskId, list] of byTask) {
 for (const n of (await all('devNotes')).filter(n => (n.statusAt || 0) > since && n.status !== 'new'))
   outbox.push({ to: [n.by], title: n.status === 'doing' ? '🔧 ההערה שלך בטיפול' : '✓ ההערה שלך טופלה', body: String(n.text || '').slice(0, 150), tag: `dn-${n.id}` });
 
+// 1e. nudges ("הקפצות"), new challenge, new monthly goal
+{
+  const nowHM = `${String(hour).padStart(2, '0')}:${new Intl.DateTimeFormat('en-GB', { timeZone: TZ, minute: '2-digit' }).format(now).padStart(2, '0')}`;
+  const todays = allLogs.filter(l => l.day === today);
+  const dueFor = (t, m) => {
+    if (t.pending) return false;
+    if (t.untilTime && t.untilTime <= nowHM) return false;
+    const by = l => l.taskId === t.id && !rejected(l) && (t.assignee !== 'each' || l.memberId === m);
+    if (t.type === 'once') return !allLogs.some(by);
+    return (t.days || []).includes(dow) && !todays.some(by);
+  };
+  const mine = m => tasks.filter(t => { if (!dueFor(t, m)) return false; const w = whoseTurn(t); return w === m || w === 'all' || t.boss; });
+  const ch = (await db.doc('settings/challenge').get()).data();
+  const chKey = ch ? (ch.cid || `${ch.start}|${ch.title}`) : null;
+  const chItems = ch && Array.isArray(ch.items) ? ch.items.filter(i => i && i.id) : [];
+  const chOn = !!ch && chItems.length > 0 && ch.until >= today;
+  let chLeft = [];
+  if (chOn) { const marks = (await db.collection('challengeItems').get()).docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.key === chKey); chLeft = chItems.filter(i => !marks.some(m => m.id === i.id)); }
+  const list = arr => arr.slice(0, 3).join(', ') + (arr.length > 3 ? ` ועוד ${arr.length - 3}` : '');
+
+  const nudges = await all('nudges');
+  for (const n of nudges.filter(n => n.id !== 'challenge')) {
+    if (n.type === 'people') {
+      for (const id of (n.to || [])) {
+        const left = mine(id).map(t => t.title); const all2 = left.concat(chLeft.map(i => `${i.title} (אתגר)`));
+        if (!all2.length) continue;
+        outbox.push({ to: [id], title: `👑 המלך מזכיר: נשארו לך ${all2.length} משימות`, body: list(all2), tag: `nudge-${id}` });
+      }
+    } else if (n.type === 'task') {
+      const t = tasks.find(x => x.id === n.taskId);
+      if (t) {
+        const w = whoseTurn(t);
+        const to = (t.boss || w === 'all') ? everyone.filter(id => dueFor(t, id)) : [w];
+        outbox.push({ to, title: t.boss ? `🐉 המלך מזכיר: משימת בוס!` : '👑 המלך מזכיר', body: `${t.title}${t.boss ? ` · ${t.points * 3} נקודות למי שעושה ראשון` : ''}`, tag: `nudge-t-${t.id}` });
+      }
+    }
+    await db.doc(`nudges/${n.id}`).delete();
+  }
+  const cn = nudges.find(n => n.id === 'challenge');
+  if (cn && (cn.at || 0) > since && chOn && chLeft.length)
+    outbox.push({ to: everyone.filter(id => id !== cn.by), title: `⚡ ${name(cn.by)} מזכיר/ה: אתגר ${ch.title}`, body: `נשארו ${chLeft.length} משימות: ${list(chLeft.map(i => i.title))}`, tag: 'nudge-challenge' });
+
+  // a new family challenge / a new monthly goal -> everyone (first run only remembers, no spam)
+  if (chOn && state.challengeKey !== chKey) {
+    if (state.challengeKey !== undefined) outbox.push({ to: everyone, title: `⚡ אתגר משפחתי חדש: ${ch.title}`, body: `${chItems.length} משימות עד ${ch.until.split('-').reverse().slice(0, 2).join('.')}${ch.prize ? ` · פרס: ${ch.prize}` : ''}`, tag: 'new-challenge' });
+    state.challengeKey = chKey;
+  }
+  const g = (await db.doc('settings/goal').get()).data();
+  const gKey = g && g.target > 0 ? `${g.target}|${g.prize || ''}` : null;
+  if (gKey && state.goalKey !== gKey) {
+    if (state.goalKey !== undefined) outbox.push({ to: everyone, title: `🎯 יעד חודשי חדש${g.prize ? `: ${g.prize}` : ''}`, body: `${g.target} נקודות ביחד החודש`, tag: 'new-goal' });
+    state.goalKey = gKey;
+  } else if (!gKey && state.goalKey === undefined) state.goalKey = null;
+}
+
 // 2. new tasks since the last run
 for (const t of tasks.filter(t => (t.createdAt || 0) > since)) {
   const turn = whoseTurn(t);

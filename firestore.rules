@@ -327,6 +327,21 @@ service cloud.firestore {
       allow delete: if isAdmin() || (resource.data.status == 'open' && boundTo(resource.data.by));
     }
 
+    // הקפצות: המנהל שולח לכל אחד; את האתגר מקפיץ גם מי שהמנהל הרשה (עם הגבלת זמן אם סומן).
+    match /nudges/{id} {
+      allow read, create, update, delete: if isAdmin();
+      allow get: if id == 'challenge' && signedIn();
+      allow create, update: if id == 'challenge'
+        && request.resource.data.keys().hasOnly(['by','at'])
+        && request.resource.data.at is int && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
+        && request.resource.data.by is string && boundTo(request.resource.data.by)
+        && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('canNudge', false) == true
+        && (get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('nudgeLimited', true) == false
+            || !exists(/databases/$(database)/documents/nudges/challenge)
+            || request.time.toMillis() - get(/databases/$(database)/documents/nudges/challenge).data.at
+               >= (exists(/databases/$(database)/documents/settings/perms) ? get(/databases/$(database)/documents/settings/perms).data.get('nudgeEveryMin', 60) : 60) * 60000);
+    }
+
     // הערות למפתח: כל אחד שולח בשמו, רק המנהל קורא ומטפל.
     match /devNotes/{id} {
       allow update: if isAdmin();

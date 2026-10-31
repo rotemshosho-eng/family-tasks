@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { tokens:[], nudgePick:new Set(), nudgeCh:null, myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -252,7 +252,7 @@ function render(){
   renderChatSheet(); renderProfileSheet(); updateSplash();
   $('sgSec').hidden = !S.user || (S.isAdmin && !plain) || !bound || needLogin;
   if (needLogin) return;
-  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); renderParentPointsAdmin(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
+  renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); renderParentPointsAdmin(); renderNudgeAdmin(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
   if (S.isAdmin){ renderAdminLists(); renderJoins(); }
   renderPresets();
   const cl = $('chat-list'); if (cl) cl.scrollTop = cl.scrollHeight;
@@ -838,6 +838,7 @@ function taskCard(t, canAct){
       chatButton(t),
       canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
       canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null,
+      S.isAdmin ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`הקפצה: ${t.title}`, title:'הקפצה', onclick:() => nudgeTask(t) }, '📣') : null,
       (S.isAdmin && S.plain && !t.pinned) ? (() => { const b = h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`מחיקה: ${t.title}`, title:'מחיקה' }, '🗑️');
         b.addEventListener('click', () => arm('dt' + t.id, b, () => deleteTask(t, false))); if (S.armed === 'dt' + t.id){ b.classList.add('armed'); b.textContent = 'בטוח?'; } return b; })() : null));
   running.forEach(tm => {
@@ -1195,6 +1196,8 @@ function renderChallenge(){
             h('span', { class:'dot', style:`background:${m.color}` }), m.name, on ? ' ✓' : ''); })),
       (!done && !over && S.boundId && !didInChallenge(c, S.boundId) && !markedIn(c, S.boundId))
         ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : '',
+      (!done && !over && challengeNudgeState().allowed) ? (() => { const st = challengeNudgeState();
+        return h('button', { type:'button', class:'btn ghost small', disabled: st.wait > 0, onclick: nudgeChallenge }, st.wait > 0 ? `📣 אפשר להקפיץ שוב בעוד ${Math.ceil(st.wait / 60000)} דק׳` : '📣 הקפצת האתגר לכל המשפחה'); })() : '',
       canEditGoal() ? h('button', { type:'button', class:'linkbtn ch-edit', onclick: () => openChallengeEdit('edit') }, '✏️ עריכת האתגר') : '');
   });
 }
@@ -1540,6 +1543,46 @@ function renderDevNotes(){
         armedBtn('dn' + n.id, 'מחיקה', async () => { try{ await deleteDoc(doc(db,'devNotes',n.id)); }catch(e){ fail(e); } })))); });
 }
 
+
+/* ---------- nudges (push reminders). The server sends them within ~5 minutes. ---------- */
+const nudgeEveryMin = () => Math.max(1, Number(S.perms?.nudgeEveryMin) || 60);
+const hasPush = id => (S.tokens || []).some(t => t.memberId === id);
+async function sendNudge(data){ await addDoc(collection(db,'nudges'), { ...data, at:Date.now() }); }
+function renderNudgeAdmin(){
+  if (!S.isAdmin || !$('nudgeWho')) return;
+  const W = $('nudgeWho'); W.replaceChildren();
+  S.members.forEach(m => W.append(h('button', { type:'button', class:'chip', 'aria-pressed':String(S.nudgePick.has(m.id)),
+    onclick:() => { S.nudgePick.has(m.id) ? S.nudgePick.delete(m.id) : S.nudgePick.add(m.id); render(); } },
+    h('span', { class:'dot', style:`background:${m.color}` }), m.name, hasPush(m.id) ? ' 🔔' : ' 🔕')));
+  const R = $('nudgeRights'); R.replaceChildren();
+  S.members.filter(m => roleOf(m.id) !== 'admin').forEach(m => R.append(h('div', { class:'arow' },
+    h('div', { class:'t' }, h('strong', null, m.name)),
+    h('label', { class:'check' }, h('input', { type:'checkbox', checked: m.canNudge === true, onchange: e => updateDoc(doc(db,'members',m.id), { canNudge: e.target.checked }).catch(fail) }), ' יכול להקפיץ'),
+    h('label', { class:'check' }, h('input', { type:'checkbox', checked: m.nudgeLimited !== false, disabled: m.canNudge !== true, onchange: e => updateDoc(doc(db,'members',m.id), { nudgeLimited: e.target.checked }).catch(fail) }), ' עם הגבלה'))));
+  if (document.activeElement !== $('nudgeEvery')) $('nudgeEvery').value = nudgeEveryMin();
+}
+async function nudgePeople(){
+  const to = [...S.nudgePick].filter(id => member(id)); if (!to.length){ toast('בחרו למי להקפיץ'); return; }
+  try{ await sendNudge({ type:'people', to }); S.nudgePick.clear(); toast(`📣 נשלח. ${to.map(mName).join(', ')} יקבלו התראה בדקות הקרובות`); render(); }catch(e){ fail(e); }
+}
+async function nudgeTask(t){
+  try{ await sendNudge({ type:'task', taskId:t.id }); toast(`📣 ${t.title}: ההתראה תצא בדקות הקרובות`); }catch(e){ fail(e); }
+}
+// the family challenge: the admin, and whoever the admin allowed (some with a time limit)
+function challengeNudgeState(){
+  const me = S.boundId ? member(S.boundId) : null;
+  const allowed = S.isAdmin || (me && me.canNudge === true);
+  if (!allowed) return { allowed:false };
+  const limited = !S.isAdmin && me.nudgeLimited !== false;
+  const last = S.nudgeCh?.at || 0; const wait = limited ? last + nudgeEveryMin() * 60000 - Date.now() : 0;
+  return { allowed:true, wait: Math.max(0, wait) };
+}
+async function nudgeChallenge(){
+  const st = challengeNudgeState(); if (!st.allowed) return;
+  if (st.wait > 0){ toast(`כבר הקפיצו. אפשר שוב בעוד ${Math.ceil(st.wait / 60000)} דק׳`); return; }
+  try{ await setDoc(doc(db,'nudges','challenge'), { by: myMemberId() || S.boundId, at: Date.now() }); toast('📣 כל המשפחה תקבל תזכורת על האתגר בדקות הקרובות'); }catch(e){ fail(e); }
+}
+
 /* ---------- admin ---------- */
 function syncSelects(){
   const fill = (sel, withAll) => { const v = sel.value; sel.replaceChildren();
@@ -1794,6 +1837,9 @@ function buildStatic(){
   $('mf-role').addEventListener('change', fillMarkFor); $('mf-cancel').addEventListener('click', resetMemberForm);
   $('bf-save').addEventListener('click', saveBonus);
   $('pp-save').addEventListener('click', saveParentPoints);
+  $('nudgeSend').addEventListener('click', nudgePeople);
+  $('nudgeEverySave').addEventListener('click', async () => { const v = Math.round(Number($('nudgeEvery').value)); if (!(v >= 1 && v <= 1440)){ toast('בין 1 ל-1440 דקות'); return; }
+    try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), nudgeEveryMin: v }); toast(`נשמר: פעם ב-${v} דקות`); }catch(e){ fail(e); } });
   $('pp-toggle').addEventListener('click', () => { S.ppOpen = true; render(); $('pp-points').focus(); });
   $('ppPanel').prepend(h('button', { type:'button', class:'cl-close', 'aria-label':'סגירה', onclick:() => { S.ppOpen = false; render(); } }, '✕'));
   $('perm-parentPts').addEventListener('change', async e => { try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), parentPoints: e.target.checked }); toast(e.target.checked ? 'הורים יכולים עכשיו לשנות נקודות' : 'רק אתה יכול לשנות נקודות'); }catch(err){ fail(err); e.target.checked = !e.target.checked; } });
@@ -2040,6 +2086,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('tasks', a => { S.tasks = a; });
     sub('logs', a => { S.logs = a; S.logsLoaded = true; });
     sub('complaints', a => { S.complaints = a; });
+    unsubs.push(onSnapshot(doc(db,'nudges','challenge'), s => { S.nudgeCh = s.exists() ? s.data() : null; render(); }, () => {}));
     sub('cpComments', a => { S.cpComments = a; });
     sub('challengeJoins', a => { S.cjoins = Object.fromEntries(a.map(j => [j.id, j])); });
     sub('challengeItems', a => { S.citems = Object.fromEntries(a.map(d => [d.id, d])); });
@@ -2068,7 +2115,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
       let ok = false;
       if (hasSession || !user.isAnonymous){ try{ await getDoc(doc(db,'private','admin')); ok = true; }catch(e){ ok = false; } }
       S.isAdmin = ok; S.realAdmin = ok; if (!ok) S.viewAs = null; S.adminChecked = true;
-      if (ok){ startAdminSubs(); startJoinsSub(); startDevSub(); } else { S.pins = {}; S.joins = []; S.devNotes = []; }
+      if (ok){ startAdminSubs(); startJoinsSub(); startDevSub(); unsubs.push(onSnapshot(collection(db,'pushTokens'), s => { S.tokens = s.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, e => console.error(e))); } else { S.pins = {}; S.joins = []; S.devNotes = []; }
       render();
     };
     // Admin by code: this device holds adminSessions/<uid> with the admin code; it counts while the code is current.
