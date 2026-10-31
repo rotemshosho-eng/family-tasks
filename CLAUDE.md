@@ -15,6 +15,9 @@ Owner and admin: Rotem (rotemshosho@gmail.com). Rotem is **not** a parent; he's 
 - `sw.js`: network-first service worker. **Bump `CACHE` (`family-tasks-vNN`) on every push** or phones keep the old version.
 - `notify/notify.mjs`: push notifications, streak bonus, Saturday-night winner, weekly summary, challenge bonus.
 - `tests/`: smoke test (see below).
+- `functions/index.js`: **real-time** pushes as Firebase Cloud Functions (v2 Firestore triggers): chat, new task, approvals/redeem, complaints (+handled, +comments), dev notes (+status), nudges, new challenge, new monthly goal. Deployed by `.github/workflows/deploy-functions.yml` (on push to `functions/**`, or Run workflow). The region follows the Firestore location. After a successful deploy the workflow writes `system/functions`; from then `notify.mjs` skips its real-time sections and only does the scheduled ones (evening reminder, streaks, challenge bonus, Saturday winner, weekly summary).
+  Needs the Blaze plan, and the service account (FIREBASE_SERVICE_ACCOUNT) with roles: Editor, Cloud Functions Admin, Project IAM Admin (Google Cloud → IAM).
+  Why: GitHub's 5-minute cron really runs every ~35-45 minutes, so pushes from notify.mjs arrived late.
 
 ## Deploy routine
 1. `node --check` on app.js (copy to `.mjs` first) and notify.mjs

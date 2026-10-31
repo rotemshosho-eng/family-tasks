@@ -55,6 +55,10 @@ function whoseTurn(t) {
 const dayStr = d => { const p = parts(d); return `${p.year}-${p.month}-${p.day}`; };
 const daysAgo = n => dayStr(new Date(now.getTime() - n * 86400000));
 
+// Real-time pushes (chat, new task, approvals, complaints, dev notes, nudges, new challenge/goal) move to
+// Cloud Functions (functions/index.js) once they are deployed; then this script only does the scheduled ones.
+const RT = !(await db.doc('system/functions').get()).exists;
+if (RT) {
 // 1. chat messages since the last run
 const msgs = (await db.collection('messages').where('at', '>', Timestamp.fromMillis(since)).get()).docs.map(d => d.data());
 const byTask = new Map();
@@ -180,6 +184,8 @@ const admins = members.filter(m => m.admin === true).map(m => m.id);
   const spent = fresh.filter(l => l.kind === 'redeem' && l.approved !== false);
   for (const l of spent) outbox.push({ to: approvers.filter(id => id !== l.memberId), title: `${name(l.memberId)} השתמש/ה בנקודות`, body: `${l.title} · ${l.points} נקודות`, tag: `redeem-${l.memberId}-${l.at}` });
 }
+
+} // end of real-time sections
 
 // 3. evening reminder, once a day
 if (hour >= REMIND_HOUR && state.remindedDay !== today) {

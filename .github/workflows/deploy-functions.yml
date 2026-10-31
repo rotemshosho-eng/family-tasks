@@ -1,0 +1,48 @@
+name: Deploy Cloud Functions
+
+# Real-time notifications (functions/). Runs when functions/ changes, or by hand ("Run workflow").
+# Needs: the Firebase project on the Blaze plan, and the service account in FIREBASE_SERVICE_ACCOUNT
+# with permission to deploy functions (see CLAUDE.md).
+on:
+  push:
+    branches: [main]
+    paths: ['functions/**', 'firebase.json', '.github/workflows/deploy-functions.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Credentials
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Install
+        working-directory: functions
+        run: npm ci --no-audit --no-fund
+      - name: Find the database region
+        run: |
+          LOC=$(npx --yes firebase-tools@15.34.2 firestore:databases:get "(default)" --project family-tasks-b0fa7 --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log((j.result||j).locationId||'')})")
+          case "$LOC" in nam5) R=us-central1;; nam7) R=us-east4;; eur3) R=europe-west1;; "") R=us-central1;; *) R=$LOC;; esac
+          echo "Firestore: $LOC -> functions region: $R"
+          echo "FN_REGION=$R" >> "$GITHUB_ENV"
+      - name: Deploy
+        run: npx --yes firebase-tools@15.34.2 deploy --only functions --project family-tasks-b0fa7 --non-interactive --force
+      - name: Tell the GitHub notifier to leave real-time pushes to the functions
+        working-directory: functions
+        run: |
+          node --input-type=module -e "
+            import { initializeApp } from 'firebase-admin/app'; import { getFirestore } from 'firebase-admin/firestore';
+            initializeApp({ projectId: 'family-tasks-b0fa7' }); await getFirestore().doc('system/functions').set({ deployedAt: Date.now(), region: process.env.FN_REGION });
+            console.log('system/functions updated');"
