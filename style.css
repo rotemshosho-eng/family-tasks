@@ -571,3 +571,12 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .signed input{flex:1;min-width:0}
 .sign-btn{flex:none;min-width:44px;font-size:1.15rem;font-weight:700;padding-inline:10px}
 #ppList .signed,.cp-pts-row .signed{flex:none}
+
+/* the challenge's own task list, inside the challenge card */
+.ch-items{display:flex;flex-direction:column;gap:6px;margin:12px 0 4px;padding:8px;border-radius:14px;background:var(--sunk);border:1px solid var(--line)}
+.ch-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 6px;border-radius:10px}
+.ch-item .donecheck{flex:none;width:36px;height:36px}
+.ch-check{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#39B980;color:#fff;font-weight:700}
+.ch-t{flex:1;min-width:0;font-weight:600}
+.ch-item.ch-ok .ch-t{text-decoration:line-through;opacity:.7}
+.ch-who{display:inline-flex;align-items:center;gap:5px;font-size:.85rem;color:var(--muted);white-space:nowrap}

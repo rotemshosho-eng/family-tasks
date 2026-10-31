@@ -163,14 +163,16 @@ for (const m of members) {
 // 4b. family challenge reached -> everyone gets the bonus (once per challenge)
 {
   const c = (await db.doc('settings/challenge').get()).data();
-  if (c && c.target > 0 && c.bonus > 0 && c.start && c.until) {
+  // the challenge has its own task list (c.items); done marks live in challengeItems/<itemId>
+  const items = Array.isArray(c?.items) ? c.items.filter(i => i && i.id) : [];
+  if (c && items.length && c.bonus > 0 && c.start && c.until) {
     const key = `${c.start}|${c.title}`;
-    const n = allLogs.filter(l => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until && (!(c.startAt > 0) || (l.at || 0) >= c.startAt)).length;
+    const marks = (await db.collection('challengeItems').get()).docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.key === key && items.some(i => i.id === d.id));
     const paid = allLogs.some(l => l.auto === 'challenge' && l.key === key);
-    if (n >= c.target && !paid) {
+    if (marks.length >= items.length && !paid) {
       const joins = (await db.collection('challengeJoins').get()).docs.map(d => ({ id: d.id, ...d.data() }));
       const inIt = m => joins.some(j => j.id === m.id && j.key === key)
-        || allLogs.some(l => l.memberId === m.id && (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until && (!(c.startAt > 0) || (l.at || 0) >= c.startAt));
+        || marks.some(d => d.memberId === m.id);
       const winners = members.filter(inIt);
       for (const m of winners) {
         const log = { kind: 'bonus', auto: 'challenge', key, title: `בונוס אתגר: ${c.title}`, memberId: m.id, points: c.bonus, day: today, at: now.getTime() };

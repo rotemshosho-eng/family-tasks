@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1136,11 +1136,12 @@ function renderBoss(){
 }
 
 /* ---------- family challenge with a deadline ---------- */
-// Who takes part: marked themselves (or marked by a parent), or did at least one task during the challenge.
+// The challenge has its own task list (c.items), separate from the regular tasks. Each item is marked done once
+// (challengeItems/<itemId>), by whoever did it. Who takes part: marked themselves (or marked by a parent), or did an item.
 const challengeKey = c => `${c.start}|${c.title}`;
-// A task counts only if it was done after the challenge was created (startAt), not earlier that same day.
-const inChallenge = (c, l) => (l.kind === 'task' || l.kind === 'timed') && counted(l) && l.day >= c.start && l.day <= c.until && (!(c.startAt > 0) || (l.at || 0) >= c.startAt);
-const didInChallenge = (c, id) => S.logs.some(l => l.memberId === id && inChallenge(c, l));
+const chItems = c => Array.isArray(c?.items) ? c.items.filter(i => i && i.id && i.title) : [];
+const itemDone = (c, it) => { const d = S.citems[it.id]; return d && d.key === challengeKey(c) ? d : null; };
+const didInChallenge = (c, id) => chItems(c).some(it => itemDone(c, it)?.memberId === id);
 const markedIn = (c, id) => S.cjoins[id]?.key === challengeKey(c);
 const canMarkFor = id => S.isAdmin || id === S.boundId || (!!S.boundId && isParentMember(S.boundId));
 async function toggleJoin(c, id){
@@ -1148,43 +1149,65 @@ async function toggleJoin(c, id){
   try{ await setDoc(doc(db,'challengeJoins',id), { key: on ? '' : challengeKey(c), memberId:id, at:Date.now(), ...(S.isAdmin || id === S.boundId ? {} : { by:S.boundId }) });
     toast(on ? `${mName(id)} הוסר/ה מהאתגר` : `${mName(id)} משתתף/ת באתגר 💪`); }catch(e){ fail(e); }
 }
-function challengeCount(c){ return S.logs.filter(l => inChallenge(c, l)).length; }
+// Who did it: the child a parent picked at the top ("מסמן עבור"), else this phone's member, else (admin) the member chosen at the top.
+function challengeDoer(){ const a = actingChild(); if (a) return a; if (S.boundId) return S.boundId; return S.me !== 'all' && member(S.me) ? S.me : null; }
+async function markItem(c, it){
+  const who = challengeDoer(); if (!who){ toast('בחרו למעלה מי עשה'); return; }
+  const by = S.isAdmin || who === S.boundId ? {} : { by: S.boundId };
+  try{ await setDoc(doc(db,'challengeItems',it.id), { key: challengeKey(c), itemId: it.id, memberId: who, ...by, at: Date.now() }); toast(`${mName(who)}: ${it.title} ✓`); confetti(50); }catch(e){ fail(e); }
+}
+async function unmarkItem(it){ try{ await deleteDoc(doc(db,'challengeItems',it.id)); toast('הסימון בוטל'); }catch(e){ fail(e); } }
+const canUnmark = d => S.isAdmin || d.memberId === S.boundId || isParentNow();
+function challengeCount(c){ return chItems(c).filter(it => itemDone(c, it)).length; }
 function renderChallenge(){
   $('chEditor').hidden = !canEditGoal();
-  const c = S.challenge; const td = today();
-  const on = !!c && c.target > 0 && c.until && dayGap(c.until, td) <= 2;
+  const c = S.challenge; const td = today(); const items = chItems(c);
+  const on = !!c && items.length > 0 && c.until && dayGap(c.until, td) <= 2;
   document.querySelectorAll('[data-challenge]').forEach(el => {
     el.hidden = !on; el.replaceChildren(); if (!on) return;
-    const n = challengeCount(c); const pct = Math.min(100, Math.round(n / c.target * 100)); const done = n >= c.target; const left = dayGap(td, c.until); const over = left < 0;
+    const total = items.length; const n = challengeCount(c); const pct = Math.round(n / total * 100); const done = n >= total; const left = dayGap(td, c.until); const over = left < 0;
     el.classList.toggle('reached', done);
     el.append(h('div', { class:'goal-head' }, h('span', { class:'goal-e', 'aria-hidden':'true' }, done ? '🎉' : over ? '⌛' : '⚡'),
         h('div', { class:'goal-t' }, h('strong', null, done ? `ניצחתם באתגר! ${c.prize || ''}`.trim() : `אתגר: ${c.title}`),
-          h('span', { class:'sub' }, done ? (c.bonus ? `כל הכבוד! כל משתתף מקבל ${c.bonus} נקודות בונוס 🎁` : 'כל הכבוד לכולם!') : over ? `האתגר נגמר. הגעתם ל-${n} מתוך ${c.target}.` :
-            `עוד ${c.target - n} משימות ביחד · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}${c.bonus ? ` · ${c.bonus} נקודות לכל משתתף` : ''}`)),
+          h('span', { class:'sub' }, done ? (c.bonus ? `כל הכבוד! כל משתתף מקבל ${c.bonus} נקודות בונוס 🎁` : 'כל הכבוד לכולם!') : over ? `האתגר נגמר. סיימתם ${n} מתוך ${total}.` :
+            `עוד ${total - n} משימות · ${left === 0 ? 'היום היום האחרון!' : left === 1 ? 'נשאר יום אחד' : `נשארו ${left} ימים`}${c.prize ? ` · פרס: ${c.prize}` : ''}${c.bonus ? ` · ${c.bonus} נקודות לכל משתתף` : ''}`)),
         h('span', { class:'progress-pct' }, `${pct}%`)),
       h('div', { class:'progress-bar' }, h('span', { style:`width:${pct}%` })),
-      h('p', { class:'sub' }, `${n} מתוך ${c.target} משימות`),
+      // the challenge's own tasks: tap to mark done; the name of who did it shows on the row
+      h('div', { class:'ch-items' }, items.map(it => { const d = itemDone(c, it);
+        return h('div', { class:'ch-item' + (d ? ' ch-ok' : '') },
+          d ? h('span', { class:'ch-check', 'aria-hidden':'true' }, '✓')
+            : h('button', { type:'button', class:'donecheck ch-do', disabled: over, 'aria-label':`סיימתי: ${it.title}`, onclick:() => markItem(c, it) }),
+          h('span', { class:'ch-t' }, it.title),
+          d ? h('span', { class:'ch-who' }, h('span', { class:'dot', style:`background:${mColor(d.memberId)}` }), mName(d.memberId)) : null,
+          d && !over && canUnmark(d) ? h('button', { type:'button', class:'linkbtn', onclick:() => unmarkItem(it) }, 'ביטול') : null); })),
+      h('p', { class:'sub' }, `${n} מתוך ${total} משימות האתגר`),
       h('div', { class:'cj' }, h('span', { class:'cj-l' }, c.bonus ? 'משתתפים (רק הם מקבלים את הבונוס):' : 'משתתפים:'),
         S.members.map(m => { const auto = didInChallenge(c, m.id); const on = auto || markedIn(c, m.id); const can = !auto && !done && !over && canMarkFor(m.id);
           return h('button', { type:'button', class:'chip cj-chip' + (on ? ' on' : ''), disabled: !can, 'aria-pressed':String(on),
-            title: auto ? 'עשה/תה משימה באתגר' : '', onclick: () => toggleJoin(c, m.id) },
+            title: auto ? 'סימן/ה משימה באתגר' : '', onclick: () => toggleJoin(c, m.id) },
             h('span', { class:'dot', style:`background:${m.color}` }), m.name, on ? ' ✓' : ''); })),
       (!done && !over && S.boundId && !didInChallenge(c, S.boundId) && !markedIn(c, S.boundId))
         ? h('button', { type:'button', class:'btn small', onclick: () => toggleJoin(c, S.boundId) }, 'אני משתתף/ת! 🙋') : '');
   });
 }
+const itemsText = c => chItems(c).map(i => i.title).join('\n');
 async function saveChallenge(){
-  const title = $('ch-title').value.trim(); const target = Math.round(Number($('ch-target').value)); const bonus = Math.round(Number($('ch-bonus').value)) || 0; const until = $('ch-until').value; const prize = $('ch-prize').value.trim();
+  const title = $('ch-title').value.trim(); const bonus = Math.round(Number($('ch-bonus').value)) || 0; const until = $('ch-until').value; const prize = $('ch-prize').value.trim();
+  const lines = [...new Set($('ch-items').value.split('\n').map(x => x.trim().slice(0, 60)).filter(Boolean))];
   if (!canEditGoal()){ toast('רק הורה או מנהל'); return; }
-  if (target > 0){
+  if (lines.length > 30){ toast('עד 30 משימות באתגר'); return; }
+  if (lines.length){
     if (!title){ toast('כתבו שם לאתגר'); return; }
     if (!(bonus >= 0 && bonus <= 1000)){ toast('בונוס: בין 0 ל-1000 נקודות'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today()){ toast('בחרו תאריך סיום מהיום והלאה'); return; }
   }
-  const old = S.challenge; const same = old && old.target > 0 && old.until >= today() && old.title === title;
-  const start = same ? old.start : today(); const startAt = same ? old.startAt : Date.now();
-  const data = { title, target: Math.max(0, target || 0), start, ...(startAt > 0 ? { startAt } : {}), until: until || today(), prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
-  try{ await setDoc(doc(db,'settings','challenge'), data); toast(data.target ? 'האתגר נשמר. בהצלחה!' : 'האתגר בוטל'); }catch(e){ fail(e); }
+  const old = S.challenge; const same = old && chItems(old).length > 0 && old.until >= today() && old.title === title;
+  // an edited list keeps the ids (and the done marks) of tasks whose text didn't change
+  const prev = same ? chItems(old) : [];
+  const items = lines.map(t => prev.find(i => i.title === t) || { id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4), title: t });
+  const data = { title, target: items.length, items, start: same ? old.start : today(), until: until || today(), prize, bonus: Math.max(0, bonus), ...(S.isAdmin ? {} : { by: S.boundId }) };
+  try{ await setDoc(doc(db,'settings','challenge'), data); toast(items.length ? 'האתגר נשמר. בהצלחה!' : 'האתגר בוטל'); }catch(e){ fail(e); }
 }
 
 /* ---------- loans: ask for a reward before having enough points; a parent approves ---------- */
@@ -1951,6 +1974,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('complaints', a => { S.complaints = a; });
     sub('cpComments', a => { S.cpComments = a; });
     sub('challengeJoins', a => { S.cjoins = Object.fromEntries(a.map(j => [j.id, j])); });
+    sub('challengeItems', a => { S.citems = Object.fromEntries(a.map(d => [d.id, d])); });
     sub('photos', a => { S.photos = Object.fromEntries(a.map(p => [p.id, p])); });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });
@@ -1990,7 +2014,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','challenge'), s => {
       S.challenge = s.exists() ? s.data() : null; const c = S.challenge;
-      if (c && !['ch-title','ch-target','ch-until','ch-prize','ch-bonus'].includes(document.activeElement?.id)){ $('ch-bonus').value = c.bonus || ''; $('ch-title').value = c.title || ''; $('ch-target').value = c.target || ''; $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
+      if (c && !['ch-title','ch-items','ch-until','ch-prize','ch-bonus'].includes(document.activeElement?.id)){ $('ch-bonus').value = c.bonus || ''; $('ch-title').value = c.title || ''; $('ch-items').value = itemsText(c); $('ch-until').value = c.until || ''; $('ch-prize').value = c.prize || ''; }
       render();
     }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','perms'), s => { S.perms = s.exists() ? s.data() : {}; render(); }, e => console.error(e)));

@@ -260,8 +260,8 @@ service cloud.firestore {
     match /settings/{id} {
       allow read: if signedIn();
       allow write: if isAdmin() || (id == 'challenge'
-        && request.resource.data.keys().hasOnly(['title','target','start','startAt','until','prize','bonus','by'])
-        && (!('startAt' in request.resource.data) || request.resource.data.startAt is int)
+        && request.resource.data.keys().hasOnly(['title','target','items','start','until','prize','bonus','by'])
+        && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
         && (!('bonus' in request.resource.data) || (request.resource.data.bonus is int && request.resource.data.bonus >= 0 && request.resource.data.bonus <= 1000))
         && request.resource.data.title is string && request.resource.data.title.size() <= 40
         && request.resource.data.target is int && request.resource.data.target >= 0 && request.resource.data.target <= 100000
@@ -348,6 +348,22 @@ service cloud.firestore {
         && memberExists(request.resource.data.memberId)
         && (isAdmin() || boundTo(request.resource.data.memberId));
       allow delete: if isAdmin() || boundTo(resource.data.memberId);
+    }
+
+    // משימות האתגר (נפרדות מהמשימות הרגילות): כל משימה מסומנת פעם אחת, בשם מי שעשה אותה (או הורה בשם ילד).
+    // key חייב להיות של האתגר הנוכחי. ביטול: מי שסימן, הורה, או המנהל.
+    match /challengeItems/{itemId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['key','itemId','memberId','by','at'])
+        && request.resource.data.itemId == itemId
+        && request.resource.data.at is int
+        && memberExists(request.resource.data.memberId)
+        && request.resource.data.key == get(/databases/$(database)/documents/settings/challenge).data.start + '|' + get(/databases/$(database)/documents/settings/challenge).data.title
+        && ((!('by' in request.resource.data) && boundTo(request.resource.data.memberId))
+          || (request.resource.data.by is string && boundTo(request.resource.data.by)
+              && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('role', '') == 'parent')));
+      allow delete: if isAdmin() || boundTo(resource.data.memberId) || parentDevice();
     }
 
     // משתתפים באתגר: כל אחד מסמן את עצמו, הורה או מנהל יכולים לסמן כל אחד. ביטול = key ריק.
