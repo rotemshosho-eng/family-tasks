@@ -2785,7 +2785,7 @@ function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend()
 function kRenderSend(){
   const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
   eat.hidden = !(K.ready && K.dish);
-  sendBox.hidden = !(kMe() && !K.dish);
+  sendBox.hidden = !kMe();
   if (!$('kPop').hidden) kRenderPop();
 }
 // the send window: the picked food to one person or to everyone (optionally with "come and eat"), or a plain "come and eat" call
