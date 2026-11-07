@@ -2794,7 +2794,7 @@ function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend()
 // under the message: one button opens the send window (as soon as a food is picked, or to call everyone to eat); "I ate it" for a dish someone sent me
 function kRenderSend(){
   const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
-  eat.hidden = !(K.ready && K.dish);
+  eat.hidden = !K.dish;   // no waiting for the animation to end
   $('kComing').hidden = !(K.dish && !K.dish.coming); $('kComing').textContent = K.dish ? kReplyLabel(K.dish) + (K.dish.call ? '!' : '') : '';
   sendBox.hidden = !kMe();
   const cb = $('kCallBtn'); cb.disabled = !!K.called; cb.textContent = K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול!';
