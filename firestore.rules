@@ -334,7 +334,7 @@ service cloud.firestore {
     match /dishes/{id} {
       allow read: if signedIn();
       allow create: if (isAdmin() || boundTo(request.resource.data.from))
-        && request.resource.data.keys().hasOnly(['from','to','e','n','a','c','at','w'])
+        && request.resource.data.keys().hasOnly(['from','to','e','n','a','c','at','w','call'])
         && request.resource.data.from is string && request.resource.data.to is string
         && request.resource.data.from != request.resource.data.to
         && memberExists(request.resource.data.from) && memberExists(request.resource.data.to)
@@ -342,6 +342,7 @@ service cloud.firestore {
         && request.resource.data.n is string && request.resource.data.n.size() > 0 && request.resource.data.n.size() <= 30
         && request.resource.data.a in ['heat','cut','toasting','pour','fry','blend','bake']
         && (!('c' in request.resource.data) || (request.resource.data.c is string && request.resource.data.c.size() <= 9))
+        && (!('call' in request.resource.data) || request.resource.data.call == true)
         && request.resource.data.at is int && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
         && request.resource.data.w is int && request.resource.data.w * dishMs() <= request.resource.data.at && request.resource.data.at < (request.resource.data.w + 1) * dishMs()
         && id == request.resource.data.from + '__' + request.resource.data.to + '__' + string(request.resource.data.w);

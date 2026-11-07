@@ -211,8 +211,8 @@ export const onDish = onDocumentCreated('dishes/{id}', async ev => {
   const d = ev.data?.data(); if (!d || !d.to) return;
   const F = await family();
   const phones = await phonesOf([d.to]);
-  const call = d.n === 'בואו לאכול!';   // the "come and eat" call is a normal dish with this name
-  const pushed = await push([d.to], call ? `🍽️ ${F.name(d.from)} קורא${fem(F, d.from) ? 'ת' : ''}: בואו לאכול!` : `${d.e} ${F.name(d.from)} ${fem(F, d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`, call ? 'לחצו כדי לבוא' : 'פתחו את המטבח כדי לראות ולטעום', `dish-${ev.params.id}`, `${APP_URL}?kitchen=1`);
+  const call = d.call === true || d.n === 'בואו לאכול!';   // the "come and eat" call is a normal dish with this name
+  const pushed = await push([d.to], call ? `🍽️ ${F.name(d.from)} קורא${fem(F, d.from) ? 'ת' : ''}: בואו לאכול!${d.n === 'בואו לאכול!' ? '' : ` ${d.e} ${d.n}`}` : `${d.e} ${F.name(d.from)} ${fem(F, d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`, call ? 'לחצו כדי לבוא' : 'פתחו את המטבח כדי לראות ולטעום', `dish-${ev.params.id}`, `${APP_URL}?kitchen=1`);
   await ev.data.ref.update({ pushed, phones });   // the sender's app shows whether the notification went out (eaten is unchanged, so onDishEaten ignores this write)
 });
 export const onDishEaten = onDocumentUpdated('dishes/{id}', async ev => {

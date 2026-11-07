@@ -2113,7 +2113,7 @@ function kStop(){
 const kMsg = t => { $('kMsg').textContent = t; };
 function kReset(action, f){
   kStop(); const sc = $('kScene'); sc.className = 'kscene ' + action; kMount((KSCENE[action] || KSCENE.heat)(f || { e: '', n: '' }));
-  K.ready = false; K.sent = new Set(); K.called = false; kRenderSend();
+  K.ready = false; K.sent = new Set(); K.called = false; K.withCall = false; kRenderSend();
 }
 // timeline tools for one run: z = wait, a = animate an element and wait for it, loop = a repeating animation (stopped on reset)
 function kTools(T, run){
@@ -2788,35 +2788,52 @@ function kRenderSend(){
   sendBox.hidden = !(kMe() && !K.dish);
   if (!$('kPop').hidden) kRenderPop();
 }
-// the send window: the picked food to one person, or "come and eat" to everyone
+// the send window: the picked food to one person or to everyone (optionally with "come and eat"), or a plain "come and eat" call
 function kRenderPop(){
   const me = kMe(), box = $('kPopBody'); box.replaceChildren(); if (!me) return;
   const others = S.members.filter(m => m.id !== me);
-  if (K.cur) box.append(h('h3', null, `לשלוח ${K.cur.e} ${K.cur.n} ל:`),
-    h('div', { class:'chips' }, others.map(m => h('button', { type:'button', class:'chip', disabled: K.sent.has(m.id), onclick:() => kSendDish(m.id) },
-      h('span', { class:'dot', style:`background:${m.color}` }), m.name, K.sent.has(m.id) ? ' ✓' : ''))));
-  box.append(h('h3', null, 'לקרוא לכולם:'), h('button', { type:'button', class:'btn kcall', disabled: K.called, onclick:() => kCallAll() }, K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול!'));
+  if (K.cur){
+    box.append(h('h3', null, `${K.cur.e} ${K.cur.n}: לשלוח ל`),
+      h('label', { class:'check' }, h('input', { type:'checkbox', checked: K.withCall, onchange: e => { K.withCall = e.target.checked; } }), ' 🍽️ עם "בואו לאכול!" (ההתראה תקרא לבוא לאכול)'),
+      h('div', { class:'chips' }, others.map(m => h('button', { type:'button', class:'chip', disabled: K.sent.has(m.id), onclick:() => kSendDish(m.id) },
+        h('span', { class:'dot', style:`background:${m.color}` }), m.name, K.sent.has(m.id) ? ' ✓' : '')),
+        h('button', { type:'button', class:'chip', disabled: others.every(m => K.sent.has(m.id)), onclick:() => kSendAll() }, '👨‍👩‍👧 כולם')));
+  }
+  box.append(h('h3', null, 'בלי אוכל:'), h('button', { type:'button', class:'btn kcall', disabled: K.called, onclick:() => kCallAll() }, K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול! (לכולם)'));
 }
 function kOpenPop(){ $('kPop').hidden = false; kRenderPop(); }
 function kClosePop(){ $('kPop').hidden = true; }
+const kFood = () => ({ ...K.cur, ...(K.withCall ? { call:true } : {}) });
+// the same food to every other member (the ones who already got it this window are skipped)
+async function kSendAll(){
+  const me = kMe(), f = K.cur && kFood(); if (!me || !f) return;
+  const w = Math.floor(Date.now() / dishMs()); let n = 0;
+  for (const m of S.members.filter(m => m.id !== me && !K.sent.has(m.id))){
+    if (S.dishes.some(d => d.id === `${me}__${m.id}__${w}`)) continue;
+    if (await kSendDish(m.id, f, true)){ K.sent.add(m.id); n++; }
+  }
+  kRenderSend(); toast(n ? `${f.e} נשלח ל${n} בני משפחה` : 'כבר שלחת לכולם לפני רגע. נסו עוד כמה דקות.');
+  setTimeout(kClosePop, 700);
+}
 async function kCallAll(){
   const me = kMe(); if (!me || K.called) return;
   K.called = true; kRenderPop();
   const w = Math.floor(Date.now() / dishMs()); let n = 0;
   for (const m of S.members.filter(m => m.id !== me)){
     if (S.dishes.some(d => d.id === `${me}__${m.id}__${w}`)) continue;
-    try{ await kSendDish(m.id, { e:'🍽️', n:'בואו לאכול!', a:'heat' }, true); n++; }catch(e){}
+    if (await kSendDish(m.id, { e:'🍽️', n:'בואו לאכול!', a:'heat', call:true }, true)) n++;
   }
   toast(n ? '🍽️ קראת לכולם לאכול' : 'כבר שלחת לכולם לפני רגע. נסו עוד כמה דקות.');
   setTimeout(kClosePop, 700);
 }
-async function kSendDish(to, food = K.cur, call = false){
-  const me = kMe(), f = food; if (!me || !f || (!call && K.sent.has(to))) return;
+// returns true when the dish was written
+async function kSendDish(to, food, bulk = false){
+  const me = kMe(), f = food || (K.cur && kFood()); if (!me || !f || (!bulk && K.sent.has(to))) return false;
   const at = Date.now(), w = Math.floor(at / dishMs()), id = `${me}__${to}__${w}`;
-  if (S.dishes.some(d => d.id === id)){ if (!call) toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return; }
-  if (!call){ K.sent.add(to); kRenderSend(); }
-  try{ await setDoc(doc(db, 'dishes', id), { from: me, to, e: f.e, n: f.n, a: f.a, ...(f.c ? { c: f.c } : {}), at, w }); if (!call) toast(`נשלח ל${mName(to)} 📤`); }
-  catch(e){ if (!call){ K.sent.delete(to); kRenderSend(); } if (e && e.code === 'permission-denied'){ if (!call) toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); } else if (!call) fail(e); }
+  if (S.dishes.some(d => d.id === id)){ if (!bulk) toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return false; }
+  if (!bulk){ K.sent.add(to); kRenderSend(); }
+  try{ await setDoc(doc(db, 'dishes', id), { from: me, to, e: f.e, n: f.n, a: f.a, ...(f.c ? { c: f.c } : {}), ...(f.call ? { call: true } : {}), at, w }); if (!bulk) toast(`נשלח ל${mName(to)} 📤`); return true; }
+  catch(e){ if (!bulk){ K.sent.delete(to); kRenderSend(); if (e && e.code === 'permission-denied') toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); else fail(e); } return false; }
 }
 // opening a dish someone sent: it is prepared on screen again, then "I ate it" tells them
 function kOpenDish(d){
