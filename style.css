@@ -636,12 +636,6 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 
 .kpop-card.tall{max-height:90vh;min-height:60vh}
 
-/* wide screens: the kitchen and its popups open as a regular centred window, not full-screen */
-@media (min-width:700px){
-  #kitchenSheet{inset:0;margin:auto;width:min(560px,92vw);height:min(90vh,880px);border-radius:20px;overflow:hidden;
-    box-shadow:0 0 0 100vmax rgba(10,14,28,.6),0 24px 70px rgba(0,0,0,.5)}
-  #kitchenSheet .sheet-head{border-radius:20px 20px 0 0}
-  .kpop{align-items:center}
-  .kpop-card{border-radius:18px;max-height:88vh}
-  .kpop-card.tall{min-height:0}
-}
+/* the kitchen stays inside the normal page: it sits above the bottom bar, which stays visible and usable */
+#kitchenSheet{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));padding-bottom:0}
+.bottomnav{z-index:16}

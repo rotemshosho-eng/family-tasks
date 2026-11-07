@@ -218,7 +218,7 @@ function render(){
   if ((!S.isAdmin || plain) && S.tab === 'admin') S.tab = 'today';
   $('tabs').hidden = !S.user;
   $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin || plain;
-  for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kitchen ? !!S.kitchenOpen : b.dataset.tab === S.tab));
+  for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kitchen ? !!S.kitchenOpen : (!S.kitchenOpen && b.dataset.tab === S.tab)));
   if (!['today','tasks','rewards','family','admin'].includes(S.tab)) S.tab = 'today';
   const VIEWS = ['today','tasks','rewards','family','admin'];
   const hideViews = () => VIEWS.forEach(v => $('view-'+v).hidden = true);
@@ -1871,7 +1871,7 @@ function buildStatic(){
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
   const jc = $('join-colors'); COLORS.forEach((c, i) => jc.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'join-color', id:'join-color-'+i, value:c, checked: i === 0 }))));
   document.querySelectorAll('input[name=tf-type]').forEach(r => r.addEventListener('change', () => { $('tf-dayswrap').hidden = $('tf-type-once').checked; }));
-  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.kitchen){ S.kitchenOpen = true; S.openPick = null; render(); return; } S.tab = b.dataset.tab; S.openPick = null; render(); window.scrollTo(0, 0); });
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.kitchen){ S.kitchenOpen = true; S.openPick = null; render(); return; } S.tab = b.dataset.tab; S.openPick = null; S.kitchenOpen = false; render(); window.scrollTo(0, 0); });
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
   $('mf-save').addEventListener('click', saveMember);
   $('mf-role').addEventListener('change', fillMarkFor); $('mf-cancel').addEventListener('click', resetMemberForm);
