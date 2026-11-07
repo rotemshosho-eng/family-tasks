@@ -219,7 +219,8 @@ export const onDish = onDocumentCreated('dishes/{id}', async ev => {
 export const onDishComing = onDocumentUpdated('dishes/{id}', async ev => {
   const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.coming === true || d.coming !== true) return;
   const F = await family();
-  await push([d.from], `🏃 ${F.name(d.to)} בדרך לאכול`, d.n === 'בואו לאכול!' ? 'קראת ו' + F.name(d.to) + (fem(F, d.to) ? ' באה' : ' בא') : `${d.e} ${d.n}`, `dish-coming-${ev.params.id}`);
+  const call = d.call === true || d.n === 'בואו לאכול!';
+  await push([d.from], call ? `🏃 ${F.name(d.to)} בדרך לאכול` : `✅ ${F.name(d.to)} ${fem(F, d.to) ? 'מוכנה' : 'מוכן'}: ${d.e} ${d.n}`, call ? (d.n === 'בואו לאכול!' ? 'קראת ו' + F.name(d.to) + (fem(F, d.to) ? ' באה' : ' בא') : `${d.e} ${d.n}`) : 'המנה שלך הגיעה', `dish-coming-${ev.params.id}`);
 });
 export const onDishEaten = onDocumentUpdated('dishes/{id}', async ev => {
   const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.eaten === true || d.eaten !== true) return;
