@@ -452,7 +452,7 @@
       <canvas id="kFx"></canvas>
     </div>
     <p class="kmsg" id="kMsg" role="status" aria-live="polite">בחרו מה להכין</p>
-    <div class="ksend" id="kSend" hidden><span class="sub">לשלוח את זה ל:</span><div class="chips" id="kSendTo"></div></div>
+    <div class="ksend" id="kSend" hidden><button type="button" class="btn" id="kSendOpen">📤 שליחה / בואו לאכול</button></div>
     <div class="keat" id="kEatWrap" hidden><button type="button" class="btn" id="kEat">😋 אכלתי</button></div>
     <form class="kfree" id="kFree" autocomplete="off">
       <input type="text" id="kFreeIn" maxlength="24" placeholder="כתבו כל אוכל או שתייה, למשל: קפה" enterkeyhint="go" aria-label="אוכל לבחירתכם">
@@ -464,6 +464,12 @@
       <h2>📤 מה ששלחתי</h2>
       <div id="kOutboxList"></div>
     </section>
+  </div>
+</div>
+<div class="kpop" id="kPop" hidden role="dialog" aria-modal="true" aria-labelledby="kPopTitle">
+  <div class="kpop-card">
+    <div class="kpop-head"><strong id="kPopTitle">📤 שליחה</strong><button type="button" class="btn ghost small" id="kPopClose">סגירה</button></div>
+    <div id="kPopBody"></div>
   </div>
 </div>
 <div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">

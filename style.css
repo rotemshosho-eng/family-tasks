@@ -624,3 +624,12 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 /* the count of dishes waiting in the kitchen, on its bottom-bar icon */
 .bottomnav button{position:relative}
 .nbadge{position:absolute;top:3px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#E2574C;color:#fff;font:700 .68rem/17px var(--body);text-align:center}
+
+/* kitchen send popup */
+.kpop{position:fixed;inset:0;z-index:30;background:rgba(15,20,35,.55);display:flex;align-items:flex-end;justify-content:center;animation:sheetIn .18s ease-out}
+.kpop[hidden]{display:none}
+.kpop-card{background:var(--surface);color:var(--ink);width:min(520px,100%);max-height:85vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.kpop-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.kpop-card h3{margin:0;font-size:.95rem}
+.kpop-card .chips{justify-content:flex-start}
+.kcall{width:100%}

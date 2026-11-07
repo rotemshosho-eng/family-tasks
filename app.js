@@ -2104,7 +2104,7 @@ function kStop(){
 const kMsg = t => { $('kMsg').textContent = t; };
 function kReset(action, f){
   kStop(); const sc = $('kScene'); sc.className = 'kscene ' + action; kMount((KSCENE[action] || KSCENE.heat)(f || { e: '', n: '' }));
-  K.ready = false; K.sent = new Set(); kRenderSend();
+  K.ready = false; K.sent = new Set(); K.called = false; kRenderSend();
 }
 // timeline tools for one run: z = wait, a = animate an element and wait for it, loop = a repeating animation (stopped on reset)
 function kTools(T, run){
@@ -2772,23 +2772,42 @@ function kDishesIn(list){
   S.dishes = list; S.dishesLoaded = true;
 }
 function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend(); }
-// under the message: who to send it to (as soon as a food is picked), or "I ate it" for a dish someone sent me
+// under the message: one button opens the send window (as soon as a food is picked, or to call everyone to eat); "I ate it" for a dish someone sent me
 function kRenderSend(){
   const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
   eat.hidden = !(K.ready && K.dish);
-  const can = !!(K.cur && !K.dish); sendBox.hidden = !can; if (!can) return;
-  const me = kMe(), box = $('kSendTo'); box.replaceChildren();
-  if (!me){ box.append(h('span', { class:'sub' }, 'כדי לשלוח, בחרו למעלה מי משתמש')); return; }
-  S.members.filter(m => m.id !== me).forEach(m => box.append(h('button', { type:'button', class:'chip', disabled: K.sent.has(m.id), onclick:() => kSendDish(m.id) },
-    h('span', { class:'dot', style:`background:${m.color}` }), m.name, K.sent.has(m.id) ? ' ✓' : '')));
+  sendBox.hidden = !(kMe() && !K.dish);
+  if (!$('kPop').hidden) kRenderPop();
 }
-async function kSendDish(to){
-  const me = kMe(), f = K.cur; if (!me || !f || K.sent.has(to)) return;
+// the send window: the picked food to one person, or "come and eat" to everyone
+function kRenderPop(){
+  const me = kMe(), box = $('kPopBody'); box.replaceChildren(); if (!me) return;
+  const others = S.members.filter(m => m.id !== me);
+  if (K.cur) box.append(h('h3', null, `לשלוח ${K.cur.e} ${K.cur.n} ל:`),
+    h('div', { class:'chips' }, others.map(m => h('button', { type:'button', class:'chip', disabled: K.sent.has(m.id), onclick:() => kSendDish(m.id) },
+      h('span', { class:'dot', style:`background:${m.color}` }), m.name, K.sent.has(m.id) ? ' ✓' : ''))));
+  box.append(h('h3', null, 'לקרוא לכולם:'), h('button', { type:'button', class:'btn kcall', disabled: K.called, onclick:() => kCallAll() }, K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול!'));
+}
+function kOpenPop(){ $('kPop').hidden = false; kRenderPop(); }
+function kClosePop(){ $('kPop').hidden = true; }
+async function kCallAll(){
+  const me = kMe(); if (!me || K.called) return;
+  K.called = true; kRenderPop();
+  const w = Math.floor(Date.now() / 600000); let n = 0;
+  for (const m of S.members.filter(m => m.id !== me)){
+    if (S.dishes.some(d => d.id === `${me}__${m.id}__${w}`)) continue;
+    try{ await kSendDish(m.id, { e:'🍽️', n:'בואו לאכול!', a:'heat' }, true); n++; }catch(e){}
+  }
+  toast(n ? '🍽️ קראת לכולם לאכול' : 'כבר שלחת לכולם לפני רגע. נסו עוד כמה דקות.');
+  setTimeout(kClosePop, 700);
+}
+async function kSendDish(to, food = K.cur, call = false){
+  const me = kMe(), f = food; if (!me || !f || (!call && K.sent.has(to))) return;
   const at = Date.now(), w = Math.floor(at / 600000), id = `${me}__${to}__${w}`;
-  if (S.dishes.some(d => d.id === id)){ toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return; }
-  K.sent.add(to); kRenderSend();
-  try{ await setDoc(doc(db, 'dishes', id), { from: me, to, e: f.e, n: f.n, a: f.a, ...(f.c ? { c: f.c } : {}), at, w }); toast(`נשלח ל${mName(to)} 📤`); }
-  catch(e){ K.sent.delete(to); kRenderSend(); if (e && e.code === 'permission-denied') toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); else fail(e); }
+  if (S.dishes.some(d => d.id === id)){ if (!call) toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return; }
+  if (!call){ K.sent.add(to); kRenderSend(); }
+  try{ await setDoc(doc(db, 'dishes', id), { from: me, to, e: f.e, n: f.n, a: f.a, ...(f.c ? { c: f.c } : {}), at, w }); if (!call) toast(`נשלח ל${mName(to)} 📤`); }
+  catch(e){ if (!call){ K.sent.delete(to); kRenderSend(); } if (e && e.code === 'permission-denied'){ if (!call) toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); } else if (!call) fail(e); }
 }
 // opening a dish someone sent: it is prepared on screen again, then "I ate it" tells them
 function kOpenDish(d){
@@ -2828,6 +2847,9 @@ function buildKitchen(){
   window.addEventListener('resize', () => { if (K.shown) kFit(); });
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kEat').addEventListener('click', kEat);
+  $('kSendOpen').addEventListener('click', kOpenPop);
+  $('kPopClose').addEventListener('click', kClosePop);
+  $('kPop').addEventListener('click', e => { if (e.target === $('kPop')) kClosePop(); });
   $('kSound').addEventListener('click', () => { store.set('ft-ksound', store.get('ft-ksound') === '0' ? '1' : '0'); kSoundIcon(); kBeep(660, 80); });
 }
 // render() calls this on every data update: it only shows or hides the sheet and never touches a running animation
