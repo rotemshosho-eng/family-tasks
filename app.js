@@ -2786,6 +2786,7 @@ function kRenderSend(){
   const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
   eat.hidden = !(K.ready && K.dish);
   sendBox.hidden = !kMe();
+  const cb = $('kCallBtn'); cb.disabled = !!K.called; cb.textContent = K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול!';
   if (!$('kPop').hidden) kRenderPop();
 }
 // the send window: the picked food to one person or to everyone (optionally with "come and eat"), or a plain "come and eat" call
@@ -2817,7 +2818,7 @@ async function kSendAll(){
 }
 async function kCallAll(){
   const me = kMe(); if (!me || K.called) return;
-  K.called = true; kRenderPop();
+  K.called = true; kRenderSend(); kRenderPop();
   const w = Math.floor(Date.now() / dishMs()); let n = 0;
   for (const m of S.members.filter(m => m.id !== me)){
     if (S.dishes.some(d => d.id === `${me}__${m.id}__${w}`)) continue;
@@ -2877,6 +2878,7 @@ function buildKitchen(){
   $('kFoodOpen').addEventListener('click', () => { $('kFoodPop').hidden = false; });
   $('kFoodPopClose').addEventListener('click', () => { $('kFoodPop').hidden = true; });
   $('kFoodPop').addEventListener('click', e => { if (e.target === $('kFoodPop')) $('kFoodPop').hidden = true; });
+  $('kCallBtn').addEventListener('click', kCallAll);
   $('kSendOpen').addEventListener('click', kOpenPop);
   $('kPopClose').addEventListener('click', kClosePop);
   $('kPop').addEventListener('click', e => { if (e.target === $('kPop')) kClosePop(); });
