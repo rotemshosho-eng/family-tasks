@@ -269,6 +269,12 @@ if (dow === 6 && hour >= 20 && state.ceremonyDay !== today) {
   state.ceremonyDay = today;
 }
 
+// 6. housekeeping: a dish sent from the kitchen is only for a day or two
+{
+  const old = await db.collection('dishes').where('at', '<', now.getTime() - 3 * 864e5).get();
+  for (const d of old.docs) await d.ref.delete();
+}
+
 // send
 let sent = 0; const dead = new Set();
 for (const n of outbox) {

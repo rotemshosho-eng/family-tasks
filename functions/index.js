@@ -39,13 +39,13 @@ function turnOf(t, members, logs){
   return r.length ? r[done % r.length] : 'all';
 }
 // sends one notification to the phones of these members; removes tokens of phones that uninstalled
-async function push(to, title, body, tag){
+async function push(to, title, body, tag, link){
   to = [...new Set((to || []).filter(Boolean))]; if (!to.length) return 0;
   const toks = (await all('pushTokens')).filter(t => to.includes(t.memberId)).map(t => t.id); if (!toks.length) return 0;
   let sent = 0;
   for (let i = 0; i < toks.length; i += 500){
     const chunk = toks.slice(i, i + 500);
-    const res = await fcm.sendEachForMulticast({ tokens: chunk, data: { title, body: String(body || '').slice(0, 200), tag: tag || 'kofzi', link: APP_URL }, webpush: { headers: { Urgency: 'high', TTL: '3600' } } });
+    const res = await fcm.sendEachForMulticast({ tokens: chunk, data: { title, body: String(body || '').slice(0, 200), tag: tag || 'kofzi', link: link || APP_URL }, webpush: { headers: { Urgency: 'high', TTL: '3600' } } });
     await Promise.all(res.responses.map((r, j) => {
       if (r.success){ sent++; return null; }
       if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument'].includes(r.error?.code)) return db.doc(`pushTokens/${chunk[j]}`).delete();
@@ -187,4 +187,17 @@ export const onSettings = onDocumentWritten('settings/{id}', async ev => {
     if (!(a.target > 0) || (b && b.target === a.target && (b.prize || '') === (a.prize || ''))) return;
     return push(F.ids, `🎯 יעד חודשי חדש${a.prize ? `: ${a.prize}` : ''}`, `${a.target} נקודות ביחד החודש`, 'new-goal');
   }
+});
+
+/* ---------- kitchen: a dish sent to a family member, and "I ate it" ---------- */
+const fem = (F, id) => F.members.find(m => m.id === id)?.gender === 'f';
+export const onDish = onDocumentCreated('dishes/{id}', async ev => {
+  const d = ev.data?.data(); if (!d || !d.to) return;
+  const F = await family();
+  await push([d.to], `${d.e} ${F.name(d.from)} ${fem(F, d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`, 'פתחו את המטבח כדי לראות ולטעום', `dish-${ev.params.id}`, `${APP_URL}?kitchen=1`);
+});
+export const onDishEaten = onDocumentUpdated('dishes/{id}', async ev => {
+  const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.eaten === true || d.eaten !== true) return;
+  const F = await family();
+  await push([d.from], `😋 ${F.name(d.to)} ${fem(F, d.to) ? 'אכלה' : 'אכל'} את ${d.n} שלך`, 'בתיאבון!', `dish-eaten-${ev.params.id}`);
 });

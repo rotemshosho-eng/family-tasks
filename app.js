@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { tokens:[], nudgePick:new Set(), nudgeCh:null, myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, kitchenOpen:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { tokens:[], nudgePick:new Set(), nudgeCh:null, myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, kitchenOpen:false, dishes:[], dishesLoaded:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -1907,7 +1907,7 @@ const KITCHEN = [
   { e:'🥛', n:'חלב', a:'pour', c:'#FFFFFF' }, { e:'🍊', n:'מיץ תפוזים', a:'pour', c:'#FFA726' }, { e:'🍫', n:'שוקו', a:'pour', c:'#6D4C41' }, { e:'☕', n:'קפה', a:'pour', c:'#6B4226' }, { e:'🍵', n:'תה', a:'pour', c:'#C98A4B' }, { e:'💧', n:'מים', a:'pour', c:'#7FD1FF' }, { e:'🍇', n:'מיץ ענבים', a:'pour', c:'#8E3FA8' },
   { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' }];
 const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 שתייה (שופכים לכוס)'], ['fry', '🍳 לטגן במחבת']];
-const K = { timers:[], clock:null, audio:null, shown:false };
+const K = { timers:[], clock:null, audio:null, shown:false, cur:null, dish:null, ready:false, sent:new Set() };
 const kLater = (ms, fn) => K.timers.push(setTimeout(fn, ms));
 const kSpeed = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches ? .4 : 1; }catch(e){ return 1; } };
 function kCtx(){ const A = K.audio || (K.audio = new (window.AudioContext || window.webkitAudioContext)()); if (A.state === 'suspended') A.resume(); return A; }
@@ -1934,7 +1934,7 @@ const kMsg = t => { $('kMsg').textContent = t; };
 function kReset(action){
   kStop(); const sc = $('kScene'); sc.className = 'kscene reset ' + action; sc.style.removeProperty('--lq');
   $('kClock').textContent = '0:00'; $('kLines').replaceChildren(); $('kPieces').replaceChildren(); $('kFood').textContent = ''; $('kCutFood').textContent = ''; $('kCutFood').classList.remove('shake');
-  $('kToast1').textContent = ''; $('kToast2').textContent = '';
+  $('kToast1').textContent = ''; $('kToast2').textContent = ''; K.ready = false; K.sent = new Set(); kRenderSend();
   sc.offsetWidth; requestAnimationFrame(() => sc.classList.remove('reset'));
 }
 function kCountdown(sec, ms){
@@ -1951,7 +1951,7 @@ function kHeat(f, T){
   kLater(5500 * T, () => { sc.classList.remove('on'); kBeep(1320, 160); kLater(260, () => kBeep(1320, 160)); kLater(520, () => kBeep(1320, 280)); });
   kLater(6200 * T, () => { sc.classList.remove('closed'); sc.classList.add('ready'); });
   kLater(6600 * T, () => { sc.classList.remove('in'); sc.classList.add('steam'); });
-  kLater(7700 * T, () => kMsg('בתיאבון! 🍽️'));
+  kLater(7700 * T, kDone);
 }
 // cutting board: the food pops in, the knife chops three times, it falls apart into pieces
 function kCut(f, T){
@@ -1965,7 +1965,7 @@ function kCut(f, T){
   }));
   kLater(3500 * T, () => { sc.classList.add('sliced'); $('kLines').replaceChildren(); const P = $('kPieces');
     for (let i = 0; i < 6; i++) P.append(h('span', { style:`--i:${i};--r:${(i % 2 ? 1 : -1) * (6 + i * 3)}deg` }, f.e)); kBeep(880, 90); });
-  kLater(4600 * T, () => kMsg('בתיאבון! 🍽️'));
+  kLater(4600 * T, kDone);
 }
 // toaster: two slices drop in, the lever goes down and the slot glows, then they pop up toasted with a ding
 function kToast(f, T){
@@ -1973,7 +1973,7 @@ function kToast(f, T){
   kLater(600 * T, () => { sc.classList.add('down'); kBeep(150, 140, 'square', .06); });
   kLater(1500 * T, () => sc.classList.add('on'));
   kLater(3800 * T, () => { sc.classList.remove('on', 'down'); sc.classList.add('up', 'steam'); kBeep(1320, 220); });
-  kLater(4900 * T, () => kMsg('בתיאבון! 🍽️'));
+  kLater(4900 * T, kDone);
 }
 // pouring: the jug tips, a stream runs into the glass and the liquid rises; the food it came from appears next to the glass
 function kPour(f, T){
@@ -1981,7 +1981,7 @@ function kPour(f, T){
   kLater(300 * T, () => sc.classList.add('tilt'));
   kLater(1000 * T, () => { sc.classList.add('pouring'); for (let i = 0; i < 8; i++) kLater(i * 330 * T, () => kBeep(200 + i * 45, 110, 'sine', .05)); });
   kLater(3800 * T, () => { sc.classList.remove('pouring', 'tilt'); sc.classList.add('poured'); kBeep(1000, 90); });
-  kLater(4700 * T, () => kMsg('בתיאבון! 🍽️'));
+  kLater(4700 * T, kDone);
 }
 // frying: the food drops into the pan and sizzles; an egg cracks open into a fried egg, everything else flips once
 function kFry(f, T){
@@ -1990,7 +1990,7 @@ function kFry(f, T){
   kLater(1000 * T, () => { sc.classList.add('on'); kSizzle(3200 * T); kBeep(180, 80, 'square', .05); if (egg) sc.classList.add('crack'); });
   if (!egg) kLater(3000 * T, () => { sc.classList.add('flip'); kLater(850 * T, () => sc.classList.remove('flip')); });
   kLater(4300 * T, () => { sc.classList.remove('on'); sc.classList.add('ready', 'steam'); });
-  kLater(5300 * T, () => kMsg('בתיאבון! 🍽️'));
+  kLater(5300 * T, kDone);
 }
 // ---- free text: any food typed in the box. A built-in dictionary (no network, no AI) maps words to an emoji and an action. ----
 const KFREE_HINT = 'אפשר גם להקליד אימוג׳י, כמו ☕';
@@ -2135,11 +2135,66 @@ function kFree(text){
   kPick(r.f);
   $('kFreeNote').textContent = r.known ? KFREE_HINT : `עוד לא מכיר את "${r.f.n}", אז מחממים אותו בכל זאת. אפשר להקליד אימוג׳י במקום.`;
 }
+/* ---------- kitchen: send what you made to a family member ---------- */
+// dishes/<from>__<to>__<10-minute window>: {from, to, e, n, a, c?, at, eaten?, ateAt?}. The id caps it at one dish per pair per window.
+// Whoever is signed in on this phone (or, for the admin, the member chosen at the top) is the sender.
+const kMe = () => { if (S.boundId && member(S.boundId)) return S.boundId; return S.isAdmin && S.me !== 'all' && member(S.me) ? S.me : null; };
+const kRecent = d => d.at > Date.now() - 3 * 864e5;
+const kInbox = () => { const me = kMe(); return me ? S.dishes.filter(d => d.to === me && !d.eaten && kRecent(d)).sort((a, b) => b.at - a.at) : []; };
+const kOutbox = () => { const me = kMe(); return me ? S.dishes.filter(d => d.from === me && kRecent(d)).sort((a, b) => b.at - a.at).slice(0, 6) : []; };
+const kFem = id => member(id)?.gender === 'f';
+const kWhen = at => { const d = new Date(at); const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`; return dstr(d) === today() ? `היום ${hm}` : `${d.getDate()}.${d.getMonth() + 1} ${hm}`; };
+// a dish for me that arrives while the app is open pops up as a message (only fresh ones, so a cache replay stays quiet)
+function kDishesIn(list){
+  const prev = new Set(S.dishes.map(d => d.id)); const me = kMe();
+  if (S.dishesLoaded && me) for (const d of list) if (!prev.has(d.id) && d.to === me && !d.eaten && d.at > Date.now() - 120000) toast(`${d.e} ${mName(d.from)} ${kFem(d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`);
+  S.dishes = list; S.dishesLoaded = true;
+}
+function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend(); }
+// under the message: who to send it to (after it is ready), or "I ate it" for a dish someone sent me
+function kRenderSend(){
+  const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
+  eat.hidden = !(K.ready && K.dish);
+  const can = !!(K.ready && K.cur && !K.dish); sendBox.hidden = !can; if (!can) return;
+  const me = kMe(), box = $('kSendTo'); box.replaceChildren();
+  if (!me){ box.append(h('span', { class:'sub' }, 'כדי לשלוח, בחרו למעלה מי משתמש')); return; }
+  S.members.filter(m => m.id !== me).forEach(m => box.append(h('button', { type:'button', class:'chip', disabled: K.sent.has(m.id), onclick:() => kSendDish(m.id) },
+    h('span', { class:'dot', style:`background:${m.color}` }), m.name, K.sent.has(m.id) ? ' ✓' : '')));
+}
+async function kSendDish(to){
+  const me = kMe(), f = K.cur; if (!me || !f || !K.ready || K.sent.has(to)) return;
+  const at = Date.now(), w = Math.floor(at / 600000), id = `${me}__${to}__${w}`;
+  if (S.dishes.some(d => d.id === id)){ toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return; }
+  K.sent.add(to); kRenderSend();
+  try{ await setDoc(doc(db, 'dishes', id), { from: me, to, e: f.e, n: f.n, a: f.a, ...(f.c ? { c: f.c } : {}), at, w }); toast(`נשלח ל${mName(to)} 📤`); }
+  catch(e){ K.sent.delete(to); kRenderSend(); if (e && e.code === 'permission-denied') toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); else fail(e); }
+}
+// opening a dish someone sent: it is prepared on screen again, then "I ate it" tells them
+function kOpenDish(d){
+  kPick({ e:d.e, n:d.n, a:d.a, ...(d.c ? { c:d.c } : {}) }, d);
+  try{ document.querySelector('#kitchenSheet .sheet-body').scrollTo({ top: 0, behavior: 'smooth' }); }catch(e){}
+}
+async function kEat(){
+  const d = K.dish; if (!d) return;
+  try{ await updateDoc(doc(db, 'dishes', d.id), { eaten: true, ateAt: Date.now() }); toast(`בתיאבון! ${mName(d.from)} יקבל${kFem(d.from) ? 'ת' : ''} הודעה 😋`); K.dish = null; K.cur = null; kRenderSend(); render(); }
+  catch(e){ fail(e); }
+}
+function renderKitchenMail(){
+  const inbox = kInbox(), out = kOutbox();
+  $('kInbox').hidden = !inbox.length; const I = $('kInboxList'); I.replaceChildren();
+  inbox.forEach(d => I.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
+    h('div', { class:'t' }, h('strong', null, `${mName(d.from)} ${kFem(d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`), h('small', null, kWhen(d.at))),
+    h('button', { type:'button', class:'btn small', onclick:() => kOpenDish(d) }, 'פתחו'))));
+  $('kOutbox').hidden = !out.length; const O = $('kOutboxList'); O.replaceChildren();
+  out.forEach(d => O.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
+    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}`)))));
+}
 const KRUN = { heat:kHeat, cut:kCut, toasting:kToast, pour:kPour, fry:kFry };
-function kPick(f){
+function kPick(f, dish = null){
+  K.cur = f; K.dish = dish;
   const i = String(KITCHEN.indexOf(f));
   document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.i === i)));
-  $('kFreeNote').textContent = KFREE_HINT; kReset(f.a); KRUN[f.a](f, kSpeed());
+  $('kFreeNote').textContent = KFREE_HINT; kReset(f.a); (KRUN[f.a] || kHeat)(f, kSpeed());
 }
 function kFit(){ const st = $('kStage'), sc = $('kScene'); const k = Math.min(1, (st.clientWidth || 320) / 320); sc.style.transform = k < 1 ? `scale(${k})` : ''; st.style.height = Math.round(340 * k) + 'px'; }
 const kSoundIcon = () => { $('kSound').textContent = store.get('ft-ksound') === '0' ? '🔇' : '🔊'; };
@@ -2152,14 +2207,18 @@ function buildKitchen(){
   $('kitchen-open').addEventListener('click', () => { S.kitchenOpen = true; render(); });
   $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
+  $('kEat').addEventListener('click', kEat);
   $('kSound').addEventListener('click', () => { store.set('ft-ksound', store.get('ft-ksound') === '0' ? '1' : '0'); kSoundIcon(); kBeep(660, 80); });
 }
 // render() calls this on every data update: it only shows or hides the sheet and never touches a running animation
 function renderKitchen(){
   const sheet = $('kitchenSheet'); if (!sheet) return;
-  if (!S.kitchenOpen){ if (K.shown){ K.shown = false; sheet.hidden = true; kStop(); } return; }
+  const kb = $('kitchen-open'); if (kb){ const n = kInbox().length; kb.textContent = n ? `🍽️ המטבח (${n} ${n === 1 ? 'מנה חדשה' : 'מנות חדשות'})` : '🍽️ המטבח: אוכל ושתייה'; }
+  const allowed = !!S.user && !!(S.boundId || S.isAdmin);
+  if (!S.kitchenOpen || !allowed){ if (K.shown){ K.shown = false; sheet.hidden = true; kStop(); } return; }
   document.body.classList.add('locked');
-  if (!K.shown){ K.shown = true; sheet.hidden = false; kFit(); kReset('heat'); kMsg('בחרו מה להכין'); $('kFreeNote').textContent = KFREE_HINT; $('kFreeIn').value = ''; document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', 'false')); }
+  if (!K.shown){ K.shown = true; K.cur = null; K.dish = null; sheet.hidden = false; kFit(); kReset('heat'); kMsg('בחרו מה להכין'); $('kFreeNote').textContent = KFREE_HINT; $('kFreeIn').value = ''; document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', 'false')); }
+  renderKitchenMail();
 }
 
 /* ---------- opening splash ---------- */
@@ -2269,6 +2328,7 @@ function updateSplash(){
 })();
 
 /* ---------- boot ---------- */
+if (/[?&]kitchen=1/.test(location.search)) S.kitchenOpen = true;
 buildStatic(); render();
 let lastDay = today();
 setInterval(() => { if (today() !== lastDay){ lastDay = today(); render(); } }, 60000);
@@ -2276,6 +2336,7 @@ setInterval(tick, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.open === 'kitchen'){ S.kitchenOpen = true; S.tab = 'family'; render(); } });
 
 if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
   $('setup').hidden = false;
@@ -2364,6 +2425,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
     sub('cpComments', a => { S.cpComments = a; });
     sub('challengeJoins', a => { S.cjoins = Object.fromEntries(a.map(j => [j.id, j])); });
     sub('challengeItems', a => { S.citems = Object.fromEntries(a.map(d => [d.id, d])); });
+    sub('dishes', a => kDishesIn(a));
     sub('photos', a => { S.photos = Object.fromEntries(a.map(p => [p.id, p])); });
     sub('timers', a => { S.timers = a; });
     sub('messages', a => { S.messages = a; });

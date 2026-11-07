@@ -442,6 +442,10 @@
     <button type="button" class="btn ghost small ksound" id="kSound" aria-label="צליל">🔊</button>
   </div>
   <div class="sheet-body scroll">
+    <section class="kmail" id="kInbox" hidden>
+      <h2>🍽️ מנות שקיבלת</h2>
+      <div id="kInboxList"></div>
+    </section>
     <div class="kstage" id="kStage">
       <div class="kscene heat" id="kScene" aria-hidden="true">
         <div class="kmw"></div>
@@ -470,12 +474,18 @@
       </div>
     </div>
     <p class="kmsg" id="kMsg" role="status" aria-live="polite">בחרו מה להכין</p>
+    <div class="ksend" id="kSend" hidden><span class="sub">לשלוח את זה ל:</span><div class="chips" id="kSendTo"></div></div>
+    <div class="keat" id="kEatWrap" hidden><button type="button" class="btn" id="kEat">😋 אכלתי</button></div>
     <form class="kfree" id="kFree" autocomplete="off">
       <input type="text" id="kFreeIn" maxlength="24" placeholder="כתבו כל אוכל או שתייה, למשל: קפה" enterkeyhint="go" aria-label="אוכל לבחירתכם">
       <button type="submit" class="btn" id="kFreeGo">הכינו</button>
     </form>
     <p class="sub kfree-note" id="kFreeNote">אפשר גם להקליד אימוג׳י, כמו ☕</p>
     <div class="kpick" id="kPick"></div>
+    <section class="kmail" id="kOutbox" hidden>
+      <h2>📤 מה ששלחתי</h2>
+      <div id="kOutboxList"></div>
+    </section>
   </div>
 </div>
 <div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">

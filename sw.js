@@ -1,5 +1,5 @@
 // Keeps the app opening even without internet. Same-origin files only; Firebase handles its own data cache.
-const CACHE = 'family-tasks-v99';
+const CACHE = 'family-tasks-v100';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'firebase-config.js', 'manifest.json',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
@@ -38,7 +38,7 @@ self.addEventListener('notificationclick', e => {
   e.notification.close();
   const link = (e.notification.data && e.notification.data.link) || self.registration.scope;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) if (c.url.startsWith(self.registration.scope) && 'focus' in c) return c.focus();
+    for (const c of list) if (c.url.startsWith(self.registration.scope) && 'focus' in c) return c.focus().then(w => { if (/[?&]kitchen=1/.test(link) && w) w.postMessage({ open: 'kitchen' }); return w; });
     return self.clients.openWindow(link);
   }));
 });

@@ -720,3 +720,11 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .kfree{display:flex;gap:8px;align-items:stretch}
 .kfree input{flex:1;min-width:0}
 .kfree-note{margin:-4px 0 4px;text-align:center}
+
+/* kitchen: dishes sent between family members */
+.kmail{display:flex;flex-direction:column;gap:6px}
+.kmail h2{font-size:1rem;margin:0}
+.kmail .arow .ke{font-size:1.6rem;line-height:1}
+.ksend,.keat{display:flex;flex-direction:column;gap:6px;align-items:center}
+.ksend .chips{justify-content:center}
+.keat .btn{min-width:170px}
