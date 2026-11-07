@@ -127,7 +127,7 @@ for (const n of (await all('devNotes')).filter(n => (n.statusAt || 0) > since &&
   const list = arr => arr.slice(0, 3).join(', ') + (arr.length > 3 ? ` ועוד ${arr.length - 3}` : '');
 
   const nudges = await all('nudges');
-  for (const n of nudges.filter(n => n.id !== 'challenge')) {
+  for (const n of nudges.filter(n => n.id !== 'challenge' && !n.id.startsWith('bump__'))) {
     if (n.type === 'people') {
       for (const id of (n.to || [])) {
         const left = mine(id).map(t => t.title); const all2 = left.concat(chLeft.map(i => `${i.title} (אתגר)`));
@@ -143,6 +143,13 @@ for (const n of (await all('devNotes')).filter(n => (n.statusAt || 0) > since &&
       }
     }
     await db.doc(`nudges/${n.id}`).delete();
+  }
+  // a member the admin allowed bumped a task (one nudges/bump__<member> document each, rewritten every time)
+  for (const bn of nudges.filter(n => n.id.startsWith('bump__') && (n.at || 0) > since)) {
+    const t = tasks.find(x => x.id === bn.taskId); if (!t) continue;
+    const w = whoseTurn(t);
+    const to = ((t.boss || w === 'all') ? everyone.filter(id => dueFor(t, id)) : [w]).filter(id => id !== bn.by);
+    outbox.push({ to, title: `⚡ ${name(bn.by)} מזכיר/ה`, body: t.title, tag: `bump-${t.id}` });
   }
   const cn = nudges.find(n => n.id === 'challenge');
   if (cn && (cn.at || 0) > since && chOn && chLeft.length)

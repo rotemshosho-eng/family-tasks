@@ -352,7 +352,7 @@ service cloud.firestore {
     // הקפצות: המנהל שולח לכל אחד; את האתגר מקפיץ גם מי שהמנהל הרשה (עם הגבלת זמן אם סומן).
     match /nudges/{id} {
       allow read, create, update, delete: if isAdmin();
-      allow get: if id == 'challenge' && signedIn();
+      allow get: if signedIn() && (id == 'challenge' || id.matches('bump__.*'));
       allow create, update: if id == 'challenge'
         && request.resource.data.keys().hasOnly(['by','at'])
         && request.resource.data.at is int && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
@@ -361,6 +361,18 @@ service cloud.firestore {
         && (get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('nudgeLimited', true) == false
             || !exists(/databases/$(database)/documents/nudges/challenge)
             || request.time.toMillis() - get(/databases/$(database)/documents/nudges/challenge).data.at
+               >= get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('nudgeEveryMin',
+                    exists(/databases/$(database)/documents/settings/perms) ? get(/databases/$(database)/documents/settings/perms).data.get('nudgeEveryMin', 60) : 60) * 60000);
+      // מי שהמנהל הרשה (canNudge) מקפיץ משימה: מסמך אחד לכל אחד, bump__<id>, כך שאפשר לאכוף "פעם בכמה דקות" בדיוק כמו באתגר.
+      allow create, update: if id == 'bump__' + request.resource.data.by
+        && request.resource.data.keys().hasOnly(['by','taskId','at'])
+        && request.resource.data.at is int && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
+        && request.resource.data.by is string && boundTo(request.resource.data.by)
+        && get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('canNudge', false) == true
+        && request.resource.data.taskId is string && exists(/databases/$(database)/documents/tasks/$(request.resource.data.taskId))
+        && (get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('nudgeLimited', true) == false
+            || !exists(/databases/$(database)/documents/nudges/$(id))
+            || request.time.toMillis() - get(/databases/$(database)/documents/nudges/$(id)).data.at
                >= get(/databases/$(database)/documents/members/$(request.resource.data.by)).data.get('nudgeEveryMin',
                     exists(/databases/$(database)/documents/settings/perms) ? get(/databases/$(database)/documents/settings/perms).data.get('nudgeEveryMin', 60) : 60) * 60000);
     }

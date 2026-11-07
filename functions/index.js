@@ -147,7 +147,7 @@ async function pendingFor(F){
   return { tasks, logs, dueFor, mine, ch, chOn, chLeft };
 }
 export const onNudge = onDocumentCreated('nudges/{id}', async ev => {
-  if (ev.params.id === 'challenge') return; // handled by onChallengeNudge
+  if (ev.params.id === 'challenge' || ev.params.id.startsWith('bump__')) return; // handled by onChallengeNudge / onBump
   const n = ev.data?.data(); if (!n) return;
   const F = await family(); const P = await pendingFor(F);
   if (n.type === 'people'){
@@ -170,6 +170,18 @@ export const onChallengeNudge = onDocumentWritten('nudges/challenge', async ev =
   const F = await family(); const P = await pendingFor(F);
   if (!P.chOn || !P.chLeft.length) return;
   await push(F.ids.filter(id => id !== n.by), `⚡ ${F.name(n.by)} מזכיר/ה: אתגר ${P.ch.title}`, `נשארו ${P.chLeft.length} משימות: ${list3(P.chLeft.map(i => i.title))}`, 'nudge-challenge');
+});
+
+// a member the admin allowed bumped one task (nudges/bump__<member>, written again each time): remind whoever it is waiting for
+export const onBump = onDocumentWritten('nudges/{id}', async ev => {
+  if (!ev.params.id.startsWith('bump__')) return;
+  const b = ev.data?.before?.data(), n = ev.data?.after?.data(); if (!n || (b && b.at === n.at)) return;
+  const F = await family(); const P = await pendingFor(F);
+  const t = P.tasks.find(x => x.id === n.taskId); if (!t) return;
+  const w = turnOf(t, F.members, P.logs);
+  const to = ((t.boss || w === 'all') ? F.ids.filter(id => P.dueFor(t, id)) : [w]).filter(id => id !== n.by);
+  await push(to, `⚡ ${F.name(n.by)} ${F.members.find(m => m.id === n.by)?.gender === 'f' ? 'מזכירה' : 'מזכיר'}${t.boss ? ': משימת בוס!' : ''}`,
+    `${t.title}${t.boss ? ` · ${(t.points || 0) * 3} נקודות למי שעושה ראשון` : ''}`, `bump-${t.id}`);
 });
 
 /* ---------- new family challenge / new monthly goal ---------- */

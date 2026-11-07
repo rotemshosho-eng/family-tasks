@@ -781,3 +781,7 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .kscene.bake.ready .kfood{filter:sepia(.45) saturate(1.5) brightness(.88) drop-shadow(0 0 10px rgb(255 160 40 / .9))}
 .kscene.bake .ksteam{left:160px;top:250px}
 .kscene.s-hot .koglass{background:linear-gradient(120deg,rgb(255 255 255 / .3),rgb(255 190 140 / .1) 40%,rgb(90 35 10 / .22))}
+
+/* the count of dishes waiting in the kitchen, on its bottom-bar icon */
+.bottomnav button{position:relative}
+.nbadge{position:absolute;top:3px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#E2574C;color:#fff;font:700 .68rem/17px var(--body);text-align:center}

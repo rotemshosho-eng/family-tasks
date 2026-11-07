@@ -218,7 +218,7 @@ function render(){
   if ((!S.isAdmin || plain) && S.tab === 'admin') S.tab = 'today';
   $('tabs').hidden = !S.user;
   $('tabs').querySelector('[data-tab="admin"]').hidden = !S.isAdmin || plain;
-  for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab));
+  for (const b of $('tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kitchen ? !!S.kitchenOpen : b.dataset.tab === S.tab));
   if (!['today','tasks','rewards','family','admin'].includes(S.tab)) S.tab = 'today';
   const VIEWS = ['today','tasks','rewards','family','admin'];
   const hideViews = () => VIEWS.forEach(v => $('view-'+v).hidden = true);
@@ -838,7 +838,7 @@ function taskCard(t, canAct){
       chatButton(t),
       canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`עריכה: ${t.title}`, title:'עריכה', onclick:() => openTaskEdit(t) }, '✏️') : null,
       canEditTask(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`שכפול: ${t.title}`, title:'שכפול', onclick:() => duplicateTask(t) }, '⧉') : null,
-      S.isAdmin ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`הקפצה: ${t.title}`, title:'הקפצה', onclick:() => nudgeTask(t) }, '📣') : null,
+      canBump(t) ? h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`הקפצה: ${t.title}`, title:'הקפצה', onclick:() => nudgeTask(t) }, '📣') : null,
       (S.isAdmin && S.plain && !t.pinned) ? (() => { const b = h('button', { type:'button', class:'chatbtn editbtn', 'aria-label':`מחיקה: ${t.title}`, title:'מחיקה' }, '🗑️');
         b.addEventListener('click', () => arm('dt' + t.id, b, () => deleteTask(t, false))); if (S.armed === 'dt' + t.id){ b.classList.add('armed'); b.textContent = 'בטוח?'; } return b; })() : null));
   running.forEach(tm => {
@@ -1571,7 +1571,16 @@ async function nudgePeople(){
   try{ await sendNudge({ type:'people', to }); S.nudgePick.clear(); toast(`📣 נשלח. ${to.map(mName).join(', ')} יקבלו התראה בדקות הקרובות`); render(); }catch(e){ fail(e); }
 }
 async function nudgeTask(t){
-  try{ await sendNudge({ type:'task', taskId:t.id }); toast(`📣 ${t.title}: ההתראה תצא בדקות הקרובות`); }catch(e){ fail(e); }
+  try{
+    if (S.isAdmin){ await sendNudge({ type:'task', taskId:t.id }); toast(`📣 ${t.title}: ההתראה בדרך`); return; }
+    // a member the admin allowed: one bump document per member (bump__<id>), so the rules can enforce "once every N minutes"
+    const b = bumpState(); if (!b.allowed) return;
+    let last = 0; try{ const s = await getDoc(doc(db, 'nudges', 'bump__' + b.id)); last = s.exists() ? (s.data().at || 0) : 0; }catch(e){}
+    const wait = b.limited ? last + b.every * 60000 - Date.now() : 0;
+    if (wait > 0){ toast(`כבר הקפצת. אפשר שוב בעוד ${Math.ceil(wait / 60000)} דק׳`); return; }
+    await setDoc(doc(db, 'nudges', 'bump__' + b.id), { by: b.id, taskId: t.id, at: Date.now() });
+    toast(`📣 ${t.title}: ההתראה בדרך`);
+  }catch(e){ fail(e); }
 }
 // the family challenge: the admin, and whoever the admin allowed (some with a time limit)
 function challengeNudgeState(){
@@ -1583,6 +1592,15 @@ function challengeNudgeState(){
   const last = S.nudgeCh?.at || 0; const wait = limited ? last + every * 60000 - Date.now() : 0;
   return { allowed:true, wait: Math.max(0, wait) };
 }
+// who may bump a task: the admin, and the members the admin allowed (some with a time limit, set per person)
+function bumpState(){
+  if (S.isAdmin) return { allowed:true, id:null, limited:false };
+  const m = S.boundId ? member(S.boundId) : null;
+  if (!m || m.canNudge !== true) return { allowed:false };
+  return { allowed:true, id:m.id, limited: m.nudgeLimited !== false, every: Number(m.nudgeEveryMin) >= 1 ? Number(m.nudgeEveryMin) : nudgeEveryMin() };
+}
+// the 📣 button shows on a task that is waiting today (the admin: on any task), never on your own turn
+const canBump = t => { const b = bumpState(); return b.allowed && !t.pending && (S.isAdmin || (isDue(t) && whoseTurn(t) !== b.id)); };
 async function nudgeChallenge(){
   const st = challengeNudgeState(); if (!st.allowed) return;
   if (st.wait > 0){ toast(`כבר הקפיצו. אפשר שוב בעוד ${Math.ceil(st.wait / 60000)} דק׳`); return; }
@@ -1838,7 +1856,7 @@ function buildStatic(){
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
   const jc = $('join-colors'); COLORS.forEach((c, i) => jc.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'join-color', id:'join-color-'+i, value:c, checked: i === 0 }))));
   document.querySelectorAll('input[name=tf-type]').forEach(r => r.addEventListener('change', () => { $('tf-dayswrap').hidden = $('tf-type-once').checked; }));
-  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; S.openPick = null; render(); window.scrollTo(0, 0); });
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.kitchen){ S.kitchenOpen = true; S.openPick = null; render(); return; } S.tab = b.dataset.tab; S.openPick = null; render(); window.scrollTo(0, 0); });
   $('tf-save').addEventListener('click', saveTask); $('tf-cancel').addEventListener('click', resetTaskForm);
   $('mf-save').addEventListener('click', saveMember);
   $('mf-role').addEventListener('change', fillMarkFor); $('mf-cancel').addEventListener('click', resetMemberForm);
@@ -2164,18 +2182,18 @@ function kDishesIn(list){
   S.dishes = list; S.dishesLoaded = true;
 }
 function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend(); }
-// under the message: who to send it to (after it is ready), or "I ate it" for a dish someone sent me
+// under the message: who to send it to (as soon as a food is picked), or "I ate it" for a dish someone sent me
 function kRenderSend(){
   const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
   eat.hidden = !(K.ready && K.dish);
-  const can = !!(K.ready && K.cur && !K.dish); sendBox.hidden = !can; if (!can) return;
+  const can = !!(K.cur && !K.dish); sendBox.hidden = !can; if (!can) return;
   const me = kMe(), box = $('kSendTo'); box.replaceChildren();
   if (!me){ box.append(h('span', { class:'sub' }, 'כדי לשלוח, בחרו למעלה מי משתמש')); return; }
   S.members.filter(m => m.id !== me).forEach(m => box.append(h('button', { type:'button', class:'chip', disabled: K.sent.has(m.id), onclick:() => kSendDish(m.id) },
     h('span', { class:'dot', style:`background:${m.color}` }), m.name, K.sent.has(m.id) ? ' ✓' : '')));
 }
 async function kSendDish(to){
-  const me = kMe(), f = K.cur; if (!me || !f || !K.ready || K.sent.has(to)) return;
+  const me = kMe(), f = K.cur; if (!me || !f || K.sent.has(to)) return;
   const at = Date.now(), w = Math.floor(at / 600000), id = `${me}__${to}__${w}`;
   if (S.dishes.some(d => d.id === id)){ toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return; }
   K.sent.add(to); kRenderSend();
@@ -2243,7 +2261,6 @@ function buildKitchen(){
     box.append(h('p', { class:'sub' }, title), h('div', { class:'chips' }, KITCHEN.filter(f => f.a === action).map(f =>
       h('button', { type:'button', class:'chip kchip', 'data-i':KITCHEN.indexOf(f), 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, f.e), f.n))));
   kSoundIcon();
-  $('kitchen-open').addEventListener('click', () => { S.kitchenOpen = true; render(); });
   $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kEat').addEventListener('click', kEat);
@@ -2252,7 +2269,7 @@ function buildKitchen(){
 // render() calls this on every data update: it only shows or hides the sheet and never touches a running animation
 function renderKitchen(){
   const sheet = $('kitchenSheet'); if (!sheet) return;
-  const kb = $('kitchen-open'); if (kb){ const n = kInbox().length; kb.textContent = n ? `🍽️ המטבח (${n} ${n === 1 ? 'מנה חדשה' : 'מנות חדשות'})` : '🍽️ המטבח: אוכל ושתייה'; }
+  const kb = $('tabKitchenN'); if (kb){ const n = kInbox().length; kb.hidden = !n; kb.textContent = String(n); kb.setAttribute('aria-label', n ? `${n} מנות מחכות` : ''); }
   const allowed = !!S.user && !!(S.boundId || S.isAdmin);
   if (!S.kitchenOpen || !allowed){ if (K.shown){ K.shown = false; sheet.hidden = true; kStop(); } return; }
   document.body.classList.add('locked');

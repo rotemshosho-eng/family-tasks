@@ -216,7 +216,6 @@
   </div>
     <section class="goal-card challenge" data-challenge hidden></section>
     <section class="goal-card" data-goal hidden></section>
-    <div class="kitchen-wrap"><button type="button" class="btn ghost" id="kitchen-open">🍽️ המטבח: אוכל ושתייה</button></div>
     <div id="ppToggleWrap" hidden><button type="button" class="btn ghost" id="pp-toggle" aria-expanded="false">+ הוספת נקודות</button></div>
     <section class="panel" id="ppPanel" hidden>
       <h2>➕➖ שינוי נקודות</h2>
@@ -274,7 +273,8 @@
       <p class="sub">בוחרים מי, לוחצים "הקפצה", וכל אחד מקבל התראה עם מה שנשאר לו: משימות שלו, של כולם ומשימות האתגר. ההתראה מגיעה תוך דקה עד חמש. 🔕 = ההתראות שלו כבויות, הוא לא יקבל.</p>
       <div class="chips" id="nudgeWho"></div>
       <div><button type="button" class="btn" id="nudgeSend">📣 הקפצה למסומנים</button></div>
-      <h3 class="group-h">מי יכול להקפיץ את האתגר המשפחתי</h3>
+      <h3 class="group-h">מי יכול להקפיץ משימות ואת האתגר המשפחתי</h3>
+      <p class="sub">מי שמסומן "יכול להקפיץ" רואה 📣 על משימה שמחכה היום, והמשימה מזכירה למי שהיא שלו (או לכל מי שעוד לא עשה אותה). "עם הגבלה" אומר פעם בכמה דקות.</p>
       <div id="nudgeRights"></div>
       <div class="row">
         <div class="field"><label for="nudgeEvery">הגבלה כללית: פעם בכמה דקות (אפשר לקבוע לכל אחד אחרת למעלה)</label><input type="number" id="nudgeEvery" min="1" max="1440" inputmode="numeric"></div>
@@ -418,6 +418,7 @@
   <button type="button" data-tab="tasks" aria-pressed="false"><span class="ni" aria-hidden="true">📅</span>משימות</button>
   <button type="button" data-tab="rewards" aria-pressed="false"><span class="ni" aria-hidden="true">👛</span>ארנק</button>
   <button type="button" data-tab="family" aria-pressed="false"><span class="ni" aria-hidden="true">👥</span>משפחה</button>
+  <button type="button" data-kitchen="1" id="tabKitchen" aria-pressed="false"><span class="ni" aria-hidden="true">🍽️</span><span class="nl" id="tabKitchenLbl">תחמם לי</span><b class="nbadge" id="tabKitchenN" hidden></b></button>
   <button type="button" data-tab="admin" aria-pressed="false" hidden><span class="ni" aria-hidden="true">⚙️</span><span class="nl">ניהול</span></button>
 </nav>
 <!-- full-screen chat for one task -->
