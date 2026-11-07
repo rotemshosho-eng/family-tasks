@@ -458,16 +458,22 @@
     <p class="kmsg" id="kMsg" role="status" aria-live="polite">בחרו מה להכין</p>
     <div class="ksend" id="kSend" hidden><button type="button" class="btn" id="kSendOpen">📤 שליחה / בואו לאכול</button></div>
     <div class="keat" id="kEatWrap" hidden><button type="button" class="btn" id="kEat">😋 אכלתי</button></div>
+    <div class="ksend"><button type="button" class="btn" id="kFoodOpen">🍴 בחירת אוכל או שתייה</button></div>
+    <section class="kmail" id="kOutbox" hidden>
+      <h2>📤 מה ששלחתי</h2>
+      <div id="kOutboxList"></div>
+    </section>
+  </div>
+</div>
+<div class="kpop" id="kFoodPop" hidden role="dialog" aria-modal="true" aria-labelledby="kFoodPopTitle">
+  <div class="kpop-card tall">
+    <div class="kpop-head"><strong id="kFoodPopTitle">🍴 מה להכין?</strong><button type="button" class="btn ghost small" id="kFoodPopClose">סגירה</button></div>
     <form class="kfree" id="kFree" autocomplete="off">
       <input type="text" id="kFreeIn" maxlength="24" placeholder="כתבו כל אוכל או שתייה, למשל: קפה" enterkeyhint="go" aria-label="אוכל לבחירתכם">
       <button type="submit" class="btn" id="kFreeGo">הכינו</button>
     </form>
     <p class="sub kfree-note" id="kFreeNote">אפשר גם להקליד אימוג׳י, כמו ☕</p>
     <div class="kpick" id="kPick"></div>
-    <section class="kmail" id="kOutbox" hidden>
-      <h2>📤 מה ששלחתי</h2>
-      <div id="kOutboxList"></div>
-    </section>
   </div>
 </div>
 <div class="kpop" id="kPop" hidden role="dialog" aria-modal="true" aria-labelledby="kPopTitle">

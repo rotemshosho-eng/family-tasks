@@ -2839,6 +2839,7 @@ function renderKitchenMail(){
     h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
 }
 function kPick(f, dish = null){
+  $('kFoodPop').hidden = true;
   K.cur = f; K.dish = dish;
   const i = String(KITCHEN.indexOf(f));
   document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.i === i)));
@@ -2856,6 +2857,9 @@ function buildKitchen(){
   window.addEventListener('resize', () => { if (K.shown) kFit(); });
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kEat').addEventListener('click', kEat);
+  $('kFoodOpen').addEventListener('click', () => { $('kFoodPop').hidden = false; });
+  $('kFoodPopClose').addEventListener('click', () => { $('kFoodPop').hidden = true; });
+  $('kFoodPop').addEventListener('click', e => { if (e.target === $('kFoodPop')) $('kFoodPop').hidden = true; });
   $('kSendOpen').addEventListener('click', kOpenPop);
   $('kPopClose').addEventListener('click', kClosePop);
   $('kPop').addEventListener('click', e => { if (e.target === $('kPop')) kClosePop(); });

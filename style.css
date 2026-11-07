@@ -633,3 +633,5 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .kpop-card h3{margin:0;font-size:.95rem}
 .kpop-card .chips{justify-content:flex-start}
 .kcall{width:100%}
+
+.kpop-card.tall{max-height:90vh;min-height:60vh}
