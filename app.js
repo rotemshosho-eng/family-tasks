@@ -1905,8 +1905,12 @@ const KITCHEN = [
   { e:'🍅', n:'עגבנייה', a:'cut' }, { e:'🍊', n:'תפוז', a:'cut' }, { e:'🍓', n:'תות', a:'cut' }, { e:'🥑', n:'אבוקדו', a:'cut' }, { e:'🍍', n:'אננס', a:'cut' }, { e:'🧀', n:'גבינה', a:'cut' },
   { e:'🍞', n:'לחם', a:'toasting' }, { e:'🥯', n:'בייגל', a:'toasting' }, { e:'🥐', n:'קרואסון', a:'toasting' },
   { e:'🥛', n:'חלב', a:'pour', c:'#FFFFFF' }, { e:'🍊', n:'מיץ תפוזים', a:'pour', c:'#FFA726' }, { e:'🍫', n:'שוקו', a:'pour', c:'#6D4C41' }, { e:'☕', n:'קפה', a:'pour', c:'#6B4226' }, { e:'🍵', n:'תה', a:'pour', c:'#C98A4B' }, { e:'💧', n:'מים', a:'pour', c:'#7FD1FF' }, { e:'🍇', n:'מיץ ענבים', a:'pour', c:'#8E3FA8' },
-  { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' }];
-const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 שתייה (שופכים לכוס)'], ['fry', '🍳 לטגן במחבת']];
+  { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' },
+  { e:'🍌', n:'שייק בננה', a:'blend', c:'#F6E27A' }, { e:'🍓', n:'שייק תות', a:'blend', c:'#F27A9A' }, { e:'🥭', n:'שייק מנגו', a:'blend', c:'#FFB300' }, { e:'🫐', n:'שייק אוכמניות', a:'blend', c:'#5B6BC0' },
+  { e:'🍫', n:'מילקשייק שוקולד', a:'blend', c:'#6D4C41' }, { e:'🥬', n:'סמוטי ירוק', a:'blend', c:'#9CCB4A' },
+  { e:'🍪', n:'עוגיות', a:'bake' }, { e:'🍰', n:'עוגה', a:'bake' }, { e:'🧁', n:'קאפקייק', a:'bake' }, { e:'🥧', n:'פאי', a:'bake' },
+  { e:'🍕', n:'פיצה בתנור', a:'bake' }, { e:'🍗', n:'עוף בתנור', a:'bake' }, { e:'🥔', n:'תפוד אפוי', a:'bake' }, { e:'🍠', n:'בטטה אפויה', a:'bake' }];
+const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 שתייה (שופכים לכוס)'], ['fry', '🍳 לטגן במחבת'], ['blend', '🥤 לטחון בבלנדר'], ['bake', '🧁 לאפות בתנור']];
 const K = { timers:[], clock:null, audio:null, shown:false, cur:null, dish:null, ready:false, sent:new Set() };
 const kLater = (ms, fn) => K.timers.push(setTimeout(fn, ms));
 const kSpeed = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches ? .4 : 1; }catch(e){ return 1; } };
@@ -1934,7 +1938,7 @@ const kMsg = t => { $('kMsg').textContent = t; };
 function kReset(action){
   kStop(); const sc = $('kScene'); sc.className = 'kscene reset ' + action; sc.style.removeProperty('--lq');
   $('kClock').textContent = '0:00'; $('kLines').replaceChildren(); $('kPieces').replaceChildren(); $('kFood').textContent = ''; $('kCutFood').textContent = ''; $('kCutFood').classList.remove('shake');
-  $('kToast1').textContent = ''; $('kToast2').textContent = ''; K.ready = false; K.sent = new Set(); kRenderSend();
+  $('kToast1').textContent = ''; $('kToast2').textContent = ''; ['kBp1', 'kBp2', 'kBp3'].forEach(id => { $(id).textContent = ''; }); $('kOTemp').textContent = '20°'; K.ready = false; K.sent = new Set(); kRenderSend();
   sc.offsetWidth; requestAnimationFrame(() => sc.classList.remove('reset'));
 }
 function kCountdown(sec, ms){
@@ -2002,7 +2006,7 @@ const KDICT = [
   ['🍲', 'heat', 'מרק,מרק עוף,מרק ירקות,עדשים,חמין,צולנט,תבשיל,סטו,soup,stew,cholent'],
   ['🥣', 'heat', 'דייסה,שיבולת שועל,סולת,אוטמיל,porridge,oatmeal'],
   ['🍜', 'heat', 'אטריות,נודלס,ראמן,noodles,ramen'],
-  ['🍝', 'heat', 'ספגטי,פסטה,לזניה,מקרוני,פנה,רביולי,spaghetti,pasta,lasagna,macaroni'],
+  ['🍝', 'heat', 'ספגטי,פסטה,מקרוני,פנה,רביולי,spaghetti,pasta,macaroni'],
   ['🍕', 'heat', 'פוקאצה,פיצה,pizza'],
   ['🍚', 'heat', 'אורז,קוסקוס,בורגול,פתיתים,כוסמת,קינואה,ריזוטו,rice,couscous,quinoa'],
   ['🍛', 'heat', 'קארי,מגדרה,בריאני,curry'],
@@ -2020,13 +2024,13 @@ const KDICT = [
   ['🍠', 'heat', 'בטטה,בטטות,sweet potato'],
   ['🌽', 'heat', 'תירס,קלח תירס,corn'],
   ['🍿', 'heat', 'פופקורן,popcorn'],
-  ['🍪', 'heat', 'עוגייה,עוגיה,עוגיות,בראוני,בראוניז,cookie,cookies,brownie'],
+  ['🍪', 'bake', 'עוגייה,עוגיה,עוגיות,בראוני,בראוניז,cookie,cookies,brownie'],
   ['🍩', 'heat', 'סופגנייה,סופגניה,סופגניות,donut,doughnut'],
-  ['🥧', 'heat', 'פאי,פשטידה,פשטידות,pie,quiche'],
+  ['🥧', 'bake', 'פאי,פשטידה,פשטידות,pie,quiche'],
   ['🫘', 'heat', 'חומוס,הומוס,שעועית,פול,לוביה,אפונה,beans,hummus'],
   ['🥫', 'heat', 'שימורים,טונה,tuna,canned'],
-  ['🍫', 'cut', 'שוקולד,פרלין,chocolate'],
-  ['🍰', 'cut', 'עוגה,עוגת שוקולד,עוגת גבינה,טורט,פרוסת עוגה,cake,cheesecake'],
+  ['🍫', 'cut', 'שוקולד,פרלין,chocolate', '#6D4C41'],
+  ['🍰', 'bake', 'עוגה,עוגת שוקולד,עוגת גבינה,טורט,פרוסת עוגה,cake,cheesecake'],
   ['🥗', 'cut', 'סלט,סלט ירקות,סלט חסה,salad'],
   ['🧀', 'cut', 'גבינה צהובה,גבינות,מוצרלה,פטה,קממבר,גאודה,cheese,mozzarella,feta'],
   ['🥭', 'cut', 'מנגו,mango', '#FFB300'],
@@ -2069,11 +2073,17 @@ const KDICT = [
   ['🥤', 'pour', 'קולה,קוקה קולה,פפסי,cola,pepsi,coca cola', '#3B1F14'],
   ['🥤', 'pour', 'סודה,ספרייט,soda,sprite', '#DDEFFB'],
   ['🥤', 'pour', 'פאנטה,fanta', '#FFA726'],
-  ['🥤', 'pour', 'שייק,מילקשייק,סמוטי,shake,milkshake,smoothie', '#F4B6C8'],
+  ['🥤', 'blend', 'שייק,מילקשייק,סמוטי,shake,milkshake,smoothie', '#F4B6C8'],
   ['🍋', 'pour', 'לימונדה,lemonade', '#F6E27A'],
   ['🥣', 'pour', 'יוגורט,קפיר,שמנת,לבן,yogurt,kefir,cream', '#FFFFFF'],
   ['🫖', 'pour', 'תה קר,אייס תי,iced tea', '#C98A4B'],
   ['🥤', 'pour', 'קפה קר,אייס קפה,קפה קרח,iced coffee,cold brew', '#8B5A2B'],
+  ['🧁', 'bake', 'קאפקייק,מאפין,cupcake,muffin'],
+  ['🍕', 'bake', 'פיצה בתנור,pizza in oven'],
+  ['🍗', 'bake', 'עוף בתנור,עוף אפוי,baked chicken,roast chicken'],
+  ['🥔', 'bake', 'תפוד אפוי,תפוח אדמה אפוי,תפוחי אדמה אפויים,baked potato'],
+  ['🍠', 'bake', 'בטטה אפויה,baked sweet potato'],
+  ['🍝', 'bake', 'לזניה,lasagna'],
   ['🥚', 'fry', 'ביצה,ביצים,חביתה,ביצת עין,egg,eggs,omelet,omelette,fried egg'],
   ['🥞', 'fry', 'פנקייק,פנקייקים,פנקק,pancake,pancakes'],
   ['🥔', 'fry', 'לביבה,לביבות,latke,latkes'],
@@ -2122,6 +2132,9 @@ function kResolve(text){
   if (hit) return { known:true, f:make(hit) };
   if ((toks[0] === 'מיץ' || toks[0] === 'juice') && toks.length > 1){   // "מיץ תות": a juice in the colour of the fruit
     for (const t of toks.slice(1)){ const fr = kLookup(t); if (fr) return { known:true, f:{ e:fr.e, n:name, a:'pour', c: KCOLOR.get(fr.e) || fr.c || '#FFA726' } }; }
+  }
+  if (['שייק', 'shake', 'smoothie', 'סמוטי', 'מילקשייק', 'milkshake'].includes(toks[0]) && toks.length > 1){   // "שייק תות": blended in the colour of the fruit
+    for (const t of toks.slice(1)){ const fr = kLookup(t); if (fr) return { known:true, f:{ e:fr.e, n:name, a:'blend', c: KCOLOR.get(fr.e) || fr.c || '#F4B6C8' } }; }
   }
   for (let i = 0; i < toks.length - 1 && !hit; i++) hit = kLookup(toks[i] + ' ' + toks[i + 1]);   // two words: "בצל מטוגן"
   for (let i = 0; i < toks.length && !hit; i++) hit = kLookup(toks[i]);                                // then the first word we know
@@ -2189,7 +2202,33 @@ function renderKitchenMail(){
   out.forEach(d => O.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
     h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}`)))));
 }
-const KRUN = { heat:kHeat, cut:kCut, toasting:kToast, pour:kPour, fry:kFry };
+// blender: the pieces drop in, the lid goes on, it whirls and the jar fills with the colour of the food
+function kBlend(f, T){
+  const sc = $('kScene'); sc.style.setProperty('--lq', f.c || '#F4B6C8'); $('kFood').textContent = f.e; ['kBp1', 'kBp2', 'kBp3'].forEach(id => { $(id).textContent = f.e; }); kMsg(`טוחנים: ${f.n}`);
+  kLater(300 * T, () => sc.classList.add('s-drop'));
+  kLater(1300 * T, () => { sc.classList.add('s-lid'); kBeep(220, 90, 'square', .05); });
+  kLater(1800 * T, () => { sc.classList.add('s-whirl', 's-fill'); kBeep(110, 1900 * T, 'sawtooth', .035); });
+  kLater(3800 * T, () => { sc.classList.remove('s-whirl', 's-lid'); sc.classList.add('s-ready'); kBeep(1320, 200); });
+  kLater(4800 * T, kDone);
+}
+// the oven's display climbs from `a` to `b` degrees
+function kTemp(a, b, ms){
+  const t0 = Date.now(); clearInterval(K.clock);
+  const tick = () => { const k = Math.min(1, (Date.now() - t0) / ms); $('kOTemp').textContent = `${Math.round(a + (b - a) * k)}°`; if (k >= 1) clearInterval(K.clock); };
+  tick(); K.clock = setInterval(tick, 100);
+}
+// oven: the food slides in, the door closes, it heats to 180 degrees and browns, dings, the door opens and it steams
+function kBake(f, T){
+  const sc = $('kScene'); $('kFood').textContent = f.e; kMsg(`אופים: ${f.n}`);
+  kLater(300 * T, () => sc.classList.add('s-in'));
+  kLater(1400 * T, () => { sc.classList.add('s-shut'); kBeep(200, 100, 'square', .05); });
+  kLater(1900 * T, () => { sc.classList.add('s-hot', 's-brown'); kTemp(20, 180, 3400 * T); });
+  kLater(5400 * T, () => { sc.classList.remove('s-hot'); kBeep(1320, 160); kLater(260, () => kBeep(1320, 160)); kLater(520, () => kBeep(1320, 280)); });
+  kLater(6000 * T, () => { sc.classList.remove('s-shut'); sc.classList.add('ready'); });
+  kLater(6400 * T, () => { sc.classList.remove('s-in'); sc.classList.add('steam'); });
+  kLater(7500 * T, kDone);
+}
+const KRUN = { heat:kHeat, cut:kCut, toasting:kToast, pour:kPour, fry:kFry, blend:kBlend, bake:kBake };
 function kPick(f, dish = null){
   K.cur = f; K.dish = dish;
   const i = String(KITCHEN.indexOf(f));
