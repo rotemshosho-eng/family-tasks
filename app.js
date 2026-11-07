@@ -1896,28 +1896,45 @@ function buildStatic(){
 }
 
 /* ---------- kitchen: pick a food and watch it get prepared ---------- */
-// Each food maps to an action (heat in the microwave / cut on a board). The animations belong to the action,
-// so a new food is one line here, no new drawing.
+// Each food maps to an action; the animations belong to the action (a mode class on #kScene plus timed steps),
+// so a new food is one line here, no new drawing. c = liquid colour for pouring.
 const KITCHEN = [
   { e:'🧆', n:'קציצות', a:'heat' }, { e:'🍕', n:'פיצה', a:'heat' }, { e:'🍲', n:'מרק', a:'heat' }, { e:'🍝', n:'פסטה', a:'heat' }, { e:'🍗', n:'עוף', a:'heat' }, { e:'🌭', n:'נקניקייה', a:'heat' },
-  { e:'🥭', n:'מנגו', a:'cut' }, { e:'🍉', n:'אבטיח', a:'cut' }, { e:'🍎', n:'תפוח', a:'cut' }, { e:'🍌', n:'בננה', a:'cut' }, { e:'🥒', n:'מלפפון', a:'cut' }, { e:'🥕', n:'גזר', a:'cut' }];
+  { e:'🍔', n:'המבורגר', a:'heat' }, { e:'🍟', n:'צ׳יפס', a:'heat' }, { e:'🍚', n:'אורז', a:'heat' }, { e:'🥟', n:'כופתאות', a:'heat' },
+  { e:'🥭', n:'מנגו', a:'cut' }, { e:'🍉', n:'אבטיח', a:'cut' }, { e:'🍎', n:'תפוח', a:'cut' }, { e:'🍌', n:'בננה', a:'cut' }, { e:'🥒', n:'מלפפון', a:'cut' }, { e:'🥕', n:'גזר', a:'cut' },
+  { e:'🍅', n:'עגבנייה', a:'cut' }, { e:'🍊', n:'תפוז', a:'cut' }, { e:'🍓', n:'תות', a:'cut' }, { e:'🥑', n:'אבוקדו', a:'cut' }, { e:'🍍', n:'אננס', a:'cut' }, { e:'🧀', n:'גבינה', a:'cut' },
+  { e:'🍞', n:'לחם', a:'toasting' }, { e:'🥯', n:'בייגל', a:'toasting' }, { e:'🥐', n:'קרואסון', a:'toasting' },
+  { e:'🥛', n:'חלב', a:'pour', c:'#FFFFFF' }, { e:'🍊', n:'מיץ תפוזים', a:'pour', c:'#FFA726' }, { e:'🍫', n:'שוקו', a:'pour', c:'#6D4C41' }, { e:'💧', n:'מים', a:'pour', c:'#7FD1FF' }, { e:'🍇', n:'מיץ ענבים', a:'pour', c:'#8E3FA8' },
+  { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' }];
+const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 לשפוך לכוס'], ['fry', '🍳 לטגן במחבת']];
 const K = { timers:[], clock:null, audio:null, shown:false };
 const kLater = (ms, fn) => K.timers.push(setTimeout(fn, ms));
 const kSpeed = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches ? .4 : 1; }catch(e){ return 1; } };
+function kCtx(){ const A = K.audio || (K.audio = new (window.AudioContext || window.webkitAudioContext)()); if (A.state === 'suspended') A.resume(); return A; }
 function kBeep(freq, ms = 120, type = 'sine', vol = .07){
   if (store.get('ft-ksound') === '0') return;
   try{
-    const A = K.audio || (K.audio = new (window.AudioContext || window.webkitAudioContext)()); if (A.state === 'suspended') A.resume();
-    const o = A.createOscillator(), g = A.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = vol; o.connect(g); g.connect(A.destination);
+    const A = kCtx(); const o = A.createOscillator(), g = A.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = vol; o.connect(g); g.connect(A.destination);
     o.start(); g.gain.exponentialRampToValueAtTime(.0001, A.currentTime + ms / 1000); o.stop(A.currentTime + ms / 1000 + .02);
+  }catch(e){}
+}
+// a burst of high-passed noise: the sizzle of the pan
+function kSizzle(ms, vol = .05){
+  if (store.get('ft-ksound') === '0') return;
+  try{
+    const A = kCtx(); const n = Math.floor(A.sampleRate * ms / 1000), buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.min(1, (n - i) / (n * .3));
+    const s = A.createBufferSource(), hp = A.createBiquadFilter(), g = A.createGain(); hp.type = 'highpass'; hp.frequency.value = 2500; g.gain.value = vol;
+    s.buffer = buf; s.connect(hp); hp.connect(g); g.connect(A.destination); s.start();
   }catch(e){}
 }
 function kStop(){ K.timers.forEach(clearTimeout); K.timers = []; clearInterval(K.clock); try{ $('kKnife').getAnimations().forEach(a => a.cancel()); }catch(e){} }
 const kMsg = t => { $('kMsg').textContent = t; };
 // back to an empty scene of this action (no sliding back from the previous state)
 function kReset(action){
-  kStop(); const sc = $('kScene'); sc.className = 'kscene reset ' + action;
+  kStop(); const sc = $('kScene'); sc.className = 'kscene reset ' + action; sc.style.removeProperty('--lq');
   $('kClock').textContent = '0:00'; $('kLines').replaceChildren(); $('kPieces').replaceChildren(); $('kFood').textContent = ''; $('kCutFood').textContent = ''; $('kCutFood').classList.remove('shake');
+  $('kToast1').textContent = ''; $('kToast2').textContent = '';
   sc.offsetWidth; requestAnimationFrame(() => sc.classList.remove('reset'));
 }
 function kCountdown(sec, ms){
@@ -1950,17 +1967,44 @@ function kCut(f, T){
     for (let i = 0; i < 6; i++) P.append(h('span', { style:`--i:${i};--r:${(i % 2 ? 1 : -1) * (6 + i * 3)}deg` }, f.e)); kBeep(880, 90); });
   kLater(4600 * T, () => kMsg('בתיאבון! 🍽️'));
 }
+// toaster: two slices drop in, the lever goes down and the slot glows, then they pop up toasted with a ding
+function kToast(f, T){
+  const sc = $('kScene'); $('kToast1').textContent = f.e; $('kToast2').textContent = f.e; kMsg(`קולים: ${f.n}`);
+  kLater(600 * T, () => { sc.classList.add('down'); kBeep(150, 140, 'square', .06); });
+  kLater(1500 * T, () => sc.classList.add('on'));
+  kLater(3800 * T, () => { sc.classList.remove('on', 'down'); sc.classList.add('up', 'steam'); kBeep(1320, 220); });
+  kLater(4900 * T, () => kMsg('בתיאבון! 🍽️'));
+}
+// pouring: the jug tips, a stream runs into the glass and the liquid rises; the food it came from appears next to the glass
+function kPour(f, T){
+  const sc = $('kScene'); sc.style.setProperty('--lq', f.c); $('kFood').textContent = f.e; kMsg(`שופכים: ${f.n}`);
+  kLater(300 * T, () => sc.classList.add('tilt'));
+  kLater(1000 * T, () => { sc.classList.add('pouring'); for (let i = 0; i < 8; i++) kLater(i * 330 * T, () => kBeep(200 + i * 45, 110, 'sine', .05)); });
+  kLater(3800 * T, () => { sc.classList.remove('pouring', 'tilt'); sc.classList.add('poured'); kBeep(1000, 90); });
+  kLater(4700 * T, () => kMsg('בתיאבון! 🍽️'));
+}
+// frying: the food drops into the pan and sizzles; an egg cracks open into a fried egg, everything else flips once
+function kFry(f, T){
+  const sc = $('kScene'), egg = f.e === '🥚'; $('kFood').textContent = f.e; kMsg(`מטגנים: ${f.n}`);
+  kLater(300 * T, () => sc.classList.add('in'));
+  kLater(1000 * T, () => { sc.classList.add('on'); kSizzle(3200 * T); kBeep(180, 80, 'square', .05); if (egg) sc.classList.add('crack'); });
+  if (!egg) kLater(3000 * T, () => { sc.classList.add('flip'); kLater(850 * T, () => sc.classList.remove('flip')); });
+  kLater(4300 * T, () => { sc.classList.remove('on'); sc.classList.add('ready', 'steam'); });
+  kLater(5300 * T, () => kMsg('בתיאבון! 🍽️'));
+}
+const KRUN = { heat:kHeat, cut:kCut, toasting:kToast, pour:kPour, fry:kFry };
 function kPick(f){
-  document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.n === f.n)));
-  kReset(f.a); (f.a === 'heat' ? kHeat : kCut)(f, kSpeed());
+  const i = String(KITCHEN.indexOf(f));
+  document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.i === i)));
+  kReset(f.a); KRUN[f.a](f, kSpeed());
 }
 function kFit(){ const st = $('kStage'), sc = $('kScene'); const k = Math.min(1, (st.clientWidth || 320) / 320); sc.style.transform = k < 1 ? `scale(${k})` : ''; st.style.height = Math.round(340 * k) + 'px'; }
 const kSoundIcon = () => { $('kSound').textContent = store.get('ft-ksound') === '0' ? '🔇' : '🔊'; };
 function buildKitchen(){
   const box = $('kPick'); box.replaceChildren();
-  for (const [action, title] of [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך']])
+  for (const [action, title] of KACTIONS)
     box.append(h('p', { class:'sub' }, title), h('div', { class:'chips' }, KITCHEN.filter(f => f.a === action).map(f =>
-      h('button', { type:'button', class:'chip kchip', 'data-n':f.n, 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, f.e), f.n))));
+      h('button', { type:'button', class:'chip kchip', 'data-i':KITCHEN.indexOf(f), 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, f.e), f.n))));
   kSoundIcon();
   $('kitchen-open').addEventListener('click', () => { S.kitchenOpen = true; render(); });
   $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
