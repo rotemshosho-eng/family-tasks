@@ -1992,11 +1992,154 @@ function kFry(f, T){
   kLater(4300 * T, () => { sc.classList.remove('on'); sc.classList.add('ready', 'steam'); });
   kLater(5300 * T, () => kMsg('בתיאבון! 🍽️'));
 }
+// ---- free text: any food typed in the box. A built-in dictionary (no network, no AI) maps words to an emoji and an action. ----
+const KFREE_HINT = 'אפשר גם להקליד אימוג׳י, כמו ☕';
+// [emoji, action, words (comma separated; punctuation is ignored), liquid colour when it is poured or made into a juice]
+const KDICT = [
+  ['☕', 'heat', 'קפה,נסקפה,נס קפה,אספרסו,קפוצינו,לאטה,הפוך,קפה הפוך,coffee,espresso,cappuccino,latte,americano'],
+  ['☕', 'heat', 'קקאו,שוקו חם,הוט שוקולד,cocoa,hot chocolate'],
+  ['🍵', 'heat', 'תה,תה חם,תה נענע,נענע,tea,matcha,מאצה'],
+  ['🍲', 'heat', 'מרק,מרק עוף,מרק ירקות,עדשים,חמין,צולנט,תבשיל,סטו,soup,stew,cholent'],
+  ['🥣', 'heat', 'דייסה,שיבולת שועל,סולת,אוטמיל,porridge,oatmeal'],
+  ['🍜', 'heat', 'אטריות,נודלס,ראמן,noodles,ramen'],
+  ['🍝', 'heat', 'ספגטי,פסטה,לזניה,מקרוני,פנה,רביולי,spaghetti,pasta,lasagna,macaroni'],
+  ['🍕', 'heat', 'פוקאצה,פיצה,pizza'],
+  ['🍚', 'heat', 'אורז,קוסקוס,בורגול,פתיתים,כוסמת,קינואה,ריזוטו,rice,couscous,quinoa'],
+  ['🍛', 'heat', 'קארי,מגדרה,בריאני,curry'],
+  ['🍔', 'heat', 'בורגר,המבורגר,צ׳יזבורגר,burger,hamburger,cheeseburger'],
+  ['🌭', 'heat', 'נקניק,נקניקיה,נקניקייה,נקניקיות,הוטדוג,hotdog,hot dog'],
+  ['🥪', 'heat', 'כריך,כריכון,סנדוויץ,סנדביץ,sandwich'],
+  ['🌯', 'heat', 'בוריטו,שווארמה,שוארמה,לאפה,רול,wrap,burrito,shawarma'],
+  ['🌮', 'heat', 'טאקו,טורטייה,קסדייה,taco,tortilla,quesadilla'],
+  ['🧆', 'heat', 'כדורי בשר,פלאפל,קובה,קבב,קבבים,meatball,meatballs,falafel,kebab'],
+  ['🥟', 'heat', 'כופתה,כופתאות,בורקס,בורקסים,סמבוסק,קרפלך,פירוגי,dumpling,dumplings,burekas'],
+  ['🍗', 'heat', 'כנפיים,כרעיים,שוקיים,חזה עוף,הודו,chicken,wings,drumstick,turkey'],
+  ['🍖', 'heat', 'בשר,צלעות,צלי,צלי בקר,בקר,meat,beef,ribs'],
+  ['🍟', 'heat', 'ציפס,צ׳יפס,פרנץ פרייז,fries,french fries,chips'],
+  ['🥔', 'heat', 'תפוד,תפוח אדמה,תפוחי אדמה,תפוא,פירה,פירה תפוחי אדמה,potato,potatoes,mashed potatoes'],
+  ['🍠', 'heat', 'בטטה,בטטות,sweet potato'],
+  ['🌽', 'heat', 'תירס,קלח תירס,corn'],
+  ['🍿', 'heat', 'פופקורן,popcorn'],
+  ['🍪', 'heat', 'עוגייה,עוגיה,עוגיות,בראוני,בראוניז,cookie,cookies,brownie'],
+  ['🍩', 'heat', 'סופגנייה,סופגניה,סופגניות,donut,doughnut'],
+  ['🥧', 'heat', 'פאי,פשטידה,פשטידות,pie,quiche'],
+  ['🫘', 'heat', 'חומוס,הומוס,שעועית,פול,לוביה,אפונה,beans,hummus'],
+  ['🥫', 'heat', 'שימורים,טונה,tuna,canned'],
+  ['🍫', 'cut', 'שוקולד,פרלין,chocolate'],
+  ['🍰', 'cut', 'עוגה,עוגת שוקולד,עוגת גבינה,טורט,פרוסת עוגה,cake,cheesecake'],
+  ['🥗', 'cut', 'סלט,סלט ירקות,סלט חסה,salad'],
+  ['🧀', 'cut', 'גבינה צהובה,גבינות,מוצרלה,פטה,קממבר,גאודה,cheese,mozzarella,feta'],
+  ['🥭', 'cut', 'מנגו,mango', '#FFB300'],
+  ['🍉', 'cut', 'אבטיח,אבטיחים,watermelon', '#FF5C7A'],
+  ['🍎', 'cut', 'תפוח,תפוחים,apple,apples', '#E8C26A'],
+  ['🍏', 'cut', 'תפוח ירוק,green apple', '#C5E06A'],
+  ['🍌', 'cut', 'בננה,בננות,banana,bananas', '#F6E27A'],
+  ['🥒', 'cut', 'מלפפון,מלפפונים,מלפפון חמוץ,חמוצים,cucumber,pickle,pickles'],
+  ['🥕', 'cut', 'גזר,גזרים,carrot,carrots', '#FF9A3C'],
+  ['🍅', 'cut', 'עגבנייה,עגבניה,עגבניות,עגבנית,שרי,tomato,tomatoes', '#E2574C'],
+  ['🍊', 'cut', 'תפוז,תפוזים,קלמנטינה,מנדרינה,orange,oranges,clementine,mandarin', '#FFA726'],
+  ['🍋', 'cut', 'לימון,לימונים,ליים,lemon,lime', '#F6E27A'],
+  ['🍓', 'cut', 'תות,תותים,strawberry,strawberries', '#F27A9A'],
+  ['🥑', 'cut', 'אבוקדו,avocado'],
+  ['🍍', 'cut', 'אננס,pineapple', '#F6D55C'],
+  ['🍇', 'cut', 'ענבים,ענב,grapes,grape', '#8E3FA8'],
+  ['🍐', 'cut', 'אגס,אגסים,pear,pears', '#D8E08A'],
+  ['🍑', 'cut', 'אפרסק,אפרסקים,נקטרינה,שזיף,שזיפים,משמש,משמשים,peach,nectarine,plum,apricot', '#FFB27A'],
+  ['🍒', 'cut', 'דובדבן,דובדבנים,דבדבנים,cherries', '#C2185B'],
+  ['🥝', 'cut', 'קיווי,kiwi', '#9CCB4A'],
+  ['🍈', 'cut', 'מלון,מלונים,melon,cantaloupe', '#F2D28B'],
+  ['🫐', 'cut', 'אוכמניות,אוכמנית,blueberries,blueberry', '#5B6BC0'],
+  ['🥬', 'cut', 'חסה,כרוב,lettuce,cabbage'],
+  ['🥦', 'cut', 'ברוקולי,כרובית,broccoli,cauliflower'],
+  ['🍆', 'cut', 'חציל,חצילים,eggplant,aubergine'],
+  ['🫑', 'cut', 'פלפל,פלפלים,פפריקה,pepper,paprika'],
+  ['🧅', 'cut', 'בצל,בצלים,onion,onions'],
+  ['🧄', 'cut', 'שום,garlic'],
+  ['🥥', 'cut', 'קוקוס,coconut'],
+  ['🫒', 'cut', 'זיתים,זית,olives,olive'],
+  ['🍞', 'toasting', 'לחם,פרוסת לחם,לחמנייה,לחמניה,חלה,טוסט,bread,toast,challah'],
+  ['🥯', 'toasting', 'בייגל,בייגלה,bagel'],
+  ['🥐', 'toasting', 'קרואסון,קראסון,מאפה,croissant,pastry'],
+  ['🥖', 'toasting', 'באגט,בגט,לחם צרפתי,baguette'],
+  ['🧇', 'toasting', 'וופל,וופלים,waffle,waffles'],
+  ['🫓', 'toasting', 'פיתה,פיתות,לחם שטוח,pita'],
+  ['🥛', 'pour', 'חלב,חלב שקדים,חלב סויה,milk,almond milk,soy milk', '#FFFFFF'],
+  ['💧', 'pour', 'מים,מים קרים,מינרלים,water', '#7FD1FF'],
+  ['🧃', 'pour', 'מיץ,juice,משקה,שתייה,שתיה,drink', '#FFA726'],
+  ['🥤', 'pour', 'קולה,קוקה קולה,פפסי,cola,pepsi,coca cola', '#3B1F14'],
+  ['🥤', 'pour', 'סודה,ספרייט,soda,sprite', '#DDEFFB'],
+  ['🥤', 'pour', 'פאנטה,fanta', '#FFA726'],
+  ['🥤', 'pour', 'שייק,מילקשייק,סמוטי,shake,milkshake,smoothie', '#F4B6C8'],
+  ['🍋', 'pour', 'לימונדה,lemonade', '#F6E27A'],
+  ['🥣', 'pour', 'יוגורט,קפיר,שמנת,לבן,yogurt,kefir,cream', '#FFFFFF'],
+  ['🫖', 'pour', 'תה קר,אייס תי,iced tea', '#C98A4B'],
+  ['🥤', 'pour', 'קפה קר,אייס קפה,קפה קרח,iced coffee,cold brew', '#8B5A2B'],
+  ['🥚', 'fry', 'ביצה,ביצים,חביתה,ביצת עין,egg,eggs,omelet,omelette,fried egg'],
+  ['🥞', 'fry', 'פנקייק,פנקייקים,פנקק,pancake,pancakes'],
+  ['🥔', 'fry', 'לביבה,לביבות,latke,latkes'],
+  ['🥩', 'fry', 'סטייק,אנטריקוט,פילה,גריל,steak,entrecote'],
+  ['🍗', 'fry', 'שניצל,שניצלים,נאגטס,פרגית,עוף מטוגן,schnitzel,nuggets,fried chicken'],
+  ['🍄', 'fry', 'פטריה,פטרייה,פטריות,שמפיניון,mushroom,mushrooms'],
+  ['🐟', 'fry', 'דג,דגים,סלמון,fish,salmon'],
+  ['🧅', 'fry', 'בצל מטוגן,טבעות בצל,onion rings'],
+  ['🍳', 'fry', 'שקשוקה,shakshuka']];
+const kNorm = s => s.toLowerCase().replace(/[֑-ׇ]/g, '').replace(/["'׳״`’.,!?()]/g, '').replace(/\s+/g, ' ').trim();
+// the buttons' foods win over the dictionary; the first entry for a word or emoji wins
+const KWORDS = new Map(), KEMOJI = new Map(), KCOLOR = new Map();
+for (const f of KITCHEN){ KWORDS.set(kNorm(f.n), f); if (!KEMOJI.has(f.e)) KEMOJI.set(f.e, f); }
+for (const [e, a, words, c] of KDICT){
+  const entry = { e, a, ...(c ? { c } : {}) }; if (!KEMOJI.has(e)) KEMOJI.set(e, entry); if (c && !KCOLOR.has(e)) KCOLOR.set(e, c);
+  for (const w of words.split(',')){ const k = kNorm(w); if (k && !KWORDS.has(k)) KWORDS.set(k, entry); }
+}
+// the word as typed, then without a Hebrew prefix letter (הקפה, לקפה), then singular (תפוחים, עגבניות, eggs)
+function kForms(w){
+  const bases = [w];
+  if (w.length > 3 && /^[הולבכמש]/.test(w)) bases.push(w.slice(1));
+  if (w.length > 4 && /^ו[הלבכמש]/.test(w)) bases.push(w.slice(2));
+  const out = [];
+  for (const b of bases){
+    out.push(b);
+    if (b.length > 3 && b.endsWith('ים')) out.push(b.slice(0, -2));
+    if (b.length > 3 && b.endsWith('ות')) out.push(b.slice(0, -2) + 'ה', b.slice(0, -2));
+    if (b.length > 3 && b.endsWith('es')) out.push(b.slice(0, -2));
+    if (b.length > 3 && b.endsWith('s')) out.push(b.slice(0, -1));
+  }
+  return out;
+}
+const kLookup = s => { for (const x of kForms(s)){ const hit = KWORDS.get(x); if (hit) return hit; } return null; };
+// text -> { known, f } where f is a food like the buttons' (e, n, a, optional c); null when nothing was typed
+function kResolve(text){
+  const name = text.trim().replace(/\s+/g, ' ').slice(0, 24); if (!name) return null;
+  let em = null; try{ em = (name.match(/\p{Extended_Pictographic}/u) || [])[0] || null; }catch(e){}
+  if (em){   // an emoji was typed: use it, with the action of the same emoji if the dictionary knows it
+    const k = KEMOJI.get(em); const c = KCOLOR.get(em) || (k && k.c);
+    return { known:true, f:{ e:em, n:name.replace(/\p{Extended_Pictographic}|️|‍/gu, '').trim() || em, a:k ? k.a : 'heat', ...(c ? { c } : {}) } };
+  }
+  const s = kNorm(name); if (!s) return null;
+  const toks = s.split(' ');
+  const make = hit => KITCHEN.includes(hit) ? hit : { e:hit.e, n:name, a:hit.a, ...(hit.a === 'pour' ? { c: hit.c || KCOLOR.get(hit.e) || '#FFA726' } : {}) };
+  let hit = kLookup(s);                                                   // the whole phrase: "קפה קר", "תפוח אדמה"
+  if (hit) return { known:true, f:make(hit) };
+  if ((toks[0] === 'מיץ' || toks[0] === 'juice') && toks.length > 1){   // "מיץ תות": a juice in the colour of the fruit
+    for (const t of toks.slice(1)){ const fr = kLookup(t); if (fr) return { known:true, f:{ e:fr.e, n:name, a:'pour', c: KCOLOR.get(fr.e) || fr.c || '#FFA726' } }; }
+  }
+  for (let i = 0; i < toks.length - 1 && !hit; i++) hit = kLookup(toks[i] + ' ' + toks[i + 1]);   // two words: "בצל מטוגן"
+  for (let i = 0; i < toks.length && !hit; i++) hit = kLookup(toks[i]);                                // then the first word we know
+  if (hit) return { known:true, f:make(hit) };
+  return { known:false, f:{ e:'🍽️', n:name, a:'heat' } };
+}
+function kFree(text){
+  const r = kResolve(text);
+  if (!r){ toast('כתבו איזה אוכל להכין'); $('kFreeIn').focus(); return; }
+  try{ document.activeElement.blur(); }catch(e){}   // close the phone keyboard so the animation is visible
+  kPick(r.f);
+  $('kFreeNote').textContent = r.known ? KFREE_HINT : `עוד לא מכיר את "${r.f.n}", אז מחממים אותו בכל זאת. אפשר להקליד אימוג׳י במקום.`;
+}
 const KRUN = { heat:kHeat, cut:kCut, toasting:kToast, pour:kPour, fry:kFry };
 function kPick(f){
   const i = String(KITCHEN.indexOf(f));
   document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.i === i)));
-  kReset(f.a); KRUN[f.a](f, kSpeed());
+  $('kFreeNote').textContent = KFREE_HINT; kReset(f.a); KRUN[f.a](f, kSpeed());
 }
 function kFit(){ const st = $('kStage'), sc = $('kScene'); const k = Math.min(1, (st.clientWidth || 320) / 320); sc.style.transform = k < 1 ? `scale(${k})` : ''; st.style.height = Math.round(340 * k) + 'px'; }
 const kSoundIcon = () => { $('kSound').textContent = store.get('ft-ksound') === '0' ? '🔇' : '🔊'; };
@@ -2008,6 +2151,7 @@ function buildKitchen(){
   kSoundIcon();
   $('kitchen-open').addEventListener('click', () => { S.kitchenOpen = true; render(); });
   $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
+  $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kSound').addEventListener('click', () => { store.set('ft-ksound', store.get('ft-ksound') === '0' ? '1' : '0'); kSoundIcon(); kBeep(660, 80); });
 }
 // render() calls this on every data update: it only shows or hides the sheet and never touches a running animation
@@ -2015,7 +2159,7 @@ function renderKitchen(){
   const sheet = $('kitchenSheet'); if (!sheet) return;
   if (!S.kitchenOpen){ if (K.shown){ K.shown = false; sheet.hidden = true; kStop(); } return; }
   document.body.classList.add('locked');
-  if (!K.shown){ K.shown = true; sheet.hidden = false; kFit(); kReset('heat'); kMsg('בחרו מה להכין'); document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', 'false')); }
+  if (!K.shown){ K.shown = true; sheet.hidden = false; kFit(); kReset('heat'); kMsg('בחרו מה להכין'); $('kFreeNote').textContent = KFREE_HINT; $('kFreeIn').value = ''; document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', 'false')); }
 }
 
 /* ---------- opening splash ---------- */

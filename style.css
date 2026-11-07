@@ -715,3 +715,8 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .kscene.fry.on .kbubs i{animation:kbub .9s ease-out infinite}
 .kbubs i:nth-child(1){left:92px;top:212px}.kbubs i:nth-child(2){left:150px;top:248px;animation-delay:.3s}.kbubs i:nth-child(3){left:196px;top:220px;animation-delay:.6s}.kbubs i:nth-child(4){left:120px;top:250px;animation-delay:.45s}
 @keyframes kbub{0%{transform:scale(.2);opacity:0}40%{opacity:1}100%{transform:scale(1.4) translateY(-8px);opacity:0}}
+
+/* kitchen: type any food */
+.kfree{display:flex;gap:8px;align-items:stretch}
+.kfree input{flex:1;min-width:0}
+.kfree-note{margin:-4px 0 4px;text-align:center}
