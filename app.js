@@ -2778,13 +2778,22 @@ function kDishesIn(list){
   if (S.dishesLoaded && me) for (const d of list) if (!prev.has(d.id) && d.to === me && !d.eaten && d.at > Date.now() - 120000) toast(`${d.e} ${mName(d.from)} ${kFem(d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`);
   if (S.dishesLoaded && me) for (const d of list){ const was = prevAll.get(d.id); if (d.from === me && was && was.pushed === undefined && d.pushed === 0 && Date.now() - d.at < 120000)
     toast(d.phones ? `⚠️ ההתראה ל${mName(d.to)} לא הגיעה` : `🔕 ל${mName(d.to)} אין התראות מופעלות בטלפון. המנה נשלחה, אבל לא תגיע התראה`); }
+  if (S.dishesLoaded && me) for (const d of list){ const was = prevAll.get(d.id); if (d.from === me && was && !was.coming && d.coming && Date.now() - (d.comingAt || 0) < 120000) toast(`🏃 ${mName(d.to)} בדרך`); }
   S.dishes = list; S.dishesLoaded = true;
+}
+// the reply to a come-and-eat call: "on my way" (the server tells only the caller)
+const kComingBtn = d => d.coming ? h('small', null, '🏃 בדרך ✓') : h('button', { type:'button', class:'btn small', onclick:() => kComing(d) }, '🏃 בדרך');
+async function kComing(d){
+  if (!d || d.coming) return;
+  try{ await updateDoc(doc(db, 'dishes', d.id), { coming: true, comingAt: Date.now() }); toast(`${mName(d.from)} יודע${kFem(d.from) ? 'ת' : ''} שאתה בדרך 🏃`); if (K.dish && K.dish.id === d.id) K.dish = { ...K.dish, coming: true }; kRenderSend(); render(); }
+  catch(e){ fail(e); }
 }
 function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend(); }
 // under the message: one button opens the send window (as soon as a food is picked, or to call everyone to eat); "I ate it" for a dish someone sent me
 function kRenderSend(){
   const sendBox = $('kSend'), eat = $('kEatWrap'); if (!sendBox) return;
   eat.hidden = !(K.ready && K.dish);
+  $('kComing').hidden = !(K.dish && K.dish.call && !K.dish.coming);
   sendBox.hidden = !kMe();
   const cb = $('kCallBtn'); cb.disabled = !!K.called; cb.textContent = K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול!';
   if (!$('kPop').hidden) kRenderPop();
@@ -2851,10 +2860,10 @@ function renderKitchenMail(){
   $('kInbox').hidden = !inbox.length; const I = $('kInboxList'); I.replaceChildren();
   inbox.forEach(d => I.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
     h('div', { class:'t' }, h('strong', null, `${mName(d.from)} ${kFem(d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`), h('small', null, kWhen(d.at))),
-    h('button', { type:'button', class:'btn small', onclick:() => kOpenDish(d) }, 'פתחו'))));
+    h('button', { type:'button', class:'btn small', onclick:() => kOpenDish(d) }, 'פתחו'), d.call ? kComingBtn(d) : null)));
   $('kOutbox').hidden = !out.length; const O = $('kOutboxList'); O.replaceChildren();
   out.forEach(d => O.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
-    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
+    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : d.coming ? `${mName(d.to)} בדרך 🏃` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
 }
 function kPick(f, dish = null){
   $('kFoodPop').hidden = true;
@@ -2875,6 +2884,7 @@ function buildKitchen(){
   window.addEventListener('resize', () => { if (K.shown) kFit(); });
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kEat').addEventListener('click', kEat);
+  $('kComing').addEventListener('click', () => kComing(K.dish));
   $('kFoodOpen').addEventListener('click', () => { $('kFoodPop').hidden = false; });
   $('kFoodPopClose').addEventListener('click', () => { $('kFoodPop').hidden = true; });
   $('kFoodPop').addEventListener('click', e => { if (e.target === $('kFoodPop')) $('kFoodPop').hidden = true; });

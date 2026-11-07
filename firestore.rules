@@ -347,8 +347,10 @@ service cloud.firestore {
         && request.resource.data.w is int && request.resource.data.w * dishMs() <= request.resource.data.at && request.resource.data.at < (request.resource.data.w + 1) * dishMs()
         && id == request.resource.data.from + '__' + request.resource.data.to + '__' + string(request.resource.data.w);
       allow update: if (isAdmin() || boundTo(resource.data.to))
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['eaten','ateAt'])
-        && request.resource.data.eaten == true && request.resource.data.ateAt is int;
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['eaten','ateAt'])
+             && request.resource.data.eaten == true && request.resource.data.ateAt is int)
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coming','comingAt'])
+                && request.resource.data.coming == true && request.resource.data.comingAt is int));
       allow delete: if isAdmin() || boundTo(resource.data.to);
     }
 

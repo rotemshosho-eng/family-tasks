@@ -215,6 +215,12 @@ export const onDish = onDocumentCreated('dishes/{id}', async ev => {
   const pushed = await push([d.to], call ? `🍽️ ${F.name(d.from)} קורא${fem(F, d.from) ? 'ת' : ''}: בואו לאכול!${d.n === 'בואו לאכול!' ? '' : ` ${d.e} ${d.n}`}` : `${d.e} ${F.name(d.from)} ${fem(F, d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`, call ? 'לחצו כדי לבוא' : 'פתחו את המטבח כדי לראות ולטעום', `dish-${ev.params.id}`, `${APP_URL}?kitchen=1`);
   await ev.data.ref.update({ pushed, phones });   // the sender's app shows whether the notification went out (eaten is unchanged, so onDishEaten ignores this write)
 });
+// the reply to a come-and-eat call goes only to whoever called
+export const onDishComing = onDocumentUpdated('dishes/{id}', async ev => {
+  const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.coming === true || d.coming !== true) return;
+  const F = await family();
+  await push([d.from], `🏃 ${F.name(d.to)} בדרך לאכול`, d.n === 'בואו לאכול!' ? 'קראת ו' + F.name(d.to) + (fem(F, d.to) ? ' באה' : ' בא') : `${d.e} ${d.n}`, `dish-coming-${ev.params.id}`);
+});
 export const onDishEaten = onDocumentUpdated('dishes/{id}', async ev => {
   const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.eaten === true || d.eaten !== true) return;
   const F = await family();
