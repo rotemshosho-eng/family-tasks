@@ -329,6 +329,8 @@ service cloud.firestore {
 
     // מנות מהמטבח: כל אחד שולח מנה שהכין לבן משפחה אחר. מזהה המסמך = שולח__מקבל__חלון של 10 דקות, כך שאפשר לשלוח
     // לאותו אדם רק פעם בכמה דקות. השולח לא יכול למחוק (שלא יעקוף את ההגבלה). המקבל מסמן "אכלתי" או מוחק; המנהל יכול הכול.
+    // אורך חלון ההגבלה במילישניות: settings/perms.dishEveryMin דקות (ברירת מחדל 10)
+    function dishMs() { return (exists(/databases/$(database)/documents/settings/perms) ? get(/databases/$(database)/documents/settings/perms).data.get('dishEveryMin', 10) : 10) * 60000; }
     match /dishes/{id} {
       allow read: if signedIn();
       allow create: if (isAdmin() || boundTo(request.resource.data.from))
@@ -341,7 +343,7 @@ service cloud.firestore {
         && request.resource.data.a in ['heat','cut','toasting','pour','fry','blend','bake']
         && (!('c' in request.resource.data) || (request.resource.data.c is string && request.resource.data.c.size() <= 9))
         && request.resource.data.at is int && math.abs(request.resource.data.at - request.time.toMillis()) < 600000
-        && request.resource.data.w is int && request.resource.data.w * 600000 <= request.resource.data.at && request.resource.data.at < (request.resource.data.w + 1) * 600000
+        && request.resource.data.w is int && request.resource.data.w * dishMs() <= request.resource.data.at && request.resource.data.at < (request.resource.data.w + 1) * dishMs()
         && id == request.resource.data.from + '__' + request.resource.data.to + '__' + string(request.resource.data.w);
       allow update: if (isAdmin() || boundTo(resource.data.to))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['eaten','ateAt'])

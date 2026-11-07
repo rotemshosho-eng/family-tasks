@@ -1547,6 +1547,9 @@ function renderDevNotes(){
 
 /* ---------- nudges (push reminders). The server sends them within ~5 minutes. ---------- */
 const nudgeEveryMin = () => Math.max(1, Number(S.perms?.nudgeEveryMin) || 60);
+// kitchen: one dish per pair per this many minutes (settings/perms.dishEveryMin; the rules read the same number)
+const dishEveryMin = () => { const v = Math.round(Number(S.perms?.dishEveryMin)); return v >= 1 && v <= 1440 ? v : 10; };
+const dishMs = () => dishEveryMin() * 60000;
 const hasPush = id => (S.tokens || []).some(t => t.memberId === id);
 async function sendNudge(data){ await addDoc(collection(db,'nudges'), { ...data, at:Date.now() }); }
 function renderNudgeAdmin(){
@@ -1565,6 +1568,7 @@ function renderNudgeAdmin(){
       h('input', { type:'number', min:'1', max:'1440', inputmode:'numeric', value: m.nudgeEveryMin ? String(m.nudgeEveryMin) : '', placeholder: String(nudgeEveryMin()),
         onchange: e => { const v = Math.round(Number(e.target.value)); updateDoc(doc(db,'members',m.id), { nudgeEveryMin: v >= 1 && v <= 1440 ? v : deleteField() }).then(() => toast(v >= 1 ? `${m.name}: פעם ב-${v} דקות` : `${m.name}: לפי ההגדרה הכללית`)).catch(fail); } }), ' דק׳') : null)));
   if (document.activeElement !== $('nudgeEvery')) $('nudgeEvery').value = nudgeEveryMin();
+  if (document.activeElement !== $('dishEvery')) $('dishEvery').value = dishEveryMin();
 }
 async function nudgePeople(){
   const to = [...S.nudgePick].filter(id => member(id)); if (!to.length){ toast('בחרו למי להקפיץ'); return; }
@@ -1874,6 +1878,8 @@ function buildStatic(){
   $('bf-save').addEventListener('click', saveBonus);
   $('pp-save').addEventListener('click', saveParentPoints);
   $('nudgeSend').addEventListener('click', nudgePeople);
+  $('dishEverySave').addEventListener('click', async () => { const v = Math.round(Number($('dishEvery').value)); if (!(v >= 1 && v <= 1440)){ toast('בין 1 ל-1440 דקות'); return; }
+    try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), dishEveryMin: v }); toast(`נשמר: מנה לאותו אדם פעם ב-${v} דקות`); }catch(e){ fail(e); } });
   $('nudgeEverySave').addEventListener('click', async () => { const v = Math.round(Number($('nudgeEvery').value)); if (!(v >= 1 && v <= 1440)){ toast('בין 1 ל-1440 דקות'); return; }
     try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), nudgeEveryMin: v }); toast(`נשמר: פעם ב-${v} דקות`); }catch(e){ fail(e); } });
   $('pp-toggle').addEventListener('click', () => { S.ppOpen = true; render(); $('pp-points').focus(); });
@@ -2793,7 +2799,7 @@ function kClosePop(){ $('kPop').hidden = true; }
 async function kCallAll(){
   const me = kMe(); if (!me || K.called) return;
   K.called = true; kRenderPop();
-  const w = Math.floor(Date.now() / 600000); let n = 0;
+  const w = Math.floor(Date.now() / dishMs()); let n = 0;
   for (const m of S.members.filter(m => m.id !== me)){
     if (S.dishes.some(d => d.id === `${me}__${m.id}__${w}`)) continue;
     try{ await kSendDish(m.id, { e:'🍽️', n:'בואו לאכול!', a:'heat' }, true); n++; }catch(e){}
@@ -2803,7 +2809,7 @@ async function kCallAll(){
 }
 async function kSendDish(to, food = K.cur, call = false){
   const me = kMe(), f = food; if (!me || !f || (!call && K.sent.has(to))) return;
-  const at = Date.now(), w = Math.floor(at / 600000), id = `${me}__${to}__${w}`;
+  const at = Date.now(), w = Math.floor(at / dishMs()), id = `${me}__${to}__${w}`;
   if (S.dishes.some(d => d.id === id)){ if (!call) toast(`כבר שלחת ל${mName(to)} לפני רגע. נסו עוד כמה דקות.`); return; }
   if (!call){ K.sent.add(to); kRenderSend(); }
   try{ await setDoc(doc(db, 'dishes', id), { from: me, to, e: f.e, n: f.n, a: f.a, ...(f.c ? { c: f.c } : {}), at, w }); if (!call) toast(`נשלח ל${mName(to)} 📤`); }

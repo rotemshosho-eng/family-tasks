@@ -281,6 +281,12 @@
       </div>
       <div><button type="button" class="btn ghost" id="nudgeEverySave">שמירה</button></div>
     </section>
+    <section class="card" id="dishLimitBox">
+      <h3 class="group-h">🍽️ המטבח: הגבלת זמן בשליחה</h3>
+      <p class="sub">אפשר לשלוח מנה (או "בואו לאכול") לאותו אדם רק פעם בכמה דקות.</p>
+      <div class="row"><div class="field"><label for="dishEvery">פעם בכמה דקות</label><input type="number" id="dishEvery" min="1" max="1440" inputmode="numeric"></div></div>
+      <div><button type="button" class="btn ghost" id="dishEverySave">שמירה</button></div>
+    </section>
 
     <section class="panel" id="joinsPanel" hidden>
       <div class="section-head"><h2>מחכים לאישור</h2><span class="count" id="joinsCount"></span></div>
@@ -418,7 +424,7 @@
   <button type="button" data-tab="tasks" aria-pressed="false"><span class="ni" aria-hidden="true">📅</span>משימות</button>
   <button type="button" data-tab="rewards" aria-pressed="false"><span class="ni" aria-hidden="true">👛</span>ארנק</button>
   <button type="button" data-tab="family" aria-pressed="false"><span class="ni" aria-hidden="true">👥</span>משפחה</button>
-  <button type="button" data-kitchen="1" id="tabKitchen" aria-pressed="false"><span class="ni" aria-hidden="true">🍽️</span><span class="nl" id="tabKitchenLbl">תחמם לי</span><b class="nbadge" id="tabKitchenN" hidden></b></button>
+  <button type="button" data-kitchen="1" id="tabKitchen" aria-pressed="false"><span class="ni" aria-hidden="true">🍽️</span><span class="nl" id="tabKitchenLbl">חמם לי</span><b class="nbadge" id="tabKitchenN" hidden></b></button>
   <button type="button" data-tab="admin" aria-pressed="false" hidden><span class="ni" aria-hidden="true">⚙️</span><span class="nl">ניהול</span></button>
 </nav>
 <!-- full-screen chat for one task -->
