@@ -1878,6 +1878,9 @@ function buildStatic(){
   $('bf-save').addEventListener('click', saveBonus);
   $('pp-save').addEventListener('click', saveParentPoints);
   $('nudgeSend').addEventListener('click', nudgePeople);
+  $('dishLimitOpen').addEventListener('click', () => { $('dishPop').hidden = false; $('dishEvery').value = dishEveryMin(); $('dishEvery').focus(); });
+  $('dishPopClose').addEventListener('click', () => { $('dishPop').hidden = true; });
+  $('dishPop').addEventListener('click', e => { if (e.target === $('dishPop')) $('dishPop').hidden = true; });
   $('dishEverySave').addEventListener('click', async () => { const v = Math.round(Number($('dishEvery').value)); if (!(v >= 1 && v <= 1440)){ toast('בין 1 ל-1440 דקות'); return; }
     try{ await setDoc(doc(db,'settings','perms'), { ...(S.perms || {}), dishEveryMin: v }); toast(`נשמר: מנה לאותו אדם פעם ב-${v} דקות`); }catch(e){ fail(e); } });
   $('nudgeEverySave').addEventListener('click', async () => { const v = Math.round(Number($('nudgeEvery').value)); if (!(v >= 1 && v <= 1440)){ toast('בין 1 ל-1440 דקות'); return; }

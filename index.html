@@ -282,10 +282,8 @@
       <div><button type="button" class="btn ghost" id="nudgeEverySave">שמירה</button></div>
     </section>
     <section class="card" id="dishLimitBox">
-      <h3 class="group-h">🍽️ המטבח: הגבלת זמן בשליחה</h3>
-      <p class="sub">אפשר לשלוח מנה (או "בואו לאכול") לאותו אדם רק פעם בכמה דקות.</p>
-      <div class="row"><div class="field"><label for="dishEvery">פעם בכמה דקות</label><input type="number" id="dishEvery" min="1" max="1440" inputmode="numeric"></div></div>
-      <div><button type="button" class="btn ghost" id="dishEverySave">שמירה</button></div>
+      <h3 class="group-h">🍽️ המטבח</h3>
+      <button type="button" class="btn ghost" id="dishLimitOpen">⏱️ הגבלת זמן בשליחת מנות</button>
     </section>
 
     <section class="panel" id="joinsPanel" hidden>
@@ -476,6 +474,14 @@
   <div class="kpop-card">
     <div class="kpop-head"><strong id="kPopTitle">📤 שליחה</strong><button type="button" class="btn ghost small" id="kPopClose">סגירה</button></div>
     <div id="kPopBody"></div>
+  </div>
+</div>
+<div class="kpop" id="dishPop" hidden role="dialog" aria-modal="true" aria-labelledby="dishPopTitle">
+  <div class="kpop-card">
+    <div class="kpop-head"><strong id="dishPopTitle">⏱️ הגבלת זמן בשליחת מנות</strong><button type="button" class="btn ghost small" id="dishPopClose">סגירה</button></div>
+    <p class="sub">אפשר לשלוח מנה (או "בואו לאכול") לאותו אדם רק פעם בכמה דקות.</p>
+    <div class="field"><label for="dishEvery">פעם בכמה דקות</label><input type="number" id="dishEvery" min="1" max="1440" inputmode="numeric"></div>
+    <div><button type="button" class="btn" id="dishEverySave">שמירה</button></div>
   </div>
 </div>
 <div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">
