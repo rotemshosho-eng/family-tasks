@@ -598,60 +598,11 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .nudge-min input{width:4.5em!important;padding:6px 8px!important;text-align:center}
 #nudgeRights .arow{flex-wrap:wrap}
 
-/* ---------- kitchen: a food is picked, then heated in the microwave or cut on a board ---------- */
-/* The scene is a fixed 320x340 drawing (scaled down by JS on narrow phones); direction:ltr keeps the geometry the same in RTL. */
-.kstage{flex:none;position:relative;width:100%;max-width:360px;height:340px;margin:0 auto;border-radius:22px;overflow:hidden;background:linear-gradient(#EEF3FB,#D8E2F3);box-shadow:0 0 0 1px var(--line)}
-.kscene{position:absolute;left:50%;top:0;width:320px;height:340px;margin-left:-160px;transform-origin:top center;direction:ltr}
-.kscene.reset *{transition:none!important}
-.kscene>*{position:absolute}
-.kcounter{left:0;right:0;bottom:0;height:84px;background:linear-gradient(#D9B98C,#B98F5E);border-top:4px solid #A67C4B}
-/* microwave */
-.kmw{left:10px;top:14px;width:300px;height:204px;border-radius:18px;background:linear-gradient(#F4F6FA,#DDE3EC);border:3px solid #A9B4C5;box-shadow:0 8px 0 #98A4B7}
-.kwin{left:24px;top:28px;width:190px;height:150px;border-radius:12px;background:#222838;box-shadow:inset 0 0 0 4px #141824;transition:background .5s,box-shadow .5s}
-.kscene.on .kwin{background:radial-gradient(circle at 50% 75%,#FFF2BF,#FFC55A 55%,#8C5518);box-shadow:inset 0 0 0 4px #141824,0 0 26px 6px rgb(255 190 80 / .55)}
-.kplate{left:44px;top:150px;width:150px;height:16px;border-radius:50%;background:linear-gradient(90deg,#D9E2EE,#fff,#D9E2EE) 0 0/200% 100%;opacity:.9}
-.kscene.on .kplate{animation:kplate 1s linear infinite}
-@keyframes kplate{to{background-position:200% 0}}
-.kpanel{left:228px;top:28px;width:68px;height:150px;border-radius:10px;background:#CBD3E0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0}
-.kpanel i{width:30px;height:30px;border-radius:50%;background:radial-gradient(#fff,#9AA6B8);box-shadow:0 2px 0 #7E8AA0}
-.kpanel b{width:44px;height:16px;border-radius:8px;background:#E2574C;box-shadow:0 2px 0 #A03A32}
-.kclock{width:56px;height:26px;border-radius:4px;background:#101810;color:#6BFF7B;font:700 15px/26px ui-monospace,Menlo,Consolas,monospace;text-align:center;letter-spacing:1px}
-.kscene.on .kclock{text-shadow:0 0 6px #6BFF7B}
-.kglass{left:24px;top:28px;width:190px;height:150px;border-radius:12px;border:3px solid #AAB5C7;z-index:5;pointer-events:none;
-  background:linear-gradient(120deg,rgb(255 255 255 / .38),rgb(130 150 185 / .3) 38%,rgb(40 52 76 / .5));
-  transform-origin:left center;transform:perspective(520px) rotateY(-80deg);transition:transform .55s ease-in-out}
-.kscene.closed .kglass{transform:perspective(520px) rotateY(0)}
-.kdish{left:119px;top:292px;width:120px;height:18px;margin-left:-60px;border-radius:50%;background:radial-gradient(#fff,#DDE5F0);box-shadow:0 3px 0 #B3BCCB}
-.kfood{left:119px;top:268px;z-index:4;font-size:62px;line-height:1;transform:translate(-50%,-50%);transition:top .9s cubic-bezier(.4,0,.2,1),font-size .9s}
-.kscene.heat.in .kfood{top:116px;font-size:50px}
-.kscene.on .kfood{animation:kjig .5s ease-in-out infinite}
-@keyframes kjig{0%,100%{transform:translate(-50%,-50%) rotate(-5deg)}50%{transform:translate(-46%,-50%) rotate(5deg)}}
-.kscene.ready .kfood{filter:drop-shadow(0 0 10px rgb(255 160 40 / .9))}
-.ksteam{left:119px;top:240px;width:0;height:0;z-index:6;display:none}
-.kscene.heat.steam .ksteam{display:block}
-.ksteam span{position:absolute;bottom:0;width:18px;height:18px;border-radius:50%;background:rgb(255 255 255 / .9);filter:blur(3px);opacity:0;animation:ksteam 1.6s ease-out infinite}
-.ksteam span:nth-child(1){left:-24px}.ksteam span:nth-child(2){left:-8px;animation-delay:.5s}.ksteam span:nth-child(3){left:8px;animation-delay:1s}
-@keyframes ksteam{0%{transform:translateY(0) scale(.6);opacity:0}25%{opacity:.9}100%{transform:translateY(-72px) scale(1.5);opacity:0}}
-/* cutting board */
-.kboard,.kcutfood,.klines,.kpieces,.kknife{display:none}
-.kscene.cut .kboard,.kscene.cut .kcutfood,.kscene.cut .klines,.kscene.cut .kpieces,.kscene.cut .kknife{display:block}
-.kscene.cut .kmw,.kscene.cut .kwin,.kscene.cut .kplate,.kscene.cut .kpanel,.kscene.cut .kdish,.kscene.cut .kglass,.kscene.cut .kfood,.kscene.cut .ksteam{display:none}
-.kboard{left:30px;top:200px;width:260px;height:112px;border-radius:14px;background:linear-gradient(#EBCB93,#D3A965);box-shadow:0 6px 0 #A98048}
-.kcutfood{left:160px;top:212px;z-index:4;font-size:84px;line-height:1;transform:translate(-50%,-50%) scale(0)}
-.kscene.cut.in .kcutfood{transform:translate(-50%,-50%) scale(1);transition:transform .45s cubic-bezier(.3,1.5,.5,1)}
-.kscene.cut.sliced .kcutfood{opacity:0}
-.kcutfood.shake{animation:kshake .22s}
-@keyframes kshake{0%,100%{transform:translate(-50%,-50%) scale(1)}30%{transform:translate(-53%,-50%) scale(1)}70%{transform:translate(-47%,-50%) scale(1)}}
-.klines{inset:0;z-index:5;pointer-events:none}
-.kline{position:absolute;top:166px;width:3px;height:92px;border-radius:2px;background:rgb(255 255 255 / .95);box-shadow:0 0 0 1px rgb(0 0 0 / .18);transform:scaleY(0);transform-origin:top;animation:kline .2s forwards}
-@keyframes kline{to{transform:scaleY(1)}}
-.kknife{left:149px;top:150px;width:22px;height:100px;z-index:6;transform:translateY(-150px)}
-.kknife::before{content:"";position:absolute;top:0;left:3px;width:16px;height:30px;border-radius:6px;background:linear-gradient(90deg,#7B563A,#5A3C26)}
-.kknife::after{content:"";position:absolute;top:30px;left:0;width:22px;height:70px;background:linear-gradient(90deg,#F7FAFD,#A9B6C8);clip-path:polygon(0 0,100% 0,100% 90%,0 100%)}
-.kpieces{left:30px;top:184px;width:260px;height:96px;z-index:4;flex-wrap:wrap;justify-content:center;align-content:center;padding:0 28px;box-sizing:border-box}
-.kscene.cut .kpieces{display:flex}
-.kpieces span{font-size:40px;line-height:1.1;transform:scale(0);animation:kpop .5s cubic-bezier(.3,1.5,.5,1) forwards;animation-delay:calc(var(--i) * 90ms)}
-@keyframes kpop{to{transform:scale(1) rotate(var(--r,0deg))}}
+/* ---------- kitchen (v2): the stage holds an SVG scene built by app.js, and a canvas for particles ---------- */
+.kstage{flex:none;position:relative;width:100%;max-width:360px;aspect-ratio:320/340;margin:0 auto;border-radius:22px;overflow:hidden;background:#EBE3D1;box-shadow:0 0 0 1px var(--line),0 12px 26px -14px rgb(23 43 77 / .4)}
+.kscene{position:absolute;inset:0}
+.kscene svg{display:block;width:100%;height:100%;direction:ltr}
+#kFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 /* below the drawing */
 .kmsg{text-align:center;font:600 1.1rem var(--display);margin:0;min-height:1.7em}
 .kpick{display:flex;flex-direction:column;gap:8px}
@@ -659,68 +610,10 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .kchip{gap:8px}.kchip .ke{font-size:1.45rem;line-height:1}
 .kchip[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent) inset;font-weight:600}
 .ksound{font-size:1.1rem;margin-inline-start:auto}
-.kitchen-wrap{display:flex}.kitchen-wrap .btn{flex:1}
-@media (prefers-reduced-motion:reduce){.kscene *{transition-duration:.01s!important;animation-duration:.01s!important}}
-.kknife{transition:opacity .4s}
-.kscene.cut.sliced .kknife{opacity:0}
-
-/* ---------- kitchen: toaster, pouring and frying (the same 320x340 scene, one action per mode class) ---------- */
-.kscene:not(.heat) .kmw,.kscene:not(.heat) .kwin,.kscene:not(.heat) .kplate,.kscene:not(.heat) .kpanel,.kscene:not(.heat) .kdish,.kscene:not(.heat) .kglass{display:none}
-.kscene.toasting .kfood{display:none}
-.kscene.steam .ksteam{display:block}
-.kscene.toasting .ksteam{left:160px;top:158px}.kscene.fry .ksteam{left:140px;top:196px}
-.ktoaster,.ktoast,.klever,.kcup,.kjug,.kstream,.kpan,.kegg,.kbubs{display:none}
-.kscene.toasting .ktoaster,.kscene.toasting .ktoast,.kscene.toasting .klever,.kscene.pour .kcup,.kscene.pour .kjug,.kscene.pour .kstream,.kscene.pour .kfood,
-.kscene.fry .kpan,.kscene.fry .kegg,.kscene.fry .kbubs,.kscene.fry .kfood{display:block}
-/* toaster: the slices drop behind the front, the lever goes down, the slot glows, then they pop up toasted */
-.ktoaster{left:50px;top:190px;width:220px;height:104px;box-sizing:border-box;border-radius:24px 24px 18px 18px;background:linear-gradient(#EEF1F6,#B9C1CF 55%,#9AA4B5);border:3px solid #8993A6;box-shadow:0 6px 0 #7B8599;z-index:5;transition:box-shadow .4s}
-.ktoaster::before{content:"";position:absolute;left:22px;right:22px;top:14px;height:9px;border-radius:5px;background:#2B303A;transition:background .4s,box-shadow .4s}
-.ktoaster::after{content:"";position:absolute;left:24px;bottom:18px;width:26px;height:26px;border-radius:50%;background:radial-gradient(#6B7385,#2B303A);box-shadow:0 0 0 3px #C9D0DC}
-.kscene.on .ktoaster{box-shadow:0 6px 0 #7B8599,0 0 28px 8px rgb(255 130 50 / .55)}
-.kscene.on .ktoaster::before{background:#FF7A2E;box-shadow:0 0 14px 3px #FF7A2E}
-.ktoast{top:118px;z-index:3;font-size:72px;line-height:1;transform:translate(-50%,-50%);transition:top .7s ease-in-out,filter .3s}
-#kToast1{left:112px}#kToast2{left:208px}
-.kscene.toasting.down .ktoast{top:242px}
-.kscene.toasting.on .ktoast,.kscene.toasting.up .ktoast{filter:sepia(.55) saturate(1.6) brightness(.82)}
-.kscene.toasting.up .ktoast{top:160px;transition:top .5s cubic-bezier(.3,1.7,.5,1),filter .3s}
-.klever{left:246px;top:204px;width:18px;height:30px;border-radius:6px;background:linear-gradient(#4A4F5C,#14171D);z-index:6;transition:top .35s ease-in}
-.kscene.toasting.down .klever{top:238px}
-/* pouring: the jug tips, a stream runs into the glass and the liquid rises */
-.kcup{left:150px;top:190px;width:90px;height:104px;box-sizing:border-box;border:3px solid rgb(255 255 255 / .95);border-top:0;border-radius:2px 2px 16px 16px;background:rgb(255 255 255 / .3);box-shadow:inset 0 0 0 1px rgb(110 130 165 / .35);overflow:hidden;z-index:3}
-.kliq{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--lq,#fff);box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08)}
-.kscene.pouring .kliq,.kscene.poured .kliq{height:84%;transition:height 2.6s ease-out}
-.kjug{left:197px;top:100px;width:64px;height:86px;box-sizing:border-box;border:3px solid rgb(0 0 0 / .18);border-radius:8px 8px 14px 14px;background:var(--lq,#fff);transform-origin:0 0;transition:transform .7s ease-in-out;z-index:5}
-.kjug::after{content:"";position:absolute;left:12px;right:12px;top:28px;height:26px;border-radius:6px;background:rgb(255 255 255 / .85)}
-.kscene.tilt .kjug{transform:rotate(-105deg)}
-.kscene.poured .kjug{transform:rotate(0)}
-.kstream{left:193px;top:90px;width:8px;height:166px;border-radius:4px;background:var(--lq,#fff);box-shadow:inset 0 0 0 1px rgb(0 0 0 / .1);transform-origin:top;transform:scaleY(0);transition:transform .35s ease-in;z-index:4}
-.kscene.pouring .kstream{transform:scaleY(1)}
-.kscene.poured .kstream{transform-origin:bottom;transform:scaleY(0)}
-.kscene.pour .kfood{left:84px;top:268px;font-size:50px;z-index:4;opacity:0;transition:opacity .4s}
-.kscene.pour.poured .kfood{opacity:1}
-/* frying: the food drops into the pan and sizzles; an egg cracks open; the rest flips once */
-.kpan{left:40px;top:182px;width:200px;height:100px;border-radius:50%;background:radial-gradient(ellipse at 50% 35%,#6A6A6A,#2B2B2B 72%);box-shadow:0 9px 0 #151515;transition:box-shadow .4s}
-.kpan::after{content:"";position:absolute;left:190px;top:40px;width:84px;height:20px;border-radius:10px;background:linear-gradient(#777,#3A3A3A)}
-.kscene.fry.on .kpan{box-shadow:0 9px 0 #151515,0 0 30px 8px rgb(255 120 40 / .5)}
-.kscene.fry .kfood{left:140px;top:-30px;font-size:58px;z-index:4;transition:top .55s cubic-bezier(.5,0,.85,.45),opacity .15s}
-.kscene.fry.in .kfood{top:222px}
-.kscene.fry.crack .kfood{opacity:0}
-.kscene.fry.flip .kfood{animation:kflip .85s ease-in-out}
-@keyframes kflip{0%{transform:translate(-50%,-50%) rotate(0)}45%{transform:translate(-50%,-210%) rotate(200deg)}100%{transform:translate(-50%,-50%) rotate(360deg)}}
-.kegg{left:140px;top:226px;width:118px;height:72px;margin:-36px 0 0 -59px;z-index:3;border-radius:52% 48% 55% 45% / 58% 52% 48% 42%;background:#fff;box-shadow:inset 0 -5px 0 rgb(0 0 0 / .08);transform:scale(0)}
-.kegg::after{content:"";position:absolute;left:38%;top:24%;width:38px;height:38px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFE066,#FFB800 70%);box-shadow:0 2px 0 rgb(0 0 0 / .12)}
-.kscene.fry.crack .kegg{transform:scale(1);transition:transform .4s cubic-bezier(.3,1.5,.5,1)}
-.kbubs{inset:0;z-index:5;pointer-events:none}
-.kbubs i{position:absolute;width:14px;height:14px;border-radius:50%;background:rgb(255 255 255 / .55);border:2px solid rgb(255 255 255 / .8);opacity:0}
-.kscene.fry.on .kbubs i{animation:kbub .9s ease-out infinite}
-.kbubs i:nth-child(1){left:92px;top:212px}.kbubs i:nth-child(2){left:150px;top:248px;animation-delay:.3s}.kbubs i:nth-child(3){left:196px;top:220px;animation-delay:.6s}.kbubs i:nth-child(4){left:120px;top:250px;animation-delay:.45s}
-@keyframes kbub{0%{transform:scale(.2);opacity:0}40%{opacity:1}100%{transform:scale(1.4) translateY(-8px);opacity:0}}
-
 /* kitchen: type any food */
 .kfree{display:flex;gap:8px;align-items:stretch}
 .kfree input{flex:1;min-width:0}
 .kfree-note{margin:-4px 0 4px;text-align:center}
-
 /* kitchen: dishes sent between family members */
 .kmail{display:flex;flex-direction:column;gap:6px}
 .kmail h2{font-size:1rem;margin:0}
@@ -728,60 +621,6 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .ksend,.keat{display:flex;flex-direction:column;gap:6px;align-items:center}
 .ksend .chips{justify-content:center}
 .keat .btn{min-width:170px}
-
-/* ---------- kitchen: blender and oven (state classes are s-*, so they never clash with the element classes) ---------- */
-.kbase,.kjarb,.kjar,.kbp,.klid,.koven,.kopanel,.kowin,.kotray,.koglass{display:none}
-.kscene.blend .kbase,.kscene.blend .kjarb,.kscene.blend .kjar,.kscene.blend .kbp,.kscene.blend .klid,
-.kscene.bake .koven,.kscene.bake .kowin,.kscene.bake .kotray,.kscene.bake .koglass{display:block}
-.kscene.bake .kopanel{display:flex}
-.kscene.bake .kdish{display:block;left:160px;top:300px}
-/* blender: pieces drop in, the lid goes on, it whirls and the jar fills with the colour of the food */
-.kbase{left:104px;top:236px;width:112px;height:56px;border-radius:12px 12px 8px 8px;background:linear-gradient(#5B6475,#2B303A);box-shadow:0 6px 0 #1B1F26;z-index:2}
-.kbase::before{content:"";position:absolute;left:18px;top:16px;width:20px;height:20px;border-radius:50%;background:radial-gradient(#fff,#9AA4B5);box-shadow:0 2px 0 #1B1F26}
-.kbase::after{content:"";position:absolute;right:16px;top:24px;width:38px;height:8px;border-radius:4px;background:#E2574C}
-.kjarb{left:108px;top:92px;width:104px;height:148px;background:#A9B6CB;clip-path:polygon(0 0,100% 0,88% 100%,12% 100%);z-index:2}
-.kjar{left:112px;top:96px;width:96px;height:140px;clip-path:polygon(0 0,100% 0,88% 100%,12% 100%);overflow:hidden;z-index:3;background:linear-gradient(90deg,rgb(255 255 255 / .8),rgb(222 234 250 / .65) 50%,rgb(255 255 255 / .75))}
-.kjar::after{content:"";position:absolute;left:50%;bottom:4px;width:38px;height:6px;margin-left:-19px;border-radius:3px;background:#8E99AC;z-index:2}
-.kjuice{position:absolute;left:0;right:0;bottom:0;height:0;background-color:var(--lq,#F4B6C8);transition:height 1.6s ease-out}
-.kjuice::before{content:"";position:absolute;left:0;right:0;top:-6px;height:12px;border-radius:50%;background:rgb(255 255 255 / .5)}
-.kscene.s-fill .kjuice{height:72%}
-.kscene.s-whirl .kjuice{background-image:repeating-linear-gradient(100deg,rgb(255 255 255 / .3) 0 9px,rgb(255 255 255 / 0) 9px 20px);background-size:40px 100%;animation:kswirl .35s linear infinite}
-@keyframes kswirl{to{background-position:40px 0}}
-.kscene.s-whirl .kjarb,.kscene.s-whirl .kjar{animation:kvib .11s linear infinite}
-@keyframes kvib{0%,100%{transform:translateX(-1.6px)}50%{transform:translateX(1.6px)}}
-.kbp{top:-30px;z-index:4;font-size:40px;line-height:1;transform:translate(-50%,-50%);transition:top .6s cubic-bezier(.5,0,.85,.45),opacity .5s}
-.kbp1{left:130px}.kbp2{left:160px;transition-delay:.12s,0s}.kbp3{left:190px;transition-delay:.24s,0s}
-.kscene.s-drop .kbp{top:170px}
-.kscene.s-fill .kbp{opacity:0}
-.klid{left:106px;top:20px;width:108px;height:18px;border-radius:8px;background:linear-gradient(#3A4150,#20242D);z-index:5;transition:top .35s ease-in}
-.klid::after{content:"";position:absolute;left:44px;top:-8px;width:20px;height:10px;border-radius:5px 5px 0 0;background:#20242D}
-.kscene.s-lid .klid{top:80px}
-.kscene.blend .kfood{left:262px;top:262px;font-size:50px;z-index:4;opacity:0;transition:opacity .4s}
-.kscene.blend.s-ready .kfood{opacity:1}
-/* oven: the food slides in, the door closes, the elements glow while the display climbs to 180, it browns, the door opens */
-.koven{left:40px;top:34px;width:240px;height:226px;border-radius:18px;background:linear-gradient(#F1F3F8,#CFD6E2);border:3px solid #A4AEBF;box-shadow:0 8px 0 #8E99AC;z-index:1}
-.kopanel{left:56px;top:46px;width:208px;height:36px;border-radius:10px;background:#BFC8D6;z-index:2;align-items:center;gap:10px;padding:0 10px;box-sizing:border-box;direction:ltr}
-.kopanel b{width:62px;height:24px;border-radius:4px;background:#101810;color:#FFB05C;font:700 14px/24px ui-monospace,Menlo,Consolas,monospace;text-align:center}
-.kopanel i{width:22px;height:22px;border-radius:50%;background:radial-gradient(#fff,#9AA4B5);box-shadow:0 2px 0 #7E8AA0;flex:none}
-.kopanel b + i{margin-inline-start:auto}
-.kowin{left:64px;top:96px;width:192px;height:128px;border-radius:10px;background:#1E2230;box-shadow:inset 0 0 0 4px #121620;z-index:2;transition:background .6s,box-shadow .6s}
-.kowin::before,.kowin::after{content:"";position:absolute;left:14px;right:14px;height:4px;border-radius:2px;background:#3B2D2D;transition:background .6s,box-shadow .6s}
-.kowin::before{top:12px}.kowin::after{bottom:20px}
-.kscene.s-hot .kowin{background:radial-gradient(ellipse at 50% 100%,#FF9A3C,#C8431B 60%,#4A1408);box-shadow:inset 0 0 0 4px #121620,0 0 26px 6px rgb(255 120 40 / .55)}
-.kscene.s-hot .kowin::before,.kscene.s-hot .kowin::after{background:#FF6A32;box-shadow:0 0 12px 3px #FF6A32}
-.kotray{left:78px;top:190px;width:164px;height:7px;border-radius:3px;background:linear-gradient(#C9D0DC,#8E99AC);z-index:2}
-.koglass{left:64px;top:96px;width:192px;height:128px;border-radius:10px;border:3px solid #AAB5C7;z-index:5;pointer-events:none;
-  background:linear-gradient(120deg,rgb(255 255 255 / .35),rgb(130 150 185 / .28) 40%,rgb(40 52 76 / .5));
-  transform-origin:50% 100%;transform:perspective(520px) rotateX(78deg);transition:transform .6s ease-in-out}
-.koglass::after{content:"";position:absolute;left:16px;right:16px;top:6px;height:7px;border-radius:4px;background:rgb(255 255 255 / .7)}
-.kscene.s-shut .koglass{transform:perspective(520px) rotateX(0)}
-.kscene.bake .kfood{left:160px;top:296px;font-size:60px;z-index:4;transition:top .9s cubic-bezier(.4,0,.2,1),font-size .9s,transform 3.4s ease-out,filter 3.4s}
-.kscene.bake.s-in .kfood{top:176px;font-size:52px}
-.kscene.bake.s-brown .kfood{filter:sepia(.45) saturate(1.5) brightness(.88);transform:translate(-50%,-50%) scale(1.12)}
-.kscene.bake.ready .kfood{filter:sepia(.45) saturate(1.5) brightness(.88) drop-shadow(0 0 10px rgb(255 160 40 / .9))}
-.kscene.bake .ksteam{left:160px;top:250px}
-.kscene.s-hot .koglass{background:linear-gradient(120deg,rgb(255 255 255 / .3),rgb(255 190 140 / .1) 40%,rgb(90 35 10 / .22))}
-
 /* the count of dishes waiting in the kitchen, on its bottom-bar icon */
 .bottomnav button{position:relative}
 .nbadge{position:absolute;top:3px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#E2574C;color:#fff;font:700 .68rem/17px var(--body);text-align:center}

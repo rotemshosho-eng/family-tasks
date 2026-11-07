@@ -1929,92 +1929,663 @@ const KITCHEN = [
   { e:'🍪', n:'עוגיות', a:'bake' }, { e:'🍰', n:'עוגה', a:'bake' }, { e:'🧁', n:'קאפקייק', a:'bake' }, { e:'🥧', n:'פאי', a:'bake' },
   { e:'🍕', n:'פיצה בתנור', a:'bake' }, { e:'🍗', n:'עוף בתנור', a:'bake' }, { e:'🥔', n:'תפוד אפוי', a:'bake' }, { e:'🍠', n:'בטטה אפויה', a:'bake' }];
 const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 שתייה (שופכים לכוס)'], ['fry', '🍳 לטגן במחבת'], ['blend', '🥤 לטחון בבלנדר'], ['bake', '🧁 לאפות בתנור']];
-const K = { timers:[], clock:null, audio:null, shown:false, cur:null, dish:null, ready:false, sent:new Set() };
-const kLater = (ms, fn) => K.timers.push(setTimeout(fn, ms));
+const K = { timers:[], clock:null, audio:null, shown:false, cur:null, dish:null, ready:false, sent:new Set(), run:0, stops:[], loops:[] };
+/* ---------- kitchen animations (v2): one SVG scene per action, built fresh on every pick; async timelines; a canvas for particles ---------- */
 const kSpeed = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches ? .4 : 1; }catch(e){ return 1; } };
+const kCalm = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } };
+const kRnd = (a, b) => a + Math.random() * (b - a);
+const kTx = (x, y, s = 1, sy) => `translate(${x}px,${y}px) scale(${s}${sy != null ? ',' + sy : ''})`;
+const kq = s => $('kScene').querySelector(s);
+const kHold = stop => { K.stops.push(stop); return stop; };
+
+/* --- sound: everything is synthesized, no files --- */
 function kCtx(){ const A = K.audio || (K.audio = new (window.AudioContext || window.webkitAudioContext)()); if (A.state === 'suspended') A.resume(); return A; }
-function kBeep(freq, ms = 120, type = 'sine', vol = .07){
-  if (store.get('ft-ksound') === '0') return;
+const kSoundOn = () => store.get('ft-ksound') !== '0';
+// a tone with an attack and a decay, optionally gliding to another pitch; returns a function that fades it out
+function kTone(freq, dur, o = {}){
+  if (!kSoundOn()) return () => {};
   try{
-    const A = kCtx(); const o = A.createOscillator(), g = A.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = vol; o.connect(g); g.connect(A.destination);
-    o.start(); g.gain.exponentialRampToValueAtTime(.0001, A.currentTime + ms / 1000); o.stop(A.currentTime + ms / 1000 + .02);
-  }catch(e){}
+    const A = kCtx(), t0 = A.currentTime + (o.delay || 0), osc = A.createOscillator(), g = A.createGain();
+    osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(freq, t0); if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+    const v = o.vol ?? .07; g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + (o.attack ?? .005)); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    osc.connect(g); g.connect(A.destination); osc.start(t0); osc.stop(t0 + dur + .03);
+    return () => { try{ g.gain.cancelScheduledValues(A.currentTime); g.gain.setTargetAtTime(.0001, A.currentTime, .03); osc.stop(A.currentTime + .15); }catch(e){} };
+  }catch(e){ return () => {}; }
 }
-// a burst of high-passed noise: the sizzle of the pan
-function kSizzle(ms, vol = .05){
-  if (store.get('ft-ksound') === '0') return;
+// filtered noise: whooshes, sizzle, the click of a knife
+function kNoise(dur, o = {}){
+  if (!kSoundOn()) return () => {};
   try{
-    const A = kCtx(); const n = Math.floor(A.sampleRate * ms / 1000), buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.min(1, (n - i) / (n * .3));
-    const s = A.createBufferSource(), hp = A.createBiquadFilter(), g = A.createGain(); hp.type = 'highpass'; hp.frequency.value = 2500; g.gain.value = vol;
-    s.buffer = buf; s.connect(hp); hp.connect(g); g.connect(A.destination); s.start();
-  }catch(e){}
+    const A = kCtx(), t0 = A.currentTime + (o.delay || 0), n = Math.max(1, Math.floor(A.sampleRate * dur)), buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = A.createBufferSource(), f = A.createBiquadFilter(), g = A.createGain(); f.type = o.type || 'highpass'; f.frequency.setValueAtTime(o.freq || 2000, t0);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(o.to, t0 + dur); f.Q.value = o.q || .7;
+    const v = o.vol ?? .05; g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + (o.attack ?? .004)); g.gain.setValueAtTime(v, t0 + Math.max(.01, dur * (o.hold ?? 0))); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    src.buffer = buf; src.connect(f); f.connect(g); g.connect(A.destination); src.start(t0);
+    return () => { try{ g.gain.cancelScheduledValues(A.currentTime); g.gain.setTargetAtTime(.0001, A.currentTime, .03); src.stop(A.currentTime + .15); }catch(e){} };
+  }catch(e){ return () => {}; }
 }
-function kStop(){ K.timers.forEach(clearTimeout); K.timers = []; clearInterval(K.clock); try{ $('kKnife').getAnimations().forEach(a => a.cancel()); }catch(e){} }
+const kBeep = (freq, ms = 120, type = 'sine', vol = .07) => kTone(freq, ms / 1000, { type, vol });
+const kSND = {
+  pop(){ kTone(420, .12, { to: 900, vol: .07 }); },
+  whoosh(){ kNoise(.32, { type: 'bandpass', freq: 500, to: 2600, q: .9, vol: .045, attack: .08 }); },
+  thud(){ kTone(140, .16, { to: 48, vol: .13 }); kNoise(.05, { type: 'lowpass', freq: 700, vol: .05 }); },
+  clunk(){ kTone(210, .13, { to: 80, vol: .1, type: 'triangle' }); kNoise(.04, { type: 'bandpass', freq: 1400, vol: .05 }); },
+  ding(){ [0, .24, .48].forEach(d => { kTone(1760, .6, { vol: .055, delay: d }); kTone(2637, .4, { vol: .02, delay: d }); }); },
+  chop(){ kNoise(.07, { type: 'highpass', freq: 1800, vol: .09 }); kTone(190, .1, { to: 80, vol: .1, type: 'triangle' }); },
+  sparkle(){ [0, .07, .14, .21].forEach((d, i) => kTone(1800 + i * 330, .22, { vol: .03, delay: d })); },
+  crack(){ kNoise(.06, { type: 'highpass', freq: 2500, vol: .09 }); kNoise(.05, { type: 'lowpass', freq: 900, vol: .05, delay: .05 }); },
+  sizzle(dur){ return kNoise(dur, { type: 'highpass', freq: 3200, vol: .035, attack: .1, hold: .7 }); },
+  hum(dur, f0){ const a = kTone(f0, dur, { type: 'sawtooth', vol: .02, attack: .15 }), b = kTone(f0 * 2.01, dur, { type: 'square', vol: .007, attack: .2 }); return () => { a(); b(); }; },
+  motor(dur){ return kTone(70, dur, { to: 240, type: 'sawtooth', vol: .035, attack: .2 }); },
+  glug(n){ for (let i = 0; i < n; i++) kTone(240 + (i % 3) * 60, .09, { to: 380 + (i % 2) * 90, vol: .06, delay: i * .24 + Math.random() * .05 }); },
+  clink(){ kTone(2600, .45, { vol: .05 }); kTone(3900, .3, { vol: .025, delay: .01 }); },
+};
+
+/* --- particles: one canvas over the scene, drawn in the scene's 320x340 units --- */
+const kFX = { cv: null, cx: null, ps: [], raf: 0, last: 0, k: 1 };
+function kFxSize(){
+  const cv = $('kFx'); if (!cv) return; kFX.cv = cv; const r = cv.getBoundingClientRect(); if (!r.width) return;
+  const d = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); kFX.k = cv.width / 320; kFX.cx = cv.getContext('2d');
+}
+function kFxClear(){ kFX.ps.length = 0; if (kFX.cx) kFX.cx.clearRect(0, 0, kFX.cv.width, kFX.cv.height); }
+function kFxAdd(p){ if (kCalm() || !kFX.cx) return; p.t = 0; kFX.ps.push(p); if (kFX.ps.length > 240) kFX.ps.shift(); if (!kFX.raf){ kFX.last = performance.now(); kFX.raf = requestAnimationFrame(kFxTick); } }
+function kStar(cx, x, y, r){ cx.beginPath(); for (let i = 0; i < 8; i++){ const rr = i % 2 ? r * .3 : r, a = i * Math.PI / 4; cx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr); } cx.closePath(); }
+function kFxTick(now){
+  const dt = Math.min(.05, (now - kFX.last) / 1000); kFX.last = now; const cx = kFX.cx; if (!cx){ kFX.raf = 0; return; }
+  cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, kFX.cv.width, kFX.cv.height); cx.setTransform(kFX.k, 0, 0, kFX.k, 0, 0);
+  for (let i = kFX.ps.length - 1; i >= 0; i--){
+    const p = kFX.ps[i]; p.t += dt; if (p.t >= p.life){ kFX.ps.splice(i, 1); continue; }
+    const u = p.t / p.life; cx.save(); if (p.clip){ cx.beginPath(); cx.rect(p.clip[0], p.clip[1], p.clip[2], p.clip[3]); cx.clip(); }
+    if (p.k === 'puff'){
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 1 - dt * .6; const r = p.r0 + (p.r1 - p.r0) * u, al = p.a * Math.min(1, u * 6) * (1 - u), g = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      g.addColorStop(0, `rgba(${p.col},${al})`); g.addColorStop(1, `rgba(${p.col},0)`); cx.fillStyle = g; cx.beginPath(); cx.arc(p.x, p.y, r, 0, 6.2832); cx.fill();
+    } else if (p.k === 'drop'){
+      p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.floor && p.y > p.floor){ p.y = p.floor; p.vy *= -.22; p.vx *= .5; }
+      cx.globalAlpha = Math.min(1, (1 - u) * 2.4); cx.translate(p.x, p.y); cx.rotate(Math.atan2(p.vy, p.vx)); cx.fillStyle = p.col;
+      cx.beginPath(); cx.ellipse(0, 0, p.r * (1 + Math.min(1.5, Math.hypot(p.vx, p.vy) / 130)), p.r, 0, 0, 6.2832); cx.fill(); cx.fillStyle = 'rgba(255,255,255,.55)'; cx.beginPath(); cx.arc(-p.r * .3, -p.r * .3, p.r * .32, 0, 6.2832); cx.fill();
+    } else if (p.k === 'spark'){
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 30 * dt; cx.translate(p.x, p.y); cx.rotate(p.rot + u * 2); cx.globalAlpha = Math.min(1, (1 - u) * 2); cx.fillStyle = p.col; kStar(cx, 0, 0, p.s * Math.sin(Math.PI * Math.min(1, u * 1.15))); cx.fill();
+    } else if (p.k === 'crumb'){
+      p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.floor && p.y > p.floor){ p.y = p.floor; p.vy *= -.3; p.vx *= .6; }
+      cx.globalAlpha = Math.min(1, (1 - u) * 2.5); cx.translate(p.x, p.y); cx.rotate(p.rot + u * 6); cx.fillStyle = p.col; cx.fillRect(-p.r, -p.r * .6, p.r * 2, p.r * 1.2);
+    } else if (p.k === 'bubble'){
+      p.y += p.vy * dt; p.x += Math.sin(p.t * 6 + p.ph) * 6 * dt; const pop = u > .82 ? (u - .82) / .18 : 0, r = p.r * (1 + pop * .5);
+      cx.globalAlpha = (1 - pop) * .85; cx.lineWidth = 1.1; cx.strokeStyle = p.col; cx.beginPath(); cx.arc(p.x, p.y, r, 0, 6.2832); cx.stroke(); cx.fillStyle = 'rgba(255,255,255,.5)'; cx.beginPath(); cx.arc(p.x - r * .35, p.y - r * .35, r * .25, 0, 6.2832); cx.fill();
+    } else if (p.k === 'ring'){
+      const r = p.r0 + (p.r1 - p.r0) * (1 - Math.pow(1 - u, 2.2)); cx.lineWidth = 3 * (1 - u) + .5; cx.strokeStyle = `${p.col}${(1 - u) * .85})`; cx.beginPath(); cx.arc(p.x, p.y, r, 0, 6.2832); cx.stroke();
+    } else if (p.k === 'conf'){
+      p.vy += 160 * dt; p.vx *= 1 - dt * .8; p.x += p.vx * dt + Math.sin(p.t * 7 + p.rot) * 12 * dt; p.y += p.vy * dt; cx.globalAlpha = Math.min(1, (1 - u) * 3); cx.translate(p.x, p.y); cx.rotate(p.rot + p.t * 9); cx.scale(1, Math.cos(p.t * 8 + p.rot)); cx.fillStyle = p.col; cx.fillRect(-3, -1.8, 6, 3.6);
+    }
+    cx.restore();
+  }
+  kFX.raf = kFX.ps.length ? requestAnimationFrame(kFxTick) : 0;
+}
+const kPuff = (x, y, o = {}) => kFxAdd({ k: 'puff', x, y, vx: o.vx ?? kRnd(-6, 6), vy: o.vy ?? kRnd(-26, -14), r0: o.r0 ?? 4, r1: o.r1 ?? 15, a: o.a ?? .5, life: o.life ?? 1.4, col: o.col || '255,255,255', clip: o.clip });
+function kDrops(x, y, n, col, o = {}){ for (let i = 0; i < n; i++){ const a = (o.dir ?? -Math.PI / 2) + kRnd(-(o.spread ?? 1.1), o.spread ?? 1.1), s = kRnd(o.min ?? 60, o.max ?? 150); kFxAdd({ k: 'drop', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, g: o.g ?? 520, r: kRnd(1.4, 3.2), col, life: kRnd(.5, .9), floor: o.floor, clip: o.clip }); } }
+function kSparkle(x, y, n = 8, col){ for (let i = 0; i < n; i++){ const a = kRnd(0, 6.28), s = kRnd(20, 70); kFxAdd({ k: 'spark', x: x + Math.cos(a) * kRnd(0, 18), y: y + Math.sin(a) * kRnd(0, 18), vx: Math.cos(a) * s * .5, vy: Math.sin(a) * s * .5 - 16, s: kRnd(5, 11), col: col || '#FFD84D', life: kRnd(.6, 1.1), rot: kRnd(0, 1.5) }); } }
+const kRing = (x, y, col = 'rgba(255,214,90,', o = {}) => kFxAdd({ k: 'ring', x, y, r0: o.r0 ?? 8, r1: o.r1 ?? 56, col, life: o.life ?? .7 });
+function kCrumbs(x, y, n, col, o = {}){ for (let i = 0; i < n; i++) kFxAdd({ k: 'crumb', x: x + kRnd(-14, 14), y, vx: kRnd(-40, 40), vy: kRnd(-130, -60), r: kRnd(1.2, 2.4), col, rot: kRnd(0, 6), life: kRnd(.6, 1), floor: o.floor }); }
+const kBubble = (x, y, o = {}) => kFxAdd({ k: 'bubble', x, y, vy: o.vy ?? kRnd(-30, -16), r: o.r ?? kRnd(2, 4.5), col: o.col || 'rgba(255,255,255,.95)', ph: kRnd(0, 6), life: o.life ?? kRnd(.7, 1.2), clip: o.clip });
+function kConfetti(x, y, n = 24){ const cols = ['#FF6B6B', '#FFD84D', '#4DA3FF', '#39B980', '#B57BFF']; for (let i = 0; i < n; i++){ const a = -Math.PI / 2 + kRnd(-1.2, 1.2), s = kRnd(70, 190); kFxAdd({ k: 'conf', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, col: cols[i % 5], rot: kRnd(0, 6), life: kRnd(1.1, 1.8) }); } }
+// every dish ends with the same little celebration
+function kFlourish(x, y){ kRing(x, y); kSparkle(x, y, 12); kSND.sparkle(); }
+
+/* --- the scene: a shared backdrop and a fresh SVG per action --- */
+const kTxt = 'text-anchor="middle" dy=".36em"';
+const KDEFS = `<defs>
+<linearGradient id="gWall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F9F5EB"/><stop offset="1" stop-color="#EBE3D1"/></linearGradient>
+<pattern id="pTile" width="40" height="20" patternUnits="userSpaceOnUse"><path d="M0 .5H40M0 10.5H40M20 .5V10.5M0 10.5V20M40 10.5V20" stroke="#CFC5AD" stroke-width="1" fill="none" opacity=".7"/></pattern>
+<radialGradient id="gVig" cx=".5" cy=".42" r=".78"><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#6B5A3A" stop-opacity=".24"/></radialGradient>
+<linearGradient id="gWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E6BB82"/><stop offset=".12" stop-color="#D3A166"/><stop offset="1" stop-color="#B38048"/></linearGradient>
+<pattern id="pGrain" width="64" height="22" patternUnits="userSpaceOnUse"><path d="M0 4Q16 1 32 4T64 4M0 13Q20 16 40 12T64 14M10 20Q30 18 50 21" stroke="#9A6B38" stroke-width="1" fill="none" opacity=".22"/></pattern>
+<linearGradient id="gBoard" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0D3A0"/><stop offset="1" stop-color="#DDB679"/></linearGradient>
+<linearGradient id="gSteel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FAFBFD"/><stop offset=".5" stop-color="#DCE2EC"/><stop offset="1" stop-color="#B6C0D2"/></linearGradient>
+<linearGradient id="gBlade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9AA6B8"/><stop offset=".35" stop-color="#F4F7FB"/><stop offset=".7" stop-color="#C5CEDB"/><stop offset="1" stop-color="#8794A8"/></linearGradient>
+<linearGradient id="gHandle" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5A3A22"/><stop offset=".4" stop-color="#8A5B38"/><stop offset="1" stop-color="#4C301C"/></linearGradient>
+<linearGradient id="gGlass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".4" stop-color="#9FB4D4" stop-opacity=".16"/><stop offset="1" stop-color="#0E1522" stop-opacity=".5"/></linearGradient>
+<linearGradient id="gInt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#323C52"/><stop offset="1" stop-color="#171D2B"/></linearGradient>
+<radialGradient id="gBulb" cx=".5" cy=".3" r=".8"><stop offset="0" stop-color="#FFF6CC" stop-opacity=".95"/><stop offset=".5" stop-color="#FFD27A" stop-opacity=".45"/><stop offset="1" stop-color="#FF9A3C" stop-opacity="0"/></radialGradient>
+<radialGradient id="gDish" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#D9E1EE"/></radialGradient>
+<radialGradient id="gKey" cx=".4" cy=".35"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#A9B4C7"/></radialGradient>
+<pattern id="pMesh" width="4" height="4" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".9" fill="#0B1020" opacity=".6"/></pattern>
+<filter id="fBlur2" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2"/></filter>
+<filter id="fBlur4" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="4"/></filter>
+<filter id="fGlowG" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="fShadow" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#2A1A08" flood-opacity=".28"/></filter>
+<filter id="fToast"><feColorMatrix type="matrix" values=".74 .30 .08 0 -.05  .20 .52 .06 0 -.08  .05 .10 .28 0 -.07  0 0 0 1 0"/></filter>
+<linearGradient id="gLiq" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient>
+<linearGradient id="gFlame" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#4DA3FF"/><stop offset=".35" stop-color="#7DC4FF"/><stop offset=".5" stop-color="#FFB347"/><stop offset="1" stop-color="#FF6A2E"/></linearGradient>
+<linearGradient id="gHob" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3C4352"/><stop offset="1" stop-color="#232833"/></linearGradient>
+<radialGradient id="gKnob" cx=".4" cy=".35"><stop offset="0" stop-color="#9AA4B8"/><stop offset="1" stop-color="#3A4150"/></radialGradient>
+<linearGradient id="gPanW" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#20242C"/><stop offset=".5" stop-color="#4C5362"/><stop offset="1" stop-color="#20242C"/></linearGradient>
+<radialGradient id="gPanIn" cx=".5" cy=".4" r=".7"><stop offset="0" stop-color="#303641"/><stop offset="1" stop-color="#12151A"/></radialGradient>
+<radialGradient id="gYolk" cx=".4" cy=".35"><stop offset="0" stop-color="#FFD84D"/><stop offset="1" stop-color="#F2A100"/></radialGradient>
+<radialGradient id="gOvenGlow" cx=".5" cy=".85" r=".8"><stop offset="0" stop-color="#FF9A3C" stop-opacity=".85"/><stop offset=".6" stop-color="#E2572C" stop-opacity=".35"/><stop offset="1" stop-color="#7A2A10" stop-opacity="0"/></radialGradient>
+<filter id="fHaze" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.015 0.07" numOctaves="2" seed="4" result="t"><animate attributeName="baseFrequency" dur="2.4s" values="0.015 0.07;0.02 0.09;0.015 0.07" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="t" scale="5" xChannelSelector="R" yChannelSelector="G"/></filter>
+<clipPath id="cWin"><rect x="52" y="62" width="158" height="152" rx="8"/></clipPath>
+</defs>`;
+// wall decoration for scenes with empty wall: a shelf with jars and a plant, or a rail with hanging utensils
+const kShelf = (x, y, w = 88) => `<g>${kShadow(x + w / 2, y + 10, w / 2, 3, .22)}
+  <rect x="${x}" y="${y}" width="${w}" height="7" rx="2" fill="#B98A55"/><rect x="${x}" y="${y}" width="${w}" height="2.5" rx="1" fill="#E9C48E"/>
+  <rect x="${x + 6}" y="${y - 38}" width="25" height="38" rx="5" fill="#F6F0E2" stroke="#D5C9AE"/><rect x="${x + 5}" y="${y - 44}" width="27" height="9" rx="3" fill="#C0584B"/>
+  <rect x="${x + 37}" y="${y - 29}" width="22" height="29" rx="5" fill="#E8F1E4" stroke="#C3D4BB"/><rect x="${x + 36}" y="${y - 34}" width="24" height="8" rx="3" fill="#6C9A5B"/>
+  <path d="M${x + 66} ${y} l-3 -13 h22 l-3 13 Z" fill="#C97F4A"/>
+  <path d="M${x + 74} ${y - 13} q-12 -12 -4 -26 q10 8 4 26 M${x + 74} ${y - 13} q10 -10 19 -4 q-8 10 -19 4 M${x + 74} ${y - 13} q-2 -16 8 -24 q4 12 -8 24" fill="#5E9B4E"/></g>`;
+const kRail = () => `<g><rect x="26" y="34" width="268" height="6" rx="3" fill="#9AA6BB"/><rect x="26" y="34" width="268" height="2" rx="1" fill="#fff" opacity=".6"/>
+  <g transform="translate(78 40)"><path d="M0 0 v8" stroke="#8794A8" stroke-width="2"/><rect x="-2.5" y="8" width="5" height="40" rx="2.5" fill="#6B4A2F"/><ellipse cx="0" cy="58" rx="13" ry="12" fill="#C9D1DF" stroke="#8E9AB0"/></g>
+  <g transform="translate(130 40)"><path d="M0 0 v8" stroke="#8794A8" stroke-width="2"/><rect x="-2.5" y="8" width="5" height="34" rx="2.5" fill="#6B4A2F"/><rect x="-11" y="42" width="22" height="26" rx="4" fill="#C9D1DF" stroke="#8E9AB0"/><path d="M-5 48 v14 M0 48 v14 M5 48 v14" stroke="#8E9AB0" stroke-width="1.5"/></g>
+  <g transform="translate(184 40)"><path d="M0 0 v8" stroke="#8794A8" stroke-width="2"/><rect x="-2.5" y="8" width="5" height="30" rx="2.5" fill="#6B4A2F"/><path d="M-12 38 q0 28 12 32 q12 -4 12 -32 Z" fill="none" stroke="#8E9AB0" stroke-width="2"/><path d="M-6 40 v26 M0 40 v30 M6 40 v26" stroke="#8E9AB0" stroke-width="1.2"/></g>
+  <g transform="translate(236 40)"><path d="M0 0 v8" stroke="#8794A8" stroke-width="2"/><rect x="-2.5" y="8" width="5" height="36" rx="2.5" fill="#6B4A2F"/><ellipse cx="0" cy="54" rx="9" ry="12" fill="#B98A55" stroke="#8A6234"/></g></g>`;
+const kBack = (deco) => `<rect width="320" height="340" fill="url(#gWall)"/><rect width="320" height="258" fill="url(#pTile)"/><rect width="320" height="340" fill="url(#gVig)"/>
+<polygon points="236,0 320,0 320,120 176,0" fill="#fff" opacity=".18"/>
+<rect y="254" width="320" height="86" fill="url(#gWood)"/><rect y="254" width="320" height="86" fill="url(#pGrain)"/>
+<rect y="254" width="320" height="4" fill="#7A4F25" opacity=".45"/><rect y="258" width="320" height="2" fill="#F6DDAE" opacity=".7"/>${deco === "rail" ? kRail() : deco ? kShelf(12, 108) : ""}`;
+const kShadow = (cx, cy, rx, ry, o = .3) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="#2A1A08" opacity="${o}" filter="url(#fBlur4)"/>`;
+function kMount(inner){ $('kScene').innerHTML = '<svg viewBox="0 0 320 340" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">' + KDEFS + inner + '</svg>'; }
+const KSCENE = {};
+
+/* --- running a scene: stop everything, mount a fresh SVG, then play the timeline --- */
+function kStop(){
+  K.run++; K.timers.forEach(clearTimeout); K.timers = []; clearInterval(K.clock);
+  K.stops.forEach(s => { try{ s(); }catch(e){} }); K.stops = []; K.loops.forEach(l => { try{ l.cancel(); }catch(e){} }); K.loops = []; kFxClear();
+}
 const kMsg = t => { $('kMsg').textContent = t; };
-// back to an empty scene of this action (no sliding back from the previous state)
-function kReset(action){
-  kStop(); const sc = $('kScene'); sc.className = 'kscene reset ' + action; sc.style.removeProperty('--lq');
-  $('kClock').textContent = '0:00'; $('kLines').replaceChildren(); $('kPieces').replaceChildren(); $('kFood').textContent = ''; $('kCutFood').textContent = ''; $('kCutFood').classList.remove('shake');
-  $('kToast1').textContent = ''; $('kToast2').textContent = ''; ['kBp1', 'kBp2', 'kBp3'].forEach(id => { $(id).textContent = ''; }); $('kOTemp').textContent = '20°'; K.ready = false; K.sent = new Set(); kRenderSend();
-  sc.offsetWidth; requestAnimationFrame(() => sc.classList.remove('reset'));
+function kReset(action, f){
+  kStop(); const sc = $('kScene'); sc.className = 'kscene ' + action; kMount((KSCENE[action] || KSCENE.heat)(f || { e: '', n: '' }));
+  K.ready = false; K.sent = new Set(); kRenderSend();
 }
-function kCountdown(sec, ms){
-  const t0 = Date.now(); clearInterval(K.clock);
-  const tick = () => { const left = Math.max(0, Math.ceil(sec * (1 - (Date.now() - t0) / ms))); $('kClock').textContent = `0:${pad(left)}`; if (left <= 0) clearInterval(K.clock); };
-  tick(); K.clock = setInterval(tick, 100);
+// timeline tools for one run: z = wait, a = animate an element and wait for it, loop = a repeating animation (stopped on reset)
+function kTools(T, run){
+  const alive = () => run === K.run;
+  const z = ms => new Promise(res => { K.timers.push(setTimeout(res, Math.max(0, ms * T))); });
+  const a = (el, kf, ms, o = {}) => { if (!el || !alive()) return Promise.resolve(); try{ return el.animate(kf, { duration: Math.max(1, ms * T), easing: 'ease-in-out', fill: 'forwards', ...o }).finished.catch(() => {}); }catch(e){ return Promise.resolve(); } };
+  const loop = (el, kf, ms, o = {}) => { try{ const an = el.animate(kf, { duration: ms, iterations: Infinity, easing: 'ease-in-out', ...o }); K.loops.push(an); return an; }catch(e){ return { cancel(){} }; } };
+  return { alive, z, a, loop, T };
 }
-// microwave: the food slides in, the door closes, it spins and counts down, dings, the door opens and it steams
-function kHeat(f, T){
-  const sc = $('kScene'); $('kFood').textContent = f.e; kMsg(`מחממים: ${f.n}`);
-  kLater(300 * T, () => sc.classList.add('in'));
-  kLater(1500 * T, () => { sc.classList.add('closed'); kBeep(260, 90, 'square', .04); });
-  kLater(2100 * T, () => { sc.classList.add('on'); kCountdown(20, 3300 * T); });
-  kLater(5500 * T, () => { sc.classList.remove('on'); kBeep(1320, 160); kLater(260, () => kBeep(1320, 160)); kLater(520, () => kBeep(1320, 280)); });
-  kLater(6200 * T, () => { sc.classList.remove('closed'); sc.classList.add('ready'); });
-  kLater(6600 * T, () => { sc.classList.remove('in'); sc.classList.add('steam'); });
-  kLater(7700 * T, kDone);
+function kPlay(f){ const run = K.run; (async () => { try{ await (KRUN[f.a] || kHeat)(f, kTools(kSpeed(), run)); }catch(e){ console.error(e); } })(); }
+
+/* ---------- microwave ---------- */
+KSCENE.heat = f => kBack() + `
+<g>${kShadow(131, 305, 56, 9, .32)}<ellipse cx="131" cy="299" rx="50" ry="10.5" fill="url(#gDish)" stroke="#C3CCDB" stroke-width="1.2"/><ellipse cx="131" cy="298" rx="36" ry="6.5" fill="none" stroke="#C3CCDB" stroke-width="1" opacity=".7"/></g>
+<g id="mw" filter="url(#fShadow)">
+  <rect x="26" y="36" width="268" height="206" rx="20" fill="url(#gSteel)" stroke="#9AA6BB" stroke-width="1.5"/>
+  <rect x="32" y="41" width="256" height="9" rx="4.5" fill="#fff" opacity=".6"/>
+  <rect x="38" y="240" width="30" height="8" rx="3" fill="#7F8BA1"/><rect x="252" y="240" width="30" height="8" rx="3" fill="#7F8BA1"/>
+  <rect x="40" y="50" width="182" height="176" rx="12" fill="#262C3B"/>
+  <rect x="52" y="62" width="158" height="152" rx="8" fill="url(#gInt)"/>
+  <g clip-path="url(#cWin)">
+    <polygon id="cone" points="100,66 162,66 200,214 62,214" fill="url(#gBulb)" opacity="0" filter="url(#fBlur4)"/>
+    <ellipse id="bulb" cx="131" cy="72" rx="46" ry="22" fill="url(#gBulb)" opacity="0"/>
+    <g transform="translate(131 206) scale(1 .2)"><g id="spin"><circle r="66" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".45" stroke-width="2.5"/><circle r="47" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="2"/><circle cx="54" r="4.5" fill="#fff" fill-opacity=".8"/><circle cx="-27" cy="47" r="4.5" fill="#fff" fill-opacity=".8"/><circle cx="-27" cy="-47" r="4.5" fill="#fff" fill-opacity=".8"/></g></g>
+    <ellipse cx="131" cy="204" rx="30" ry="5.5" fill="#000" opacity=".4" filter="url(#fBlur2)"/>
+    <g id="foodInG" style="transform:translate(131px,172px) scale(.84);opacity:0"><g id="foodSway"><text id="kFoodIn" ${kTxt} font-size="54">${f.e}</text></g></g>
+  </g>
+  <rect x="232" y="50" width="54" height="176" rx="10" fill="#E6EBF3" stroke="#B5BFD1"/>
+  <rect x="238" y="58" width="42" height="24" rx="5" fill="#0B120E" stroke="#26372C"/>
+  <text id="kClock" x="259" y="75.5" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#3F7050">0:00</text>
+  ${[98, 114, 130].map(y => [244, 259, 274].map(x => `<circle cx="${x}" cy="${y}" r="5.5" fill="url(#gKey)" stroke="#9AA6BB" stroke-width=".8"/>`).join('')).join('')}
+  <rect x="240" y="150" width="38" height="16" rx="8" fill="#E2574C"/><rect x="243" y="152" width="32" height="5" rx="2.5" fill="#fff" opacity=".35"/>
+  <rect x="240" y="172" width="38" height="14" rx="7" fill="#9AA6BB"/>
+  ${[196, 202, 208, 214].map(y => `<rect x="242" y="${y}" width="34" height="2.2" rx="1.1" fill="#AAB4C6"/>`).join('')}
+</g>
+<g id="door" style="transform-origin:40px 0;transform:scaleX(.07)">
+  <rect x="52" y="62" width="158" height="152" rx="8" fill="url(#gGlass)"/>
+  <rect x="52" y="62" width="158" height="152" rx="8" fill="url(#pMesh)" opacity=".55"/>
+  <g clip-path="url(#cWin)"><g id="refl" opacity="0"><polygon points="40,62 74,62 26,214 -8,214" fill="#fff" opacity=".28"/><polygon points="82,62 92,62 44,214 34,214" fill="#fff" opacity=".18"/></g></g>
+  <rect x="52" y="62" width="158" height="152" rx="8" fill="none" stroke="#fff" stroke-opacity=".25"/>
+  <rect x="213" y="86" width="7" height="104" rx="3.5" fill="#C7CFDD"/><rect x="214.5" y="88" width="2" height="100" rx="1" fill="#fff" opacity=".8"/>
+</g>
+<g id="foodOutG" style="transform:translate(131px,300px) scale(0);opacity:0"><g id="foodBob"><text id="kFood" ${kTxt} font-size="58">${f.e}</text></g></g>`;
+
+async function kHeat(f, c){
+  const { alive, z, a, loop, T } = c, q = kq;
+  const out = q('#foodOutG'), inn = q('#foodInG'), door = q('#door'), bulb = q('#bulb'), cone = q('#cone'), spin = q('#spin'), mw = q('#mw'), clk = q('#kClock'), refl = q('#refl'), sway = q('#foodSway'), bob = q('#foodBob');
+  if (!out || !f.e) return;
+  const OUT = (y, s = 1, sy = s) => kTx(131, y, s, sy), INN = (y, s = .84, sy = s) => kTx(131, y, s, sy);
+  const shake = () => a(mw, [{ transform: 'translate(0,0)' }, { transform: 'translate(-1.6px,.8px)' }, { transform: 'translate(1.3px,-.5px)' }, { transform: 'translate(-.6px,.2px)' }, { transform: 'translate(0,0)' }], 170);
+  kMsg(`מחממים: ${f.n}`);
+  // 1. the food appears on the counter, with a little overshoot
+  kSND.pop();
+  await a(out, [{ transform: OUT(304, 0), opacity: 0 }, { transform: OUT(272, 1.22, .92), opacity: 1, offset: .55 }, { transform: OUT(284), opacity: 1 }], 430, { easing: 'cubic-bezier(.25,.9,.35,1)' });
+  if (!alive()) return; await z(150);
+  // 2. it jumps into the open microwave and lands on the plate
+  kSND.whoosh();
+  await a(out, [{ transform: OUT(284) }, { transform: OUT(146, .98, 1.07), offset: .5 }, { transform: OUT(172, .84) }], 520, { easing: 'cubic-bezier(.4,0,.3,1)' });
+  if (!alive()) return;
+  out.style.visibility = 'hidden'; inn.style.opacity = 1; kSND.thud();
+  await a(inn, [{ transform: INN(172) }, { transform: INN(177, .96, .72), offset: .35 }, { transform: INN(170, .8, .9), offset: .7 }, { transform: INN(172) }], 280, { easing: 'ease-out' });
+  if (!alive()) return; await z(80);
+  // 3. the door swings shut and the whole oven shudders
+  kSND.clunk();
+  const closing = a(door, [{ transform: 'scaleX(.07)' }, { transform: 'scaleX(1.04)', offset: .72 }, { transform: 'scaleX(1)' }], 460, { easing: 'ease-in' });
+  await z(330); shake(); await closing; if (!alive()) return; await z(120);
+  // 4. cooking: light on, plate turning, the display counts down, steam curls off the food
+  clk.setAttribute('fill', '#7CFF8B'); clk.setAttribute('filter', 'url(#fGlowG)'); clk.textContent = '0:20';
+  const t0 = performance.now(), dur = 3400 * T; K.clock = setInterval(() => { const left = Math.max(0, Math.ceil(20 * (1 - (performance.now() - t0) / dur))); clk.textContent = `0:${pad(left)}`; }, 100);
+  kHold(kSND.hum(3.5 * T, 96));
+  a(bulb, [{ opacity: 0 }, { opacity: .95 }], 350); a(cone, [{ opacity: 0 }, { opacity: .75 }], 350); refl.style.opacity = 1;
+  const L = [loop(spin, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], 2600, { easing: 'linear' }),
+    loop(sway, [{ transform: 'translateX(-4px) rotate(-3deg)' }, { transform: 'translateX(4px) rotate(3deg)' }], 1300, { direction: 'alternate' }),
+    loop(bulb, [{ opacity: .95 }, { opacity: .78 }, { opacity: 1 }], 700, { direction: 'alternate' }),
+    loop(refl, [{ transform: 'translateX(-40px)' }, { transform: 'translateX(220px)' }], 2000, { easing: 'ease-in-out' })];
+  for (let i = 0; i < 22 && alive(); i++){ kPuff(131 + kRnd(-20, 20), 152, { clip: [52, 62, 158, 152], vy: kRnd(-26, -16), r0: 3, r1: 10, a: .3, life: 1.1 }); await z(155); }
+  if (!alive()) return;
+  // 5. ding! the door springs open in a cloud of steam
+  clearInterval(K.clock); clk.textContent = '0:00'; clk.removeAttribute('filter'); clk.setAttribute('fill', '#3F7050');
+  L.forEach(l => l.cancel()); a(bulb, [{ opacity: .9 }, { opacity: 0 }], 300); a(cone, [{ opacity: .7 }, { opacity: 0 }], 300);
+  kSND.ding(); a(clk, [{ opacity: 1 }, { opacity: .15 }, { opacity: 1 }, { opacity: .15 }, { opacity: 1 }], 700); await z(560); if (!alive()) return;
+  kSND.clunk(); shake();
+  a(door, [{ transform: 'scaleX(1)' }, { transform: 'scaleX(.02)', offset: .65 }, { transform: 'scaleX(.07)' }], 520, { easing: 'cubic-bezier(.3,1.3,.5,1)' });
+  for (let i = 0; i < 14; i++) kPuff(131 + kRnd(-56, 56), kRnd(150, 205), { vx: kRnd(-18, 18), vy: kRnd(-52, -30), r0: 9, r1: 34, a: .62, life: 1.9 });
+  await z(260); if (!alive()) return;
+  // 6. the food comes out onto the plate and lands with a squash
+  inn.style.opacity = 0; out.style.visibility = 'visible'; kSND.whoosh();
+  await a(out, [{ transform: OUT(172, .84) }, { transform: OUT(238, 1.04, .96), offset: .55 }, { transform: OUT(289, 1.14, .82), offset: .82 }, { transform: OUT(284) }], 560, { easing: 'cubic-bezier(.4,0,.6,1)' });
+  if (!alive()) return; kSND.thud(); kFlourish(131, 262); kDone();
+  loop(bob, [{ transform: 'translateY(0)' }, { transform: 'translateY(-4px)' }], 900, { direction: 'alternate' });
+  for (let i = 0; i < 10 && alive(); i++){ kPuff(131 + kRnd(-16, 16), 262, { vx: kRnd(-5, 5), vy: kRnd(-24, -14), r0: 4, r1: 14, a: .4, life: 1.6 }); await z(260); }
 }
-// cutting board: the food pops in, the knife chops three times, it falls apart into pieces
-function kCut(f, T){
-  const sc = $('kScene'), food = $('kCutFood'), knife = $('kKnife'); food.textContent = f.e; kMsg(`חותכים: ${f.n}`);
-  kLater(250 * T, () => sc.classList.add('in'));
-  [136, 160, 184].forEach((x, i) => kLater((1000 + i * 750) * T, () => {
-    knife.style.left = (x - 11) + 'px';
-    knife.animate([{ transform:'translateY(-150px)' }, { transform:'translateY(0)', offset:.42 }, { transform:'translateY(0)', offset:.5 }, { transform:'translateY(-150px)' }], { duration: 560 * T + 80, easing:'ease-in' });
-    kLater(250 * T, () => { kBeep(520 + i * 90, 60, 'square', .05); $('kLines').append(h('i', { class:'kline', style:`left:${x - 1}px` }));
-      food.classList.remove('shake'); food.offsetWidth; food.classList.add('shake'); });
-  }));
-  kLater(3500 * T, () => { sc.classList.add('sliced'); $('kLines').replaceChildren(); const P = $('kPieces');
-    for (let i = 0; i < 6; i++) P.append(h('span', { style:`--i:${i};--r:${(i % 2 ? 1 : -1) * (6 + i * 3)}deg` }, f.e)); kBeep(880, 90); });
-  kLater(4600 * T, kDone);
+
+/* ---------- cutting board: the knife really slices the food, the pieces separate and juice flies ---------- */
+KSCENE.cut = f => kBack(1) + `
+<g>${kShadow(160, 284, 136, 12, .36)}
+<g id="boardG" filter="url(#fShadow)">
+  <rect x="28" y="208" width="264" height="70" rx="14" fill="#B58447"/>
+  <rect x="28" y="196" width="264" height="74" rx="14" fill="url(#gBoard)"/>
+  <rect x="28" y="196" width="264" height="74" rx="14" fill="url(#pGrain)" opacity=".5"/>
+  <rect x="34" y="199" width="252" height="5" rx="2.5" fill="#fff" opacity=".42"/>
+</g></g>
+<g id="foodRoot" style="transform:translate(160px,-70px)"><g id="foodHop"><text id="kFood" ${kTxt} font-size="110">${f.e}</text></g></g>
+<g id="knifeG" style="transform:translate(160px,70px)">
+  <path d="M-8 -84 L8 -84 L8 -6 L0 3 L-8 -6 Z" fill="url(#gBlade)" stroke="#7F8CA0" stroke-width=".8"/>
+  <path d="M-8 -6 L0 3 L8 -6" fill="none" stroke="#fff" stroke-width="1.4" opacity=".9"/>
+  <rect x="-10" y="-94" width="20" height="11" rx="2.5" fill="#8794A8"/>
+  <rect x="-12" y="-150" width="24" height="58" rx="9" fill="url(#gHandle)"/>
+  <circle cx="0" cy="-136" r="2.8" fill="#D9DEE8"/><circle cx="0" cy="-116" r="2.8" fill="#D9DEE8"/>
+  <rect x="-7" y="-148" width="3" height="52" rx="1.5" fill="#fff" opacity=".18"/>
+</g>`;
+
+// the real pixel bounds of an emoji, measured on an offscreen canvas (an SVG text box includes side bearings, so it is not where the ink is)
+// returned relative to the text anchor: x from the centre, y from the baseline
+function kInk(e, size){
+  try{
+    const W = Math.ceil(size * 2), H = Math.ceil(size * 2), base = Math.round(H * .62), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.font = `${size}px sans-serif`; cx.textAlign = 'center'; cx.textBaseline = 'alphabetic'; cx.fillText(e, W / 2, base);
+    const d = cx.getImageData(0, 0, W, H).data; let x0 = W, x1 = -1, y0 = H, y1 = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 24){ if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    return x1 < x0 ? null : { x: x0 - W / 2, w: x1 - x0 + 1, y: y0 - base, h: y1 - y0 + 1 };
+  }catch(e){ return null; }
 }
-// toaster: two slices drop in, the lever goes down and the slot glows, then they pop up toasted with a ding
-function kToast(f, T){
-  const sc = $('kScene'); $('kToast1').textContent = f.e; $('kToast2').textContent = f.e; kMsg(`קולים: ${f.n}`);
-  kLater(600 * T, () => { sc.classList.add('down'); kBeep(150, 140, 'square', .06); });
-  kLater(1500 * T, () => sc.classList.add('on'));
-  kLater(3800 * T, () => { sc.classList.remove('on', 'down'); sc.classList.add('up', 'steam'); kBeep(1320, 220); });
-  kLater(4900 * T, kDone);
+
+async function kCut(f, c){
+  const { alive, z, a } = c, root = kq('#foodRoot'), hop = kq('#foodHop'), knife = kq('#knifeG'), boardG = kq('#boardG'), main = kq('#kFood');
+  if (!root || !main || !f.e) return;
+  const NS = 'http://www.w3.org/2000/svg', svg = root.ownerSVGElement, defs = svg.querySelector('defs'), SIZE = 110;
+  // the emoji's real size and position (SVG puts the baseline .36em below the anchor, hence the offsets)
+  const ink = kInk(f.e, SIZE), bb = main.getBBox();
+  const ix = ink ? ink.x : bb.x, iw = ink ? ink.w : bb.width, iy = ink ? SIZE * .36 + ink.y : bb.y, ih = ink ? ink.h : bb.height;
+  const N = 4, wS = iw / N, cxInk = ix + iw / 2, RX = 160 - cxInk;           // RX puts the ink in the middle of the board
+  const edge = i => i === 0 ? ix - 6 : ix + i * wS, slices = [], sx = Array(N).fill(0);
+  for (let i = 0; i < N; i++){
+    const x0 = edge(i), x1 = i === N - 1 ? ix + iw + 6 : edge(i + 1);
+    const cp = document.createElementNS(NS, 'clipPath'); cp.setAttribute('id', 'cs' + i); const r = document.createElementNS(NS, 'rect');
+    r.setAttribute('x', x0 - (i ? .5 : 0)); r.setAttribute('y', iy - 8); r.setAttribute('width', x1 - x0 + (i ? .5 : 0) + (i < N - 1 ? .5 : 0)); r.setAttribute('height', ih + 16); cp.append(r); defs.append(cp);
+    const g = document.createElementNS(NS, 'g'); g.setAttribute('clip-path', `url(#cs${i})`); g.style.transformOrigin = `${(x0 + x1) / 2}px ${iy + ih}px`;
+    const t = main.cloneNode(true); t.removeAttribute('id'); g.append(t); hop.append(g); slices.push(g);
+  }
+  main.setAttribute('opacity', '0');
+  const col = KCOLOR.get(f.e) || '#FFB74D', bottom = 205 + iy + ih;           // the board surface under the food
+  kMsg(`חותכים: ${f.n}`);
+  // the food drops onto the board and bounces
+  await a(root, [{ transform: kTx(RX, -90) }, { transform: kTx(RX, 214, 1.1, .88), offset: .6 }, { transform: kTx(RX, 197, .98, 1.05), offset: .8 }, { transform: kTx(RX, 205) }], 560, { easing: 'cubic-bezier(.45,0,.6,1)' });
+  if (!alive()) return; kSND.thud(); await z(140);
+  let kx = 160, ky = 70; const P = (px, py, r) => `translate(${px}px,${py}px) rotate(${r}deg)`;
+  for (let i = 1; i < N; i++){
+    const x = RX + edge(i);
+    await a(knife, [{ transform: P(kx, ky, 0) }, { transform: P(x, 100, -3) }], i === 1 ? 420 : 210, { easing: 'cubic-bezier(.3,0,.2,1)' });   // glide over the next cut
+    await a(knife, [{ transform: P(x, 100, -3) }, { transform: P(x, 84, -8) }], 110, { easing: 'ease-out' });                                       // lift and lean back
+    await a(knife, [{ transform: P(x, 84, -8) }, { transform: P(x, bottom + 2, 0) }], 80, { easing: 'cubic-bezier(.7,0,1,1)' });                      // strike
+    if (!alive()) return;
+    kSND.chop(); kDrops(x, bottom - 22, 8, col, { spread: 1.15, min: 70, max: 190, floor: bottom + 6 });
+    for (let j = i; j < N; j++){ const from = sx[j]; sx[j] += 3.4; a(slices[j], [{ transform: `translateX(${from}px)` }, { transform: `translateX(${sx[j]}px)` }], 170, { easing: 'ease-out' }); }
+    a(boardG, [{ transform: 'translateY(0)' }, { transform: 'translateY(2.5px)' }, { transform: 'translateY(0)' }], 150);
+    a(hop, [{ transform: 'translateY(0)' }, { transform: 'translateY(-3px)' }, { transform: 'translateY(0)' }], 150);
+    await a(knife, [{ transform: P(x, bottom + 2, 0) }, { transform: P(x, 100, -3) }], 170, { easing: 'ease-out' });
+    kx = x; ky = 100;
+  }
+  // the knife leaves and the pieces fan out on the board
+  a(knife, [{ transform: P(kx, 100, -3) }, { transform: P(kx + 80, -70, 20) }], 420, { easing: 'ease-in' });
+  kSND.whoosh();
+  for (let j = 0; j < N; j++){ const d = j - (N - 1) / 2; a(slices[j], [{ transform: `translateX(${sx[j]}px)` }, { transform: `translateX(${d * 17}px) rotate(${d * 4.5}deg)` }], 520, { easing: 'cubic-bezier(.3,1.5,.5,1)' }); }
+  await z(560); if (!alive()) return;
+  kFlourish(160, 215); kDone();
 }
-// pouring: the jug tips, a stream runs into the glass and the liquid rises; the food it came from appears next to the glass
-function kPour(f, T){
-  const sc = $('kScene'); sc.style.setProperty('--lq', f.c); $('kFood').textContent = f.e; kMsg(`שופכים: ${f.n}`);
-  kLater(300 * T, () => sc.classList.add('tilt'));
-  kLater(1000 * T, () => { sc.classList.add('pouring'); for (let i = 0; i < 8; i++) kLater(i * 330 * T, () => kBeep(200 + i * 45, 110, 'sine', .05)); });
-  kLater(3800 * T, () => { sc.classList.remove('pouring', 'tilt'); sc.classList.add('poured'); kBeep(1000, 90); });
-  kLater(4700 * T, kDone);
+
+const kqa = s => [...$('kScene').querySelectorAll(s)];
+// a wavy strip for a liquid surface (period wl, so sliding it by wl loops seamlessly), filled down to `depth`
+function kWave(x0, x1, wl, amp, depth){ let d = `M${x0} 0 Q${x0 + wl / 4} ${-amp} ${x0 + wl / 2} 0`, x = x0 + wl / 2; while (x < x1 + wl){ x += wl / 2; d += ` T${x} 0`; } return `${d} L${x} ${depth} L${x0} ${depth} Z`; }
+// the food twice: as it is, and toasted (cross-faded in while the food cooks)
+const kFoodLayers = (e, size, id) => `<text ${id ? `id="${id}" ` : ''}class="pale" ${kTxt} font-size="${size}">${e}</text><text class="toasted" ${kTxt} font-size="${size}" filter="url(#fToast)" opacity="0">${e}</text>`;
+
+/* ---------- toaster: slices drop in, the lever clunks down, the slots glow, a bar fills, they spring out toasted ---------- */
+KSCENE.toasting = f => {
+  const slot = x => `<rect x="${x - 34}" y="156" width="68" height="13" rx="6.5" fill="#161A22"/><rect id="sl${x}" x="${x - 30}" y="159" width="60" height="6" rx="3" fill="#FF6A2E" opacity="0" filter="url(#fGlowG)"/>`;
+  const bread = (id, x) => `<g clip-path="url(#cBread)"><g id="${id}" style="transform:translate(${x}px,96px) scale(0)">${kFoodLayers(f.e, 66)}</g></g>`;
+  return kBack(1) + `<clipPath id="cBread"><rect x="0" y="-120" width="320" height="290"/></clipPath>${kShadow(160, 258, 120, 10, .4)}
+<g id="toaster" filter="url(#fShadow)">
+  <rect x="64" y="246" width="26" height="9" rx="3" fill="#222733"/><rect x="230" y="246" width="26" height="9" rx="3" fill="#222733"/>
+  <rect x="48" y="172" width="224" height="78" rx="22" fill="url(#gSteel)" stroke="#8E9AB0" stroke-width="1.5"/>
+  <rect x="60" y="182" width="16" height="58" rx="8" fill="#fff" opacity=".5"/><rect x="82" y="182" width="5" height="58" rx="2.5" fill="#fff" opacity=".25"/>
+  <path d="M74 146 H246 Q262 146 266 160 L272 182 Q273 190 265 190 H55 Q47 190 48 182 L54 160 Q58 146 74 146 Z" fill="url(#gSteelH)" stroke="#8E9AB0" stroke-width="1.5"/>
+  <path d="M80 150 H240" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+  ${slot(116)}${slot(204)}
+  <g id="dial" style="transform-origin:92px 218px"><circle cx="92" cy="218" r="13" fill="url(#gKey)" stroke="#8E9AB0"/><rect x="90.5" y="207" width="3" height="9" rx="1.5" fill="#E2574C"/></g>
+  <rect x="126" y="214" width="104" height="9" rx="4.5" fill="#8E9AB0" opacity=".45"/>
+  <rect id="bar" x="126" y="214" width="104" height="9" rx="4.5" fill="#FF8A3D" style="transform-origin:126px 0;transform:scaleX(0)"/>
+  <rect x="248" y="190" width="10" height="46" rx="5" fill="#2A303B"/>
+  <g id="lever"><rect x="240" y="196" width="26" height="14" rx="5" fill="url(#gKey)" stroke="#8E9AB0"/></g>
+</g>
+${bread('bread1', 116)}${bread('bread2', 204)}<text id="kFood" ${kTxt} font-size="1" opacity="0">${f.e}</text>`;
+};
+async function kToast(f, c){
+  const { alive, z, a } = c, q = kq;
+  const b1 = q('#bread1'), b2 = q('#bread2'), lever = q('#lever'), tp = q('#toaster'), bar = q('#bar'), dial = q('#dial'), g1 = q('#sl116'), g2 = q('#sl204');
+  if (!b1 || !f.e) return;
+  const B = (x, y, s = 1, sy = s) => kTx(x, y, s, sy), EASE = 'cubic-bezier(.3,1.3,.5,1)';
+  kMsg(`קולים: ${f.n}`);
+  // the slices pop up above the slots
+  kSND.pop(); a(b1, [{ transform: B(116, 96, 0) }, { transform: B(116, 96, 1.16), offset: .6 }, { transform: B(116, 100) }], 380, { easing: EASE });
+  await z(130); kSND.pop(); await a(b2, [{ transform: B(204, 96, 0) }, { transform: B(204, 96, 1.16), offset: .6 }, { transform: B(204, 100) }], 380, { easing: EASE });
+  if (!alive()) return; await z(260);
+  // they drop into the slots and the lever goes down with a clunk
+  kSND.whoosh(); a(b1, [{ transform: B(116, 100) }, { transform: B(116, 218) }], 400, { easing: 'cubic-bezier(.5,0,.9,.55)' }); await z(70);
+  await a(b2, [{ transform: B(204, 100) }, { transform: B(204, 218) }], 400, { easing: 'cubic-bezier(.5,0,.9,.55)' }); if (!alive()) return;
+  kSND.clunk(); a(lever, [{ transform: 'translateY(0)' }, { transform: 'translateY(30px)', offset: .7 }, { transform: 'translateY(27px)' }], 300, { easing: 'ease-in' });
+  a(tp, [{ transform: 'translateY(0)' }, { transform: 'translateY(2px)' }, { transform: 'translateY(0)' }], 220);
+  await z(340); if (!alive()) return;
+  // toasting: the slots glow, the dial turns, the bar fills; the slices darken while they are hidden
+  kqa('.pale').forEach(t => t.setAttribute('opacity', 0)); kqa('.toasted').forEach(t => t.setAttribute('opacity', 1));
+  [g1, g2].forEach(g => { g.style.transition = 'opacity .45s'; g.style.opacity = 1; });
+  a(dial, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(250deg)' }], 3300, { easing: 'linear' }); a(bar, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], 3300, { easing: 'linear' });
+  for (let i = 0; i < 17 && alive(); i++){
+    kNoise(.02, { type: 'bandpass', freq: 2600, vol: .03 }); [g1, g2].forEach(g => { g.style.opacity = (.72 + Math.random() * .28).toFixed(2); });
+    if (i % 3 === 0) [116, 204].forEach(x => kPuff(x + kRnd(-8, 8), 160, { r0: 3, r1: 9, a: .16, vy: kRnd(-26, -16), col: '255,176,110', life: 1 }));
+    await z(200);
+  }
+  if (!alive()) return;
+  // done: the lever springs up, the toaster jumps and the toast pops out in a shower of crumbs
+  [g1, g2].forEach(g => { g.style.transition = 'opacity .2s'; g.style.opacity = 0; });
+  kSND.ding(); kSND.clunk();
+  a(lever, [{ transform: 'translateY(27px)' }, { transform: 'translateY(-5px)', offset: .6 }, { transform: 'translateY(0)' }], 320, { easing: 'ease-out' });
+  a(tp, [{ transform: 'translateY(0)' }, { transform: 'translateY(-5px)' }, { transform: 'translateY(0)' }], 240);
+  a(b1, [{ transform: B(116, 218) }, { transform: B(116, 128), offset: .55 }, { transform: B(116, 154) }], 560, { easing: 'cubic-bezier(.2,.9,.3,1.1)' }); await z(70);
+  await a(b2, [{ transform: B(204, 218) }, { transform: B(204, 128), offset: .55 }, { transform: B(204, 154) }], 560, { easing: 'cubic-bezier(.2,.9,.3,1.1)' });
+  [116, 204].forEach(x => { kCrumbs(x, 172, 9, '#C98F4A', { floor: 180 }); for (let i = 0; i < 3; i++) kPuff(x + kRnd(-10, 10), 150, { col: '150,130,110', a: .26, r0: 4, r1: 14, vy: kRnd(-30, -18), life: 1.5 }); });
+  kFlourish(160, 132); kDone();
+  for (let i = 0; i < 8 && alive(); i++){ [116, 204].forEach(x => kPuff(x + kRnd(-10, 10), 140, { a: .22, r0: 4, r1: 13, vy: kRnd(-24, -14), life: 1.5 })); await z(300); }
 }
-// frying: the food drops into the pan and sizzles; an egg cracks open into a fried egg, everything else flips once
-function kFry(f, T){
-  const sc = $('kScene'), egg = f.e === '🥚'; $('kFood').textContent = f.e; kMsg(`מטגנים: ${f.n}`);
-  kLater(300 * T, () => sc.classList.add('in'));
-  kLater(1000 * T, () => { sc.classList.add('on'); kSizzle(3200 * T); kBeep(180, 80, 'square', .05); if (egg) sc.classList.add('crack'); });
-  if (!egg) kLater(3000 * T, () => { sc.classList.add('flip'); kLater(850 * T, () => sc.classList.remove('flip')); });
-  kLater(4300 * T, () => { sc.classList.remove('on'); sc.classList.add('ready', 'steam'); });
-  kLater(5300 * T, kDone);
+
+/* ---------- pouring: a pitcher tips, a stream splashes into the glass, the surface ripples; hot drinks steam ---------- */
+KSCENE.pour = f => {
+  const col = f.c || '#FFA726', glass = 'M138 172 L146 256 Q147 263 154 263 L198 263 Q205 263 206 256 L214 172 Z', inner = 'M141.5 176 L149 255 Q150 259 155 259 L197 259 Q202 259 203 255 L210.5 176 Z';
+  return kBack(1) + `<clipPath id="cGlass"><path d="${inner}"/></clipPath>${kShadow(176, 267, 54, 7, .38)}
+<path d="${glass}" fill="#fff" fill-opacity=".2"/>
+<g clip-path="url(#cGlass)"><g id="liq" style="transform:translateY(66px)">
+  <rect x="120" y="198" width="120" height="90" fill="${col}"/><rect x="120" y="198" width="120" height="90" fill="url(#gLiq)"/>
+  <g transform="translate(0 198)"><g id="wave2"><path d="${kWave(80, 270, 30, 2.6, 14)}" fill="#fff" opacity=".3"/></g></g>
+  <g transform="translate(0 198)"><g id="wave1"><path d="${kWave(80, 270, 30, 3.2, 14)}" fill="${col}"/></g></g>
+</g></g>
+<g id="streamG" style="transform-origin:180.5px 112px;transform:scaleY(0);opacity:0"><rect x="178" y="112" width="5" height="150" rx="2.5" fill="${col}" stroke="#000" stroke-opacity=".08" stroke-width=".6"/><rect x="179" y="112" width="1.5" height="150" rx=".8" fill="#fff" opacity=".45"/></g>
+<path d="${glass}" fill="none" stroke="#fff" stroke-width="1.8" opacity=".9"/><path d="${glass}" fill="none" stroke="#9FB4D4" stroke-width=".8" opacity=".55"/>
+<path d="M144 180 L151 250" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".55"/><path d="M208 182 L203 224" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".35"/>
+<ellipse cx="176" cy="172" rx="38" ry="5" fill="none" stroke="#fff" stroke-width="1.6" opacity=".9"/><ellipse cx="176" cy="262" rx="29" ry="4" fill="#fff" opacity=".25"/>
+<g id="pitcher" style="transform:translate(228px,100px) rotate(0deg)" filter="url(#fShadow)"><g transform="scale(.86)">
+  <path d="M12 8 L72 8 L72 80 Q72 94 58 94 L26 94 Q12 94 12 80 Z" fill="url(#gSteel)" stroke="#B2BCCD" stroke-width="1.2"/>
+  <path d="M13 6 Q4 6 -2 -1 Q8 14 13 22 Z" fill="#EEF2F8" stroke="#B2BCCD" stroke-width="1"/>
+  <path d="M72 22 Q96 24 96 50 Q96 74 72 76" fill="none" stroke="#D7DEE9" stroke-width="8" stroke-linecap="round"/>
+  <rect x="12" y="40" width="60" height="24" fill="${col}"/><rect x="16" y="12" width="9" height="76" rx="4.5" fill="#fff" opacity=".5"/><ellipse cx="42" cy="8" rx="30" ry="4" fill="#98A4BA" opacity=".35"/>
+</g></g>
+<g id="badge" style="transform:translate(66px,238px) scale(0)"><circle r="27" fill="#fff" opacity=".9" stroke="#E4DCCB"/><text id="kFood" ${kTxt} font-size="32">${f.e}</text></g>`;
+};
+async function kPour(f, c){
+  const { alive, z, a, loop } = c, q = kq, col = f.c || '#FFA726';
+  const pit = q('#pitcher'), stream = q('#streamG'), liq = q('#liq'), w1 = q('#wave1'), w2 = q('#wave2'), badge = q('#badge');
+  if (!pit || !f.e) return;
+  const hot = /[☕🍵]/.test(f.e) && !/קר|iced|cold/i.test(f.n), IDLE = 'translate(228px,100px) rotate(0deg)', POUR = 'translate(182px,114px) rotate(-104deg)', POUR_MS = 2700;
+  kMsg(`שופכים: ${f.n}`); await z(250);
+  // the pitcher leans back a little, then tips over the glass
+  kSND.whoosh();
+  await a(pit, [{ transform: IDLE }, { transform: 'translate(236px,104px) rotate(8deg)', offset: .22 }, { transform: POUR }], 680, { easing: 'cubic-bezier(.4,0,.2,1)' });
+  if (!alive()) return;
+  // a stream runs into the glass and the liquid rises while its surface ripples
+  stream.style.opacity = 1; a(stream, [{ transform: 'scaleY(0)' }, { transform: 'scaleY(.98)' }], 170, { easing: 'ease-in' }); await z(160);
+  loop(w1, [{ transform: 'translateX(0)' }, { transform: 'translateX(-30px)' }], 1000, { easing: 'linear' }); loop(w2, [{ transform: 'translateX(-12px)' }, { transform: 'translateX(-42px)' }], 1500, { easing: 'linear' });
+  kSND.glug(10);
+  const rise = a(liq, [{ transform: 'translateY(66px)' }, { transform: 'translateY(0)' }], POUR_MS, { easing: 'linear' });
+  a(stream, [{ transform: 'scaleY(.98)' }, { transform: 'scaleY(.57)' }], POUR_MS, { easing: 'linear' });
+  for (let i = 0; i < 18 && alive(); i++){
+    const surf = Math.min(259, 198 + 66 * (1 - Math.min(1, i * 150 / POUR_MS)));
+    kDrops(180.5, surf - 1, 2, col, { spread: .8, min: 25, max: 85, g: 420, floor: surf + 1, clip: [138, 150, 76, 115] });
+    if (i % 2 === 0) kBubble(kRnd(150, 205), surf + 3, { col: 'rgba(255,255,255,.9)', clip: [141, 176, 69, 86] });
+    await z(150);
+  }
+  await rise; if (!alive()) return;
+  // the stream stops and the pitcher swings back
+  a(stream, [{ opacity: 1 }, { opacity: 0 }], 140);
+  await a(pit, [{ transform: POUR }, { transform: 'translate(238px,98px) rotate(7deg)', offset: .62 }, { transform: IDLE }], 620, { easing: 'cubic-bezier(.3,1.2,.5,1)' });
+  if (!alive()) return;
+  // ripples settle, the glass clinks, the drink gets its badge
+  a(liq, [{ transform: 'translateY(0)' }, { transform: 'translateY(2.5px)' }, { transform: 'translateY(-1px)' }, { transform: 'translateY(0)' }], 600);
+  kSND.clink(); kFlourish(176, 196); kDone();
+  a(badge, [{ transform: kTx(66, 238, 0) }, { transform: kTx(66, 232, 1.2), offset: .6 }, { transform: kTx(66, 238, 1) }], 420, { easing: 'cubic-bezier(.3,1.3,.5,1)' });
+  for (let i = 0; i < 14 && alive(); i++){
+    if (hot) kPuff(176 + kRnd(-16, 16), 168, { vy: kRnd(-30, -18), a: .32, r0: 4, r1: 16, life: 1.6 });
+    await z(260);
+  }
 }
-// ---- free text: any food typed in the box. A built-in dictionary (no network, no AI) maps words to an emoji and an action. ----
+
+/* ---------- frying: gas flames under a pan, the food drops in and sizzles, flips once; an egg cracks open ---------- */
+KSCENE.fry = f => {
+  const egg = f.e === '🥚', fl = i => `<path class="fl" d="M0 0 Q-6 -9 -2 -17 Q1 -10 3 -19 Q8 -9 0 0Z" fill="url(#gFlame)" style="transform:translate(${64 + i * 28}px,262px) scale(1.5);opacity:0"/>`;
+  return kBack("rail") + `
+<g id="stove">
+  <rect x="14" y="236" width="292" height="104" rx="10" fill="url(#gSteel)" stroke="#8E9AB0" stroke-width="1.3"/>
+  <rect x="14" y="236" width="292" height="32" rx="10" fill="url(#gHob)"/><rect x="22" y="240" width="276" height="4" rx="2" fill="#fff" opacity=".14"/>
+  ${[52, 112, 208, 268].map(x => `<circle cx="${x}" cy="304" r="12" fill="url(#gKnob)" stroke="#6F7B90"/><rect x="${x - 1.4}" y="294" width="2.8" height="9" rx="1.4" fill="#fff"/>`).join('')}
+</g>
+<g id="flames">${[0, 1, 2, 3, 4, 5, 6].map(fl).join('')}</g>
+<g id="pan" style="transform-origin:236px 208px;transform:rotate(0deg)">
+  <path d="M232 205 L306 190 Q314 188 316 195 L314 201 Q312 206 304 207 L238 221 Z" fill="#3A3F4B" stroke="#1D2129" stroke-width="1"/><path d="M236 206 L306 192" stroke="#fff" stroke-width="1.6" opacity=".22"/>
+  <path d="M42 206 L46 224 Q140 254 234 224 L238 206 Z" fill="url(#gPanW)" stroke="#1D2129" stroke-width="1"/>
+  <ellipse cx="140" cy="206" rx="98" ry="28" fill="#444B58"/><ellipse cx="140" cy="207" rx="90" ry="23" fill="url(#gPanIn)"/>
+  <ellipse cx="140" cy="210" rx="76" ry="17" fill="#FFD36B" opacity=".09"/><path d="M60 196 Q140 178 220 196" stroke="#fff" stroke-width="2" fill="none" opacity=".22"/>
+</g>
+<ellipse id="foodShadow" cx="140" cy="216" rx="27" ry="6" fill="#000" filter="url(#fBlur2)" style="opacity:0"/>
+${egg ? `<g id="eggG" style="transform:translate(140px,208px) scale(0)"><path d="M-48 2 C-52 -22 -22 -34 2 -30 C28 -36 54 -22 50 0 C56 22 26 32 -2 28 C-28 34 -54 26 -48 2 Z" fill="#fff" stroke="#E9E4D8" stroke-width="1"/><path d="M-40 8 C-38 22 -10 26 8 24" fill="none" stroke="#000" stroke-opacity=".06" stroke-width="5"/><g id="yolk" style="transform-origin:4px -4px"><circle cx="4" cy="-4" r="15" fill="url(#gYolk)"/><circle cx="-1" cy="-9" r="4" fill="#fff" opacity=".6"/></g></g>` : ''}
+<g id="foodG" style="transform:translate(140px,-60px) scale(1,1) rotate(0deg)">${kFoodLayers(f.e, 58, 'kFood')}</g>`;
+};
+async function kFry(f, c){
+  const { alive, z, a, loop } = c, q = kq, egg = f.e === '🥚';
+  const foodG = q('#foodG'), pan = q('#pan'), fsh = q('#foodShadow'), eggG = q('#eggG'), yolk = q('#yolk'), tone = q('.toasted');
+  if (!foodG || !f.e) return;
+  const FT = (y, sx = 1, sy = sx, r = 0) => `translate(140px,${y}px) scale(${sx},${sy}) rotate(${r}deg)`;
+  kMsg(`מטגנים: ${f.n}`);
+  // gas on: the flames flicker up
+  kSND.whoosh(); kqa('.fl').forEach((el, i) => { const x = 64 + i * 28; el.style.transition = 'opacity .4s'; el.style.opacity = 1;
+    loop(el, [{ transform: `translate(${x}px,262px) scale(1.5,1.2)` }, { transform: `translate(${x}px,262px) scale(1.5,1.7)` }, { transform: `translate(${x}px,262px) scale(1.3,1.35)` }], 260 + (i % 3) * 90, { direction: 'alternate', delay: i * 40 }); });
+  await z(500); if (!alive()) return;
+  if (egg){
+    await a(foodG, [{ transform: FT(-60) }, { transform: FT(152) }], 430, { easing: 'cubic-bezier(.5,0,.9,.5)' });
+    if (!alive()) return; kSND.crack(); kCrumbs(140, 160, 12, '#F1E4CF', { floor: 236 }); foodG.style.opacity = 0;
+    a(eggG, [{ transform: kTx(140, 208, .12, .08) }, { transform: kTx(140, 208, 1.08, 1.1), offset: .7 }, { transform: kTx(140, 208, 1, 1) }], 620, { easing: 'ease-out' });
+    a(yolk, [{ transform: 'translateY(-44px) scale(.7)', opacity: 0 }, { transform: 'translateY(4px) scale(1.12,.84)', opacity: 1, offset: .6 }, { transform: 'translateY(0) scale(1)', opacity: 1 }], 720, { easing: 'ease-out' });
+  } else {
+    await a(foodG, [{ transform: FT(-60) }, { transform: FT(214, 1.12, .86), offset: .62 }, { transform: FT(196, .97, 1.05), offset: .8 }, { transform: FT(203) }], 620, { easing: 'cubic-bezier(.45,0,.6,1)' });
+    if (!alive()) return; kSND.thud();
+  }
+  a(fsh, [{ opacity: 0 }, { opacity: .5 }], 300); kDrops(140, 206, 10, '#FFD36B', { spread: 1.3, min: 50, max: 150, g: 500, floor: 246 });
+  kHold(kSND.sizzle(3.6 * c.T));
+  if (!egg){ tone.setAttribute('opacity', 0); a(tone, [{ opacity: 0 }, { opacity: 1 }], 2600, { easing: 'linear' }); }
+  // sizzling: oil bubbles, spatter and steam; the food flips once halfway
+  for (let i = 0; i < 26 && alive(); i++){
+    kBubble(kRnd(76, 206), kRnd(200, 222), { col: 'rgba(255,240,200,.95)', r: kRnd(1.6, 3.6), life: kRnd(.5, .9), clip: [44, 184, 192, 52] });
+    if (i % 4 === 0) kDrops(kRnd(100, 180), 204, 3, '#FFD36B', { spread: 1.2, min: 60, max: 140, g: 480, floor: 246 });
+    if (i % 3 === 0) kPuff(140 + kRnd(-44, 44), 182, { vy: kRnd(-30, -18), a: .26, r0: 4, r1: 15, life: 1.4 });
+    if (i === 11 && !egg){
+      kSND.whoosh();
+      a(pan, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(-8deg)', offset: .3 }, { transform: 'rotate(2deg)', offset: .65 }, { transform: 'rotate(0deg)' }], 560);
+      a(fsh, [{ opacity: .5 }, { opacity: .12 }, { opacity: .5 }], 700);
+      a(foodG, [{ transform: FT(203) }, { transform: FT(78, 1.12, 1.12, 190), offset: .5 }, { transform: FT(210, 1.12, .84, 360), offset: .86 }, { transform: FT(203, 1, 1, 360) }], 700, { easing: 'cubic-bezier(.4,0,.6,1)' });
+      await z(660); if (!alive()) return; kSND.thud(); kDrops(140, 208, 12, '#FFD36B', { spread: 1.4, min: 60, max: 170, g: 500, floor: 246 }); continue;
+    }
+    await z(115);
+  }
+  if (!alive()) return;
+  kqa('.fl').forEach(el => { el.style.opacity = .55; });
+  kFlourish(140, 190); kDone();
+  for (let i = 0; i < 10 && alive(); i++){ kPuff(140 + kRnd(-34, 34), 186, { vy: kRnd(-26, -14), a: .3, r0: 4, r1: 15, life: 1.6 }); await z(280); }
+}
+
+/* ---------- blender: pieces tumble in, the lid clamps down, it whirls with a vortex, the jar fills and foams ---------- */
+KSCENE.blend = f => {
+  const col = f.c || '#F4B6C8', jar = 'M104 72 L118 218 Q119 226 127 226 L193 226 Q201 226 202 218 L216 72 Z', inner = 'M108 76 L121 216 Q122 222 128 222 L192 222 Q198 222 199 216 L212 76 Z';
+  const piece = i => `<g id="pcw${i}" style="transform-origin:160px 176px"><g id="pc${i}" style="transform:translate(${[130, 154, 178, 192][i]}px,-40px)"><text ${kTxt} font-size="34">${f.e}</text></g></g>`;
+  return kBack(1) + `<clipPath id="cJar"><path d="${inner}"/></clipPath>${kShadow(160, 267, 78, 8, .4)}
+<g id="bl" filter="url(#fShadow)">
+  <rect x="96" y="222" width="128" height="42" rx="14" fill="url(#gHob)" stroke="#1D2129"/><rect x="104" y="226" width="112" height="5" rx="2.5" fill="#fff" opacity=".18"/>
+  <circle cx="126" cy="246" r="7" fill="url(#gKey)" stroke="#6F7B90"/><circle cx="158" cy="246" r="7" fill="url(#gKey)" stroke="#6F7B90"/><circle id="led" cx="194" cy="246" r="4" fill="#3A4150"/>
+  <rect x="108" y="216" width="104" height="12" rx="5" fill="url(#gSteel)" stroke="#8E9AB0"/>
+  <path d="${jar}" fill="#fff" fill-opacity=".22"/>
+  <g clip-path="url(#cJar)">
+    <g id="bliq" style="transform:translateY(150px)">
+      <rect x="100" y="112" width="124" height="130" fill="${col}"/><rect x="100" y="112" width="124" height="130" fill="url(#gLiq)"/>
+      <g id="vortex" opacity="0"><path d="M112 146 Q160 170 208 146" stroke="#fff" stroke-width="3.5" fill="none" opacity=".3"/><path d="M114 172 Q160 196 206 172" stroke="#fff" stroke-width="3" fill="none" opacity=".25"/><path d="M118 198 Q160 216 202 198" stroke="#fff" stroke-width="3" fill="none" opacity=".2"/></g>
+      <ellipse id="foam" cx="160" cy="112" rx="50" ry="8" fill="#fff" opacity="0"/>
+      <g transform="translate(0 112)"><g id="bw1"><path d="${kWave(80, 250, 36, 4, 22)}" fill="${col}"/></g></g>
+    </g>
+    <g style="transform:translate(160px,212px)"><g id="bladeSpin"><ellipse cx="-15" cy="0" rx="18" ry="3.4" fill="#C9D1DF" stroke="#8E9AB0" stroke-width=".6"/><ellipse cx="15" cy="0" rx="18" ry="3.4" fill="#C9D1DF" stroke="#8E9AB0" stroke-width=".6"/><rect x="-5" y="-4" width="10" height="8" rx="3" fill="#8E9AB0"/></g></g>
+  </g>
+  <path d="${jar}" fill="none" stroke="#fff" stroke-width="1.8" opacity=".9"/><path d="${jar}" fill="none" stroke="#9FB4D4" stroke-width=".8" opacity=".55"/>
+  <path d="M118 90 L128 206" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".5"/><path d="M206 92 L198 170" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".35"/>
+</g>
+${[0, 1, 2, 3].map(piece).join('')}
+<g id="lid" style="transform-origin:160px 66px;transform:translateY(-90px)"><rect x="98" y="58" width="124" height="16" rx="8" fill="#2E3544"/><rect x="104" y="60" width="112" height="4" rx="2" fill="#fff" opacity=".18"/><rect x="146" y="46" width="28" height="14" rx="7" fill="#2E3544"/></g>
+<g id="badge" style="transform:translate(50px,236px) scale(0)"><circle r="27" fill="#fff" opacity=".9" stroke="#E4DCCB"/><text id="kFood" ${kTxt} font-size="32">${f.e}</text></g>`;
+};
+async function kBlend(f, c){
+  const { alive, z, a, loop } = c, q = kq;
+  const lid = q('#lid'), liq = q('#bliq'), bw = q('#bw1'), bs = q('#bladeSpin'), vortex = q('#vortex'), bl = q('#bl'), badge = q('#badge'), led = q('#led'), foam = q('#foam');
+  if (!lid || !f.e) return;
+  const X = [130, 154, 178, 192], Y = [196, 186, 192, 178];
+  kMsg(`טוחנים: ${f.n}`);
+  // the pieces tumble into the open jar
+  for (let i = 0; i < 4; i++){
+    kSND.pop(); a(q('#pc' + i), [{ transform: kTx(X[i], -40, 1) }, { transform: kTx(X[i], Y[i] + 8, 1.1, .88), offset: .62 }, { transform: kTx(X[i] + (i % 2 ? 5 : -5), Y[i] - 6, .98, 1.04), offset: .82 }, { transform: kTx(X[i], Y[i]) }], 520, { easing: 'cubic-bezier(.45,0,.6,1)' });
+    await z(180);
+  }
+  await z(360); if (!alive()) return;
+  // the lid clamps down
+  kSND.clunk(); await a(lid, [{ transform: 'translateY(-90px)' }, { transform: 'translateY(4px)', offset: .7 }, { transform: 'translateY(0)' }], 420, { easing: 'ease-in' });
+  await z(150); if (!alive()) return;
+  // whirl: the blades blur, the jar shakes, the pieces orbit and dissolve into liquid that rises
+  kHold(kSND.motor(2.8 * c.T)); led.setAttribute('fill', '#FF5A4D');
+  const L = [loop(bs, [{ transform: 'scaleX(1)' }, { transform: 'scaleX(.18)' }], 55, { direction: 'alternate', easing: 'linear' }), loop(bl, [{ transform: 'translateX(-1.3px)' }, { transform: 'translateX(1.3px)' }], 60, { direction: 'alternate', easing: 'linear' }),
+    loop(bw, [{ transform: 'translateX(0)' }, { transform: 'translateX(-36px)' }], 420, { easing: 'linear' })];
+  for (let i = 0; i < 4; i++){ L.push(loop(q('#pcw' + i), [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], 420 + i * 90, { easing: 'linear' })); a(q('#pc' + i), [{ opacity: 1 }, { opacity: 0 }], 1300, { delay: (500 + i * 120) * c.T }); }
+  vortex.setAttribute('opacity', 1); L.push(loop(vortex, [{ transform: 'translateY(-4px)' }, { transform: 'translateY(6px)' }], 300, { direction: 'alternate' }));
+  a(liq, [{ transform: 'translateY(150px)' }, { transform: 'translateY(0)' }], 2400, { easing: 'ease-in-out' });
+  for (let i = 0; i < 22 && alive(); i++){
+    kBubble(kRnd(124, 196), kRnd(150, 214), { col: 'rgba(255,255,255,.9)', r: kRnd(2, 4), vy: kRnd(-60, -30), life: kRnd(.4, .8), clip: [108, 76, 104, 148] });
+    if (i % 3 === 0) kDrops(kRnd(130, 190), 100, 2, f.c || '#F4B6C8', { dir: Math.PI / 2, spread: .8, min: 40, max: 110, g: 380, clip: [108, 76, 104, 148] });
+    await z(115);
+  }
+  if (!alive()) return;
+  // it stops: the blades slow, the surface wobbles, foam forms, the lid lifts
+  L.forEach(l => l.cancel()); led.setAttribute('fill', '#3A4150'); vortex.setAttribute('opacity', 0);
+  loop(bw, [{ transform: 'translateX(0)' }, { transform: 'translateX(-36px)' }], 3000, { easing: 'linear' });
+  a(liq, [{ transform: 'translateY(0)' }, { transform: 'translateY(4px)' }, { transform: 'translateY(-1.5px)' }, { transform: 'translateY(0)' }], 700);
+  a(foam, [{ opacity: 0 }, { opacity: .75 }], 600); kSND.ding();
+  await z(300); await a(lid, [{ transform: 'translate(0,0) rotate(0deg) scale(1)' }, { transform: 'translate(40px,-34px) rotate(-8deg) scale(1)', offset: .35 }, { transform: 'translate(104px,204px) rotate(-4deg) scale(.78)' }], 620, { easing: 'cubic-bezier(.4,0,.6,1)' }); kSND.thud();
+  a(badge, [{ transform: kTx(50, 236, 0) }, { transform: kTx(50, 230, 1.2), offset: .6 }, { transform: kTx(50, 236, 1) }], 420, { easing: 'cubic-bezier(.3,1.3,.5,1)' });
+  kFlourish(160, 150); kDone();
+  for (let i = 0; i < 6 && alive(); i++){ kBubble(kRnd(130, 190), 118, { vy: kRnd(-26, -14), col: 'rgba(255,255,255,.95)', r: kRnd(2, 4), life: 1 }); await z(300); }
+}
+
+/* ---------- oven: the food hops in, the door shuts, elements glow while the display climbs, it puffs and browns, the door drops open ---------- */
+KSCENE.bake = f => kBack() + `
+<g>${kShadow(160, 306, 56, 9, .32)}<ellipse cx="160" cy="299" rx="50" ry="10.5" fill="url(#gDish)" stroke="#C3CCDB" stroke-width="1.2"/><ellipse cx="160" cy="298" rx="36" ry="6.5" fill="none" stroke="#C3CCDB" stroke-width="1" opacity=".7"/></g>
+<clipPath id="cOven"><rect x="58" y="98" width="204" height="140" rx="6"/></clipPath><clipPath id="cOvenWin"><rect x="72" y="116" width="176" height="110" rx="6"/></clipPath>
+<g id="ov" filter="url(#fShadow)">
+  <rect x="34" y="22" width="252" height="236" rx="18" fill="url(#gSteel)" stroke="#9AA6BB" stroke-width="1.5"/><rect x="40" y="26" width="240" height="8" rx="4" fill="#fff" opacity=".6"/>
+  <rect x="48" y="38" width="224" height="44" rx="10" fill="#DDE3EE" stroke="#B5BFD1"/><rect x="58" y="46" width="72" height="28" rx="5" fill="#0B120E" stroke="#26372C"/>
+  <text id="kOTemp" x="94" y="65.5" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="16" font-weight="700" fill="#6B4A25">20°</text>
+  ${[170, 208, 246].map(x => `<circle cx="${x}" cy="60" r="12" fill="url(#gKey)" stroke="#8E9AB0"/><rect x="${x - 1.5}" y="49" width="3" height="9" rx="1.5" fill="#E2574C"/>`).join('')}
+  <rect x="52" y="92" width="216" height="152" rx="10" fill="#1A1F2B"/><rect x="58" y="98" width="204" height="140" rx="6" fill="url(#gInt)"/>
+  <g clip-path="url(#cOven)">
+    <rect id="ovGlow" x="58" y="98" width="204" height="140" fill="url(#gOvenGlow)" opacity="0"/>
+    <path d="M62 150 H258 M62 198 H258" stroke="#9AA6BB" stroke-width="2" opacity=".5"/><rect x="84" y="198" width="152" height="6" rx="3" fill="url(#gSteel)"/>
+    <rect id="elT" x="76" y="108" width="168" height="5" rx="2.5" fill="#4A3030"/><rect id="elB" x="76" y="228" width="168" height="5" rx="2.5" fill="#4A3030"/>
+    <ellipse cx="160" cy="205" rx="32" ry="5" fill="#000" opacity=".4" filter="url(#fBlur2)"/>
+    <g id="foodInG" style="transform:translate(160px,176px) scale(.84);opacity:0"><g id="foodSway">${kFoodLayers(f.e, 56)}</g></g>
+  </g>
+</g>
+<g id="door" style="transform-origin:160px 248px;transform:scaleY(.08)">
+  <path fill-rule="evenodd" d="M60 88 H260 Q274 88 274 102 V234 Q274 248 260 248 H60 Q46 248 46 234 V102 Q46 88 60 88 Z M76 112 H244 Q252 112 252 120 V222 Q252 230 244 230 H76 Q68 230 68 222 V120 Q68 112 76 112 Z" fill="url(#gSteel)" stroke="#9AA6BB" stroke-width="1.5"/><rect x="80" y="94" width="160" height="8" rx="4" fill="#C7CFDD"/><rect x="82" y="95.5" width="156" height="2.2" rx="1.1" fill="#fff" opacity=".85"/>
+  <rect x="68" y="112" width="184" height="118" rx="8" fill="none" stroke="#1A1F2B" stroke-width="8"/><rect x="72" y="116" width="176" height="110" rx="6" fill="url(#gGlass)"/>
+  <g clip-path="url(#cOvenWin)"><g id="oRefl" opacity="0"><polygon points="86,116 120,116 70,226 36,226" fill="#fff" opacity=".26"/><polygon points="128,116 138,116 88,226 78,226" fill="#fff" opacity=".16"/></g></g>
+</g>
+<g id="foodOutG" style="transform:translate(160px,300px) scale(0);opacity:0"><g id="foodBob">${kFoodLayers(f.e, 58, 'kFood')}</g></g>`;
+async function kBake(f, c){
+  const { alive, z, a, loop, T } = c, q = kq;
+  const out = q('#foodOutG'), inn = q('#foodInG'), door = q('#door'), glow = q('#ovGlow'), elT = q('#elT'), elB = q('#elB'), ov = q('#ov'), disp = q('#kOTemp'), refl = q('#oRefl'), sway = q('#foodSway'), bob = q('#foodBob');
+  if (!out || !f.e) return;
+  const OUT = (y, s = 1, sy = s) => kTx(160, y, s, sy), INN = (y, s = .84, sy = s) => kTx(160, y, s, sy);
+  const shake = () => a(ov, [{ transform: 'translate(0,0)' }, { transform: 'translate(-1.5px,.8px)' }, { transform: 'translate(1.3px,-.5px)' }, { transform: 'translate(-.6px,.2px)' }, { transform: 'translate(0,0)' }], 170);
+  kMsg(`אופים: ${f.n}`);
+  // the food appears on the counter, then hops into the open oven
+  kSND.pop();
+  await a(out, [{ transform: OUT(304, 0), opacity: 0 }, { transform: OUT(272, 1.22, .92), opacity: 1, offset: .55 }, { transform: OUT(284), opacity: 1 }], 430, { easing: 'cubic-bezier(.25,.9,.35,1)' });
+  if (!alive()) return; await z(150); kSND.whoosh();
+  await a(out, [{ transform: OUT(284) }, { transform: OUT(140, .98, 1.07), offset: .5 }, { transform: OUT(176, .84) }], 540, { easing: 'cubic-bezier(.4,0,.3,1)' });
+  if (!alive()) return;
+  out.style.visibility = 'hidden'; inn.style.opacity = 1; kSND.thud();
+  await a(inn, [{ transform: INN(176) }, { transform: INN(181, .96, .72), offset: .35 }, { transform: INN(174, .8, .9), offset: .7 }, { transform: INN(176) }], 280, { easing: 'ease-out' });
+  if (!alive()) return; await z(80);
+  // the door swings up and shuts
+  kSND.clunk();
+  const closing = a(door, [{ transform: 'scaleY(.08)' }, { transform: 'scaleY(1.03)', offset: .72 }, { transform: 'scaleY(1)' }], 480, { easing: 'ease-in' });
+  await z(350); shake(); await closing; if (!alive()) return; await z(120);
+  // baking: elements glow, the display climbs, the food puffs up and browns under a haze of heat
+  const t0 = performance.now(), dur = 3400 * T; disp.setAttribute('fill', '#FFB347'); disp.setAttribute('filter', 'url(#fGlowG)');
+  K.clock = setInterval(() => { disp.textContent = `${Math.round(20 + 160 * Math.min(1, (performance.now() - t0) / dur))}°`; }, 100);
+  kHold(kSND.hum(3.5 * T, 70));
+  [elT, elB].forEach(el => { el.style.transition = 'fill 1.4s, filter 1.4s'; el.style.fill = '#FF5A2A'; el.style.filter = 'drop-shadow(0 0 5px #FF6A32)'; });
+  a(glow, [{ opacity: 0 }, { opacity: .85 }], 1600); refl.style.opacity = 1;
+  sway.setAttribute('filter', 'url(#fHaze)');
+  a(inn.querySelector('.toasted'), [{ opacity: 0 }, { opacity: 1 }], 3300, { easing: 'linear' });
+  a(sway, [{ transform: 'scale(1)' }, { transform: 'scale(1.15)' }], 3300, { easing: 'ease-out' });
+  const L = [loop(refl, [{ transform: 'translateX(-30px)' }, { transform: 'translateX(230px)' }], 2400, { easing: 'ease-in-out' }), loop(glow, [{ opacity: .85 }, { opacity: .7 }, { opacity: .92 }], 800, { direction: 'alternate', delay: 1600 * T })];
+  for (let i = 0; i < 22 && alive(); i++){ if (i % 3 === 0) kPuff(160 + kRnd(-30, 30), 168, { clip: [58, 98, 204, 140], vy: kRnd(-24, -14), r0: 3, r1: 10, a: .22, life: 1.2, col: '255,220,170' }); await z(155); }
+  if (!alive()) return;
+  // ding! elements cool, the door drops open in a cloud of steam
+  clearInterval(K.clock); disp.textContent = '180°'; disp.removeAttribute('filter'); disp.setAttribute('fill', '#6B4A25'); L.forEach(l => l.cancel()); sway.removeAttribute('filter');
+  [elT, elB].forEach(el => { el.style.transition = 'fill .5s, filter .5s'; el.style.fill = '#4A3030'; el.style.filter = 'none'; }); a(glow, [{ opacity: .8 }, { opacity: 0 }], 500);
+  kSND.ding(); a(disp, [{ opacity: 1 }, { opacity: .15 }, { opacity: 1 }, { opacity: .15 }, { opacity: 1 }], 700); await z(560); if (!alive()) return;
+  kSND.clunk(); shake();
+  a(door, [{ transform: 'scaleY(1)' }, { transform: 'scaleY(.02)', offset: .65 }, { transform: 'scaleY(.08)' }], 540, { easing: 'cubic-bezier(.3,1.3,.5,1)' });
+  for (let i = 0; i < 12; i++) kPuff(160 + kRnd(-72, 72), kRnd(196, 238), { vx: kRnd(-14, 14), vy: kRnd(-64, -38), r0: 7, r1: 22, a: .8, life: 1.7 });
+  await z(280); if (!alive()) return;
+  // the baked food comes out and lands on the plate
+  inn.style.opacity = 0; out.querySelector('.toasted').setAttribute('opacity', 1); out.style.visibility = 'visible'; kSND.whoosh();
+  await a(out, [{ transform: OUT(176, 1.1) }, { transform: OUT(244, 1.08, .98), offset: .55 }, { transform: OUT(289, 1.16, .82), offset: .82 }, { transform: OUT(284, 1.1) }], 580, { easing: 'cubic-bezier(.4,0,.6,1)' });
+  if (!alive()) return; kSND.thud(); kFlourish(160, 262); kDone();
+  loop(bob, [{ transform: 'translateY(0)' }, { transform: 'translateY(-4px)' }], 900, { direction: 'alternate' });
+  for (let i = 0; i < 10 && alive(); i++){ kPuff(160 + kRnd(-16, 16), 262, { vx: kRnd(-5, 5), vy: kRnd(-24, -14), r0: 4, r1: 14, a: .4, life: 1.6 }); await z(260); }
+}
+
+const KRUN = { heat: kHeat, cut: kCut, toasting: kToast, pour: kPour, fry: kFry, blend: kBlend, bake: kBake };
+
 const KFREE_HINT = 'אפשר גם להקליד אימוג׳י, כמו ☕';
 // [emoji, action, words (comma separated; punctuation is ignored), liquid colour when it is poured or made into a juice]
 const KDICT = [
@@ -2220,40 +2791,13 @@ function renderKitchenMail(){
   out.forEach(d => O.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
     h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}`)))));
 }
-// blender: the pieces drop in, the lid goes on, it whirls and the jar fills with the colour of the food
-function kBlend(f, T){
-  const sc = $('kScene'); sc.style.setProperty('--lq', f.c || '#F4B6C8'); $('kFood').textContent = f.e; ['kBp1', 'kBp2', 'kBp3'].forEach(id => { $(id).textContent = f.e; }); kMsg(`טוחנים: ${f.n}`);
-  kLater(300 * T, () => sc.classList.add('s-drop'));
-  kLater(1300 * T, () => { sc.classList.add('s-lid'); kBeep(220, 90, 'square', .05); });
-  kLater(1800 * T, () => { sc.classList.add('s-whirl', 's-fill'); kBeep(110, 1900 * T, 'sawtooth', .035); });
-  kLater(3800 * T, () => { sc.classList.remove('s-whirl', 's-lid'); sc.classList.add('s-ready'); kBeep(1320, 200); });
-  kLater(4800 * T, kDone);
-}
-// the oven's display climbs from `a` to `b` degrees
-function kTemp(a, b, ms){
-  const t0 = Date.now(); clearInterval(K.clock);
-  const tick = () => { const k = Math.min(1, (Date.now() - t0) / ms); $('kOTemp').textContent = `${Math.round(a + (b - a) * k)}°`; if (k >= 1) clearInterval(K.clock); };
-  tick(); K.clock = setInterval(tick, 100);
-}
-// oven: the food slides in, the door closes, it heats to 180 degrees and browns, dings, the door opens and it steams
-function kBake(f, T){
-  const sc = $('kScene'); $('kFood').textContent = f.e; kMsg(`אופים: ${f.n}`);
-  kLater(300 * T, () => sc.classList.add('s-in'));
-  kLater(1400 * T, () => { sc.classList.add('s-shut'); kBeep(200, 100, 'square', .05); });
-  kLater(1900 * T, () => { sc.classList.add('s-hot', 's-brown'); kTemp(20, 180, 3400 * T); });
-  kLater(5400 * T, () => { sc.classList.remove('s-hot'); kBeep(1320, 160); kLater(260, () => kBeep(1320, 160)); kLater(520, () => kBeep(1320, 280)); });
-  kLater(6000 * T, () => { sc.classList.remove('s-shut'); sc.classList.add('ready'); });
-  kLater(6400 * T, () => { sc.classList.remove('s-in'); sc.classList.add('steam'); });
-  kLater(7500 * T, kDone);
-}
-const KRUN = { heat:kHeat, cut:kCut, toasting:kToast, pour:kPour, fry:kFry, blend:kBlend, bake:kBake };
 function kPick(f, dish = null){
   K.cur = f; K.dish = dish;
   const i = String(KITCHEN.indexOf(f));
   document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.i === i)));
-  $('kFreeNote').textContent = KFREE_HINT; kReset(f.a); (KRUN[f.a] || kHeat)(f, kSpeed());
+  $('kFreeNote').textContent = KFREE_HINT; kReset(f.a, f); kPlay(f);
 }
-function kFit(){ const st = $('kStage'), sc = $('kScene'); const k = Math.min(1, (st.clientWidth || 320) / 320); sc.style.transform = k < 1 ? `scale(${k})` : ''; st.style.height = Math.round(340 * k) + 'px'; }
+function kFit(){ kFxSize(); }
 const kSoundIcon = () => { $('kSound').textContent = store.get('ft-ksound') === '0' ? '🔇' : '🔊'; };
 function buildKitchen(){
   const box = $('kPick'); box.replaceChildren();
@@ -2262,6 +2806,7 @@ function buildKitchen(){
       h('button', { type:'button', class:'chip kchip', 'data-i':KITCHEN.indexOf(f), 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, f.e), f.n))));
   kSoundIcon();
   $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
+  window.addEventListener('resize', () => { if (K.shown) kFit(); });
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kEat').addEventListener('click', kEat);
   $('kSound').addEventListener('click', () => { store.set('ft-ksound', store.get('ft-ksound') === '0' ? '1' : '0'); kSoundIcon(); kBeep(660, 80); });
