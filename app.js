@@ -2782,12 +2782,12 @@ function kDishesIn(list){
   S.dishes = list; S.dishesLoaded = true;
 }
 // the reply to a come-and-eat call: "on my way" (the server tells only the caller)
-const kReplyLabel = d => d.call ? '🏃 בדרך' : '✅ מוכן';
-const kReplyText = d => d.call ? `🏃 ${mName(d.to)} בדרך` : `✅ ${mName(d.to)} ${kFem(d.to) ? 'מוכנה' : 'מוכן'}: ${d.n}`;
+const kReplyLabel = d => d.call ? '🏃 בדרך' : '✅ מוכן לאכילה';
+const kReplyText = d => d.call ? `🏃 ${mName(d.to)} בדרך` : `✅ ${d.e} ${d.n} מוכן לאכילה`;
 const kComingBtn = d => d.coming ? h('small', null, kReplyLabel(d) + ' ✓') : h('button', { type:'button', class:'btn small', onclick:() => kComing(d) }, kReplyLabel(d));
 async function kComing(d){
   if (!d || d.coming) return;
-  try{ await updateDoc(doc(db, 'dishes', d.id), { coming: true, comingAt: Date.now() }); toast(`${mName(d.from)} יודע${kFem(d.from) ? 'ת' : ''} ${d.call ? 'שאתה בדרך 🏃' : 'שאתה מוכן ✅'}`); if (K.dish && K.dish.id === d.id) K.dish = { ...K.dish, coming: true }; kRenderSend(); render(); }
+  try{ await updateDoc(doc(db, 'dishes', d.id), { coming: true, comingAt: Date.now() }); toast(`${mName(d.from)} יודע${kFem(d.from) ? 'ת' : ''} ${d.call ? 'שאתה בדרך 🏃' : 'שזה מוכן לאכילה ✅'}`); if (K.dish && K.dish.id === d.id) K.dish = { ...K.dish, coming: true }; kRenderSend(); render(); }
   catch(e){ fail(e); }
 }
 function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend(); }
@@ -2865,7 +2865,7 @@ function renderKitchenMail(){
     h('button', { type:'button', class:'btn small', onclick:() => kOpenDish(d) }, 'פתחו'), kComingBtn(d))));
   $('kOutbox').hidden = !out.length; const O = $('kOutboxList'); O.replaceChildren();
   out.forEach(d => O.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
-    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : d.coming ? `${mName(d.to)} ${d.call ? 'בדרך 🏃' : (kFem(d.to) ? 'מוכנה ✅' : 'מוכן ✅')}` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
+    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : d.coming ? `${mName(d.to)} ${d.call ? 'בדרך 🏃' : 'מוכן לאכילה ✅'}` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
 }
 function kPick(f, dish = null){
   $('kFoodPop').hidden = true;
