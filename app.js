@@ -1904,9 +1904,9 @@ const KITCHEN = [
   { e:'🥭', n:'מנגו', a:'cut' }, { e:'🍉', n:'אבטיח', a:'cut' }, { e:'🍎', n:'תפוח', a:'cut' }, { e:'🍌', n:'בננה', a:'cut' }, { e:'🥒', n:'מלפפון', a:'cut' }, { e:'🥕', n:'גזר', a:'cut' },
   { e:'🍅', n:'עגבנייה', a:'cut' }, { e:'🍊', n:'תפוז', a:'cut' }, { e:'🍓', n:'תות', a:'cut' }, { e:'🥑', n:'אבוקדו', a:'cut' }, { e:'🍍', n:'אננס', a:'cut' }, { e:'🧀', n:'גבינה', a:'cut' },
   { e:'🍞', n:'לחם', a:'toasting' }, { e:'🥯', n:'בייגל', a:'toasting' }, { e:'🥐', n:'קרואסון', a:'toasting' },
-  { e:'🥛', n:'חלב', a:'pour', c:'#FFFFFF' }, { e:'🍊', n:'מיץ תפוזים', a:'pour', c:'#FFA726' }, { e:'🍫', n:'שוקו', a:'pour', c:'#6D4C41' }, { e:'💧', n:'מים', a:'pour', c:'#7FD1FF' }, { e:'🍇', n:'מיץ ענבים', a:'pour', c:'#8E3FA8' },
+  { e:'🥛', n:'חלב', a:'pour', c:'#FFFFFF' }, { e:'🍊', n:'מיץ תפוזים', a:'pour', c:'#FFA726' }, { e:'🍫', n:'שוקו', a:'pour', c:'#6D4C41' }, { e:'☕', n:'קפה', a:'pour', c:'#6B4226' }, { e:'🍵', n:'תה', a:'pour', c:'#C98A4B' }, { e:'💧', n:'מים', a:'pour', c:'#7FD1FF' }, { e:'🍇', n:'מיץ ענבים', a:'pour', c:'#8E3FA8' },
   { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' }];
-const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 לשפוך לכוס'], ['fry', '🍳 לטגן במחבת']];
+const KACTIONS = [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך'], ['toasting', '🍞 לקלות בטוסטר'], ['pour', '🥤 שתייה (שופכים לכוס)'], ['fry', '🍳 לטגן במחבת']];
 const K = { timers:[], clock:null, audio:null, shown:false };
 const kLater = (ms, fn) => K.timers.push(setTimeout(fn, ms));
 const kSpeed = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches ? .4 : 1; }catch(e){ return 1; } };
@@ -1996,9 +1996,9 @@ function kFry(f, T){
 const KFREE_HINT = 'אפשר גם להקליד אימוג׳י, כמו ☕';
 // [emoji, action, words (comma separated; punctuation is ignored), liquid colour when it is poured or made into a juice]
 const KDICT = [
-  ['☕', 'heat', 'קפה,נסקפה,נס קפה,אספרסו,קפוצינו,לאטה,הפוך,קפה הפוך,coffee,espresso,cappuccino,latte,americano'],
-  ['☕', 'heat', 'קקאו,שוקו חם,הוט שוקולד,cocoa,hot chocolate'],
-  ['🍵', 'heat', 'תה,תה חם,תה נענע,נענע,tea,matcha,מאצה'],
+  ['☕', 'pour', 'קפה,נסקפה,נס קפה,אספרסו,קפוצינו,לאטה,הפוך,קפה הפוך,coffee,espresso,cappuccino,latte,americano', '#6B4226'],
+  ['☕', 'pour', 'קקאו,שוקו חם,הוט שוקולד,cocoa,hot chocolate', '#6D4C41'],
+  ['🍵', 'pour', 'תה,תה חם,תה נענע,נענע,tea,matcha,מאצה', '#C98A4B'],
   ['🍲', 'heat', 'מרק,מרק עוף,מרק ירקות,עדשים,חמין,צולנט,תבשיל,סטו,soup,stew,cholent'],
   ['🥣', 'heat', 'דייסה,שיבולת שועל,סולת,אוטמיל,porridge,oatmeal'],
   ['🍜', 'heat', 'אטריות,נודלס,ראמן,noodles,ramen'],
