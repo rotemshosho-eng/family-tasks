@@ -46,6 +46,7 @@ It caught a real blank-screen bug (using `store` before it was defined). Run it 
 - Splash/home jokes: `SPLASH_JOKES` (set-up + twist, `'k'` = kids only), `SILLY_NAMES` + `SILLY_INTROS`; 50/50 between them. Admin gets `PRAISE_POOL`.
 - Settings docs: `settings/goal`, `settings/challenge`, `settings/money`, `settings/perms` (`parentPoints`).
 - Challenge: its own task list `settings/challenge.items` (`{id,title}`, max 30), separate from regular tasks. Done marks in `challengeItems/<itemId>` (`key` = `cid`, or `start|title` for older challenges; editing keeps `cid`, `memberId`, optional `by`). Bonus paid by notify.mjs when all items are done.
+- Kitchen (family tab, button "המטבח"): pure front-end toy, no Firestore. `KITCHEN` in app.js maps each food to an action (`heat` = microwave, `cut` = cutting board); the animations belong to the action (CSS + timed steps on `#kScene`), so a new food is one line. State classes on `#kScene` (`in`, `closed`, `on`, `ready`, `steam`, `sliced`) must NOT be called `done`: the global `.done` rule (done-today rows) paints the element white.
 
 ## Working with Rotem
 - He writes in Hebrew (sometimes typed on an English keyboard layout — decode it).

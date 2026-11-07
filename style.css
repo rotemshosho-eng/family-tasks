@@ -597,3 +597,69 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .nudge-min{display:inline-flex;align-items:center;gap:4px;font-size:.9rem;color:var(--muted)}
 .nudge-min input{width:4.5em!important;padding:6px 8px!important;text-align:center}
 #nudgeRights .arow{flex-wrap:wrap}
+
+/* ---------- kitchen: a food is picked, then heated in the microwave or cut on a board ---------- */
+/* The scene is a fixed 320x340 drawing (scaled down by JS on narrow phones); direction:ltr keeps the geometry the same in RTL. */
+.kstage{flex:none;position:relative;width:100%;max-width:360px;height:340px;margin:0 auto;border-radius:22px;overflow:hidden;background:linear-gradient(#EEF3FB,#D8E2F3);box-shadow:0 0 0 1px var(--line)}
+.kscene{position:absolute;left:50%;top:0;width:320px;height:340px;margin-left:-160px;transform-origin:top center;direction:ltr}
+.kscene.reset *{transition:none!important}
+.kscene>*{position:absolute}
+.kcounter{left:0;right:0;bottom:0;height:84px;background:linear-gradient(#D9B98C,#B98F5E);border-top:4px solid #A67C4B}
+/* microwave */
+.kmw{left:10px;top:14px;width:300px;height:204px;border-radius:18px;background:linear-gradient(#F4F6FA,#DDE3EC);border:3px solid #A9B4C5;box-shadow:0 8px 0 #98A4B7}
+.kwin{left:24px;top:28px;width:190px;height:150px;border-radius:12px;background:#222838;box-shadow:inset 0 0 0 4px #141824;transition:background .5s,box-shadow .5s}
+.kscene.on .kwin{background:radial-gradient(circle at 50% 75%,#FFF2BF,#FFC55A 55%,#8C5518);box-shadow:inset 0 0 0 4px #141824,0 0 26px 6px rgb(255 190 80 / .55)}
+.kplate{left:44px;top:150px;width:150px;height:16px;border-radius:50%;background:linear-gradient(90deg,#D9E2EE,#fff,#D9E2EE) 0 0/200% 100%;opacity:.9}
+.kscene.on .kplate{animation:kplate 1s linear infinite}
+@keyframes kplate{to{background-position:200% 0}}
+.kpanel{left:228px;top:28px;width:68px;height:150px;border-radius:10px;background:#CBD3E0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0}
+.kpanel i{width:30px;height:30px;border-radius:50%;background:radial-gradient(#fff,#9AA6B8);box-shadow:0 2px 0 #7E8AA0}
+.kpanel b{width:44px;height:16px;border-radius:8px;background:#E2574C;box-shadow:0 2px 0 #A03A32}
+.kclock{width:56px;height:26px;border-radius:4px;background:#101810;color:#6BFF7B;font:700 15px/26px ui-monospace,Menlo,Consolas,monospace;text-align:center;letter-spacing:1px}
+.kscene.on .kclock{text-shadow:0 0 6px #6BFF7B}
+.kglass{left:24px;top:28px;width:190px;height:150px;border-radius:12px;border:3px solid #AAB5C7;z-index:5;pointer-events:none;
+  background:linear-gradient(120deg,rgb(255 255 255 / .38),rgb(130 150 185 / .3) 38%,rgb(40 52 76 / .5));
+  transform-origin:left center;transform:perspective(520px) rotateY(-80deg);transition:transform .55s ease-in-out}
+.kscene.closed .kglass{transform:perspective(520px) rotateY(0)}
+.kdish{left:119px;top:292px;width:120px;height:18px;margin-left:-60px;border-radius:50%;background:radial-gradient(#fff,#DDE5F0);box-shadow:0 3px 0 #B3BCCB}
+.kfood{left:119px;top:268px;z-index:4;font-size:62px;line-height:1;transform:translate(-50%,-50%);transition:top .9s cubic-bezier(.4,0,.2,1),font-size .9s}
+.kscene.heat.in .kfood{top:116px;font-size:50px}
+.kscene.on .kfood{animation:kjig .5s ease-in-out infinite}
+@keyframes kjig{0%,100%{transform:translate(-50%,-50%) rotate(-5deg)}50%{transform:translate(-46%,-50%) rotate(5deg)}}
+.kscene.ready .kfood{filter:drop-shadow(0 0 10px rgb(255 160 40 / .9))}
+.ksteam{left:119px;top:240px;width:0;height:0;z-index:6;display:none}
+.kscene.heat.steam .ksteam{display:block}
+.ksteam span{position:absolute;bottom:0;width:18px;height:18px;border-radius:50%;background:rgb(255 255 255 / .9);filter:blur(3px);opacity:0;animation:ksteam 1.6s ease-out infinite}
+.ksteam span:nth-child(1){left:-24px}.ksteam span:nth-child(2){left:-8px;animation-delay:.5s}.ksteam span:nth-child(3){left:8px;animation-delay:1s}
+@keyframes ksteam{0%{transform:translateY(0) scale(.6);opacity:0}25%{opacity:.9}100%{transform:translateY(-72px) scale(1.5);opacity:0}}
+/* cutting board */
+.kboard,.kcutfood,.klines,.kpieces,.kknife{display:none}
+.kscene.cut .kboard,.kscene.cut .kcutfood,.kscene.cut .klines,.kscene.cut .kpieces,.kscene.cut .kknife{display:block}
+.kscene.cut .kmw,.kscene.cut .kwin,.kscene.cut .kplate,.kscene.cut .kpanel,.kscene.cut .kdish,.kscene.cut .kglass,.kscene.cut .kfood,.kscene.cut .ksteam{display:none}
+.kboard{left:30px;top:200px;width:260px;height:112px;border-radius:14px;background:linear-gradient(#EBCB93,#D3A965);box-shadow:0 6px 0 #A98048}
+.kcutfood{left:160px;top:212px;z-index:4;font-size:84px;line-height:1;transform:translate(-50%,-50%) scale(0)}
+.kscene.cut.in .kcutfood{transform:translate(-50%,-50%) scale(1);transition:transform .45s cubic-bezier(.3,1.5,.5,1)}
+.kscene.cut.sliced .kcutfood{opacity:0}
+.kcutfood.shake{animation:kshake .22s}
+@keyframes kshake{0%,100%{transform:translate(-50%,-50%) scale(1)}30%{transform:translate(-53%,-50%) scale(1)}70%{transform:translate(-47%,-50%) scale(1)}}
+.klines{inset:0;z-index:5;pointer-events:none}
+.kline{position:absolute;top:166px;width:3px;height:92px;border-radius:2px;background:rgb(255 255 255 / .95);box-shadow:0 0 0 1px rgb(0 0 0 / .18);transform:scaleY(0);transform-origin:top;animation:kline .2s forwards}
+@keyframes kline{to{transform:scaleY(1)}}
+.kknife{left:149px;top:150px;width:22px;height:100px;z-index:6;transform:translateY(-150px)}
+.kknife::before{content:"";position:absolute;top:0;left:3px;width:16px;height:30px;border-radius:6px;background:linear-gradient(90deg,#7B563A,#5A3C26)}
+.kknife::after{content:"";position:absolute;top:30px;left:0;width:22px;height:70px;background:linear-gradient(90deg,#F7FAFD,#A9B6C8);clip-path:polygon(0 0,100% 0,100% 90%,0 100%)}
+.kpieces{left:30px;top:184px;width:260px;height:96px;z-index:4;flex-wrap:wrap;justify-content:center;align-content:center;padding:0 28px;box-sizing:border-box}
+.kscene.cut .kpieces{display:flex}
+.kpieces span{font-size:40px;line-height:1.1;transform:scale(0);animation:kpop .5s cubic-bezier(.3,1.5,.5,1) forwards;animation-delay:calc(var(--i) * 90ms)}
+@keyframes kpop{to{transform:scale(1) rotate(var(--r,0deg))}}
+/* below the drawing */
+.kmsg{text-align:center;font:600 1.1rem var(--display);margin:0;min-height:1.7em}
+.kpick{display:flex;flex-direction:column;gap:8px}
+.kpick .sub{margin:4px 0 0}
+.kchip{gap:8px}.kchip .ke{font-size:1.45rem;line-height:1}
+.kchip[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent) inset;font-weight:600}
+.ksound{font-size:1.1rem;margin-inline-start:auto}
+.kitchen-wrap{display:flex}.kitchen-wrap .btn{flex:1}
+@media (prefers-reduced-motion:reduce){.kscene *{transition-duration:.01s!important;animation-duration:.01s!important}}
+.kknife{transition:opacity .4s}
+.kscene.cut.sliced .kknife{opacity:0}

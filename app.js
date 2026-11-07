@@ -16,7 +16,7 @@ const writeBatch = d => { const b = _writeBatch(d); const c = b.commit.bind(b); 
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
 const COLORS = ['#2A7F9E','#C0504D','#7B5EA7','#C97F14','#3B8C4A','#C2577F','#4F6D7A','#8A6D3B'];
-const S = { tokens:[], nudgePick:new Set(), nudgeCh:null, myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
+const S = { tokens:[], nudgePick:new Set(), nudgeCh:null, myNotes:[], myNotesFor:null, dnSeen:new Set(), openPanels:new Set(), ppOpen:false, perms:{}, actFor:null, plain:false, rankOpen:false, fabMenu:false, devNotes:[], dnOpen:false, cpComments:[], cpCm:{}, complaints:[], cpOpen:false, cpDraft:{}, cjoins:{}, citems:{}, chOpen:false, chEdit:null, kitchenOpen:false, photos:{}, challenge:null, logsLoaded:false, viewAs:null, realAdmin:false, qtyAsk:null, rewards:[], joins:[], myJoin:null, adminChecked:false, boundId:null, profiles:{}, profileOpen:null, seen:{}, binding:null, bindLoaded:false, pins:{}, loginPick:null, loginErr:'', members:[], tasks:[], logs:[], timers:[], messages:[], chatOpen:null, chatDraft:'', delAsk:null, money:{ points:100, shekels:0 }, me:'all', tab:'today', isAdmin:false, user:null,
   editTask:null, editSg:null, editMember:null, armed:null, busy:new Set(), openPick:null, memInit:false };
 let db = null, unsubs = [], fbApp = null;
 
@@ -249,7 +249,7 @@ function render(){
   { const nRev = S.logs.filter(l => waiting(l) && canApprove(l)).length; const tb = $('tabs').querySelector('[data-tab="tasks"]');
     tb.lastChild.textContent = nRev ? `משימות (${nRev})` : 'משימות'; }
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  renderChatSheet(); renderProfileSheet(); updateSplash();
+  renderChatSheet(); renderProfileSheet(); updateSplash(); renderKitchen();
   $('sgSec').hidden = !S.user || (S.isAdmin && !plain) || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); renderParentPointsAdmin(); renderNudgeAdmin(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
@@ -1346,7 +1346,7 @@ function renderComplaints(){
   $('cpFab').hidden = !S.user || S.tab !== 'today' || !(S.boundId || S.isAdmin) || !!S.cpOpen || !!S.dnOpen;
   $('cpFabN').hidden = !open; $('cpFabN').textContent = String(open);
   const sheet = $('cpSheet');
-  if (!S.cpOpen){ sheet.hidden = true; if (!S.chatOpen && !S.profileOpen && !S.dnOpen) document.body.classList.remove('locked'); return; }
+  if (!S.cpOpen){ sheet.hidden = true; if (!S.chatOpen && !S.profileOpen && !S.dnOpen && !S.kitchenOpen) document.body.classList.remove('locked'); return; }
   sheet.hidden = false; document.body.classList.add('locked');
   fillCpAbout();
   const all = $('cpf-all').checked;
@@ -1403,13 +1403,14 @@ function closeTop(){
   if (S.openPick){ S.openPick = null; return true; }
   if (S.chatOpen){ if (typeof markSeen_chat === 'function') markSeen_chat(S.chatOpen); S.chatOpen = null; S.chatDraft = ''; return true; }
   if (S.profileOpen){ S.profileOpen = null; return true; }
+  if (S.kitchenOpen){ S.kitchenOpen = false; return true; }
   if (S.dnOpen){ S.dnOpen = false; const seen = [...S.dnSeen]; S.dnSeen.clear(); if (seen.length) clearSeenNotes(seen); return true; }
   if (S.cpOpen){ S.cpOpen = false; return true; }
   if (S.viewAs){ S.viewAs = null; S.tab = 'admin'; return true; }
   if (S.tab !== 'today'){ S.tab = 'today'; window.scrollTo(0, 0); return true; }
   return false;
 }
-const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.openPanels.size || S.ppOpen || S.rankOpen || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
+const somethingOpen = () => !!(document.querySelector('.lightbox') || S.fabMenu || S.openPanels.size || S.ppOpen || S.rankOpen || S.qtyAsk || S.openPick || S.chatOpen || S.profileOpen || S.dnOpen || S.kitchenOpen || S.cpOpen || S.viewAs || (S.tab && S.tab !== 'today'));
 // Keep exactly one extra history entry while anything can be closed; at home with nothing open, "back" leaves the app as usual.
 function syncHistory(){
   try{ const trapped = history.state && history.state.ftBack;
@@ -1831,6 +1832,7 @@ function tick(){
   }
 }
 function buildStatic(){
+  buildKitchen();
   for (const id of ['bf-points','pp-points']){ const inp = $(id); const wrap = h('span', { class:'signed' }); inp.replaceWith(wrap); wrap.append(inp, signBtn(inp)); }
   const dw = $('tf-days'); DAYS.forEach((d, i) => dw.append(h('label', { title:'יום '+d }, h('input', { type:'checkbox', id:'tf-day-'+i, value:i, checked:true }), d)));
   const sw = $('mf-colors'); COLORS.forEach((c, i) => sw.append(h('label', { style:`background:${c}`, title:'צבע' }, h('input', { type:'radio', name:'mf-color', id:'mf-color-'+i, value:c, checked: i === 0 }))));
@@ -1891,6 +1893,85 @@ function buildStatic(){
   document.querySelectorAll('input[name=tf-mode]').forEach(r => r.addEventListener('change', () => setMode(radioMode('tf'))));
   ['tf-rate','tf-max'].forEach(id => $(id).addEventListener('input', updateHint));
   updateHint();
+}
+
+/* ---------- kitchen: pick a food and watch it get prepared ---------- */
+// Each food maps to an action (heat in the microwave / cut on a board). The animations belong to the action,
+// so a new food is one line here, no new drawing.
+const KITCHEN = [
+  { e:'🧆', n:'קציצות', a:'heat' }, { e:'🍕', n:'פיצה', a:'heat' }, { e:'🍲', n:'מרק', a:'heat' }, { e:'🍝', n:'פסטה', a:'heat' }, { e:'🍗', n:'עוף', a:'heat' }, { e:'🌭', n:'נקניקייה', a:'heat' },
+  { e:'🥭', n:'מנגו', a:'cut' }, { e:'🍉', n:'אבטיח', a:'cut' }, { e:'🍎', n:'תפוח', a:'cut' }, { e:'🍌', n:'בננה', a:'cut' }, { e:'🥒', n:'מלפפון', a:'cut' }, { e:'🥕', n:'גזר', a:'cut' }];
+const K = { timers:[], clock:null, audio:null, shown:false };
+const kLater = (ms, fn) => K.timers.push(setTimeout(fn, ms));
+const kSpeed = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches ? .4 : 1; }catch(e){ return 1; } };
+function kBeep(freq, ms = 120, type = 'sine', vol = .07){
+  if (store.get('ft-ksound') === '0') return;
+  try{
+    const A = K.audio || (K.audio = new (window.AudioContext || window.webkitAudioContext)()); if (A.state === 'suspended') A.resume();
+    const o = A.createOscillator(), g = A.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = vol; o.connect(g); g.connect(A.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(.0001, A.currentTime + ms / 1000); o.stop(A.currentTime + ms / 1000 + .02);
+  }catch(e){}
+}
+function kStop(){ K.timers.forEach(clearTimeout); K.timers = []; clearInterval(K.clock); try{ $('kKnife').getAnimations().forEach(a => a.cancel()); }catch(e){} }
+const kMsg = t => { $('kMsg').textContent = t; };
+// back to an empty scene of this action (no sliding back from the previous state)
+function kReset(action){
+  kStop(); const sc = $('kScene'); sc.className = 'kscene reset ' + action;
+  $('kClock').textContent = '0:00'; $('kLines').replaceChildren(); $('kPieces').replaceChildren(); $('kFood').textContent = ''; $('kCutFood').textContent = ''; $('kCutFood').classList.remove('shake');
+  sc.offsetWidth; requestAnimationFrame(() => sc.classList.remove('reset'));
+}
+function kCountdown(sec, ms){
+  const t0 = Date.now(); clearInterval(K.clock);
+  const tick = () => { const left = Math.max(0, Math.ceil(sec * (1 - (Date.now() - t0) / ms))); $('kClock').textContent = `0:${pad(left)}`; if (left <= 0) clearInterval(K.clock); };
+  tick(); K.clock = setInterval(tick, 100);
+}
+// microwave: the food slides in, the door closes, it spins and counts down, dings, the door opens and it steams
+function kHeat(f, T){
+  const sc = $('kScene'); $('kFood').textContent = f.e; kMsg(`מחממים: ${f.n}`);
+  kLater(300 * T, () => sc.classList.add('in'));
+  kLater(1500 * T, () => { sc.classList.add('closed'); kBeep(260, 90, 'square', .04); });
+  kLater(2100 * T, () => { sc.classList.add('on'); kCountdown(20, 3300 * T); });
+  kLater(5500 * T, () => { sc.classList.remove('on'); kBeep(1320, 160); kLater(260, () => kBeep(1320, 160)); kLater(520, () => kBeep(1320, 280)); });
+  kLater(6200 * T, () => { sc.classList.remove('closed'); sc.classList.add('ready'); });
+  kLater(6600 * T, () => { sc.classList.remove('in'); sc.classList.add('steam'); });
+  kLater(7700 * T, () => kMsg('בתיאבון! 🍽️'));
+}
+// cutting board: the food pops in, the knife chops three times, it falls apart into pieces
+function kCut(f, T){
+  const sc = $('kScene'), food = $('kCutFood'), knife = $('kKnife'); food.textContent = f.e; kMsg(`חותכים: ${f.n}`);
+  kLater(250 * T, () => sc.classList.add('in'));
+  [136, 160, 184].forEach((x, i) => kLater((1000 + i * 750) * T, () => {
+    knife.style.left = (x - 11) + 'px';
+    knife.animate([{ transform:'translateY(-150px)' }, { transform:'translateY(0)', offset:.42 }, { transform:'translateY(0)', offset:.5 }, { transform:'translateY(-150px)' }], { duration: 560 * T + 80, easing:'ease-in' });
+    kLater(250 * T, () => { kBeep(520 + i * 90, 60, 'square', .05); $('kLines').append(h('i', { class:'kline', style:`left:${x - 1}px` }));
+      food.classList.remove('shake'); food.offsetWidth; food.classList.add('shake'); });
+  }));
+  kLater(3500 * T, () => { sc.classList.add('sliced'); $('kLines').replaceChildren(); const P = $('kPieces');
+    for (let i = 0; i < 6; i++) P.append(h('span', { style:`--i:${i};--r:${(i % 2 ? 1 : -1) * (6 + i * 3)}deg` }, f.e)); kBeep(880, 90); });
+  kLater(4600 * T, () => kMsg('בתיאבון! 🍽️'));
+}
+function kPick(f){
+  document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.n === f.n)));
+  kReset(f.a); (f.a === 'heat' ? kHeat : kCut)(f, kSpeed());
+}
+function kFit(){ const st = $('kStage'), sc = $('kScene'); const k = Math.min(1, (st.clientWidth || 320) / 320); sc.style.transform = k < 1 ? `scale(${k})` : ''; st.style.height = Math.round(340 * k) + 'px'; }
+const kSoundIcon = () => { $('kSound').textContent = store.get('ft-ksound') === '0' ? '🔇' : '🔊'; };
+function buildKitchen(){
+  const box = $('kPick'); box.replaceChildren();
+  for (const [action, title] of [['heat', '🔥 לחמם במיקרוגל'], ['cut', '🔪 לחתוך']])
+    box.append(h('p', { class:'sub' }, title), h('div', { class:'chips' }, KITCHEN.filter(f => f.a === action).map(f =>
+      h('button', { type:'button', class:'chip kchip', 'data-n':f.n, 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, f.e), f.n))));
+  kSoundIcon();
+  $('kitchen-open').addEventListener('click', () => { S.kitchenOpen = true; render(); });
+  $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
+  $('kSound').addEventListener('click', () => { store.set('ft-ksound', store.get('ft-ksound') === '0' ? '1' : '0'); kSoundIcon(); kBeep(660, 80); });
+}
+// render() calls this on every data update: it only shows or hides the sheet and never touches a running animation
+function renderKitchen(){
+  const sheet = $('kitchenSheet'); if (!sheet) return;
+  if (!S.kitchenOpen){ if (K.shown){ K.shown = false; sheet.hidden = true; kStop(); } return; }
+  document.body.classList.add('locked');
+  if (!K.shown){ K.shown = true; sheet.hidden = false; kFit(); kReset('heat'); kMsg('בחרו מה להכין'); document.querySelectorAll('.kchip').forEach(b => b.setAttribute('aria-pressed', 'false')); }
 }
 
 /* ---------- opening splash ---------- */

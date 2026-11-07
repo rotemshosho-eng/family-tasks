@@ -216,6 +216,7 @@
   </div>
     <section class="goal-card challenge" data-challenge hidden></section>
     <section class="goal-card" data-goal hidden></section>
+    <div class="kitchen-wrap"><button type="button" class="btn ghost" id="kitchen-open">🍽️ המטבח: לחמם ולחתוך</button></div>
     <div id="ppToggleWrap" hidden><button type="button" class="btn ghost" id="pp-toggle" aria-expanded="false">+ הוספת נקודות</button></div>
     <section class="panel" id="ppPanel" hidden>
       <h2>➕➖ שינוי נקודות</h2>
@@ -434,6 +435,35 @@
   <button type="button" class="btn ghost" id="fmDn">🛠️ הערות למפתח</button>
 </div>
 <button type="button" class="fab fab2" id="dnFab" hidden aria-label="הערות למפתח">🛠️<span class="fab-n" id="dnFabN" hidden></span></button>
+<div class="sheet" id="kitchenSheet" hidden role="dialog" aria-modal="true" aria-labelledby="kTitle">
+  <div class="sheet-head">
+    <button type="button" class="btn ghost small" id="kBack">חזרה</button>
+    <div class="sheet-titles"><strong id="kTitle">🍽️ המטבח</strong><span class="sub">בחרו אוכל והוא יוכן</span></div>
+    <button type="button" class="btn ghost small ksound" id="kSound" aria-label="צליל">🔊</button>
+  </div>
+  <div class="sheet-body scroll">
+    <div class="kstage" id="kStage">
+      <div class="kscene heat" id="kScene" aria-hidden="true">
+        <div class="kmw"></div>
+        <div class="kwin"></div>
+        <div class="kplate"></div>
+        <div class="kpanel"><div class="kclock" id="kClock">0:00</div><i></i><i></i><b></b></div>
+        <div class="kcounter"></div>
+        <div class="kdish"></div>
+        <div class="kboard"></div>
+        <div class="kfood" id="kFood"></div>
+        <div class="kglass"></div>
+        <div class="kcutfood" id="kCutFood"></div>
+        <div class="klines" id="kLines"></div>
+        <div class="kpieces" id="kPieces"></div>
+        <div class="kknife" id="kKnife"></div>
+        <div class="ksteam"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+    <p class="kmsg" id="kMsg" role="status" aria-live="polite">בחרו מה להכין</p>
+    <div class="kpick" id="kPick"></div>
+  </div>
+</div>
 <div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">
   <div class="sheet-head">
     <button type="button" class="btn ghost small" id="dnBack">חזרה</button>
