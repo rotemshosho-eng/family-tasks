@@ -639,3 +639,8 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 /* the kitchen stays inside the normal page: it sits above the bottom bar, which stays visible and usable */
 #kitchenSheet{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));padding-bottom:0}
 .bottomnav{z-index:16}
+
+/* the former popups are plain parts of the page: they open in place */
+.kpop{position:static;inset:auto;z-index:auto;background:none;display:block;animation:none;padding:0}
+.kpop[hidden]{display:none}
+.kpop-card,.kpop-card.tall{width:100%;max-height:none;min-height:0;overflow:visible;border-radius:16px;border:2px solid var(--line);padding:14px}

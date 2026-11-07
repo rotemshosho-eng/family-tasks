@@ -1878,7 +1878,7 @@ function buildStatic(){
   $('bf-save').addEventListener('click', saveBonus);
   $('pp-save').addEventListener('click', saveParentPoints);
   $('nudgeSend').addEventListener('click', nudgePeople);
-  $('dishLimitOpen').addEventListener('click', () => { $('dishPop').hidden = false; $('dishEvery').value = dishEveryMin(); $('dishEvery').focus(); });
+  $('dishLimitOpen').addEventListener('click', () => { $('dishPop').hidden = !$('dishPop').hidden; if ($('dishPop').hidden) return; $('dishEvery').value = dishEveryMin(); $('dishEvery').focus(); });
   $('dishPopClose').addEventListener('click', () => { $('dishPop').hidden = true; });
   $('dishPop').addEventListener('click', e => { if (e.target === $('dishPop')) $('dishPop').hidden = true; });
   $('dishEverySave').addEventListener('click', async () => { const v = Math.round(Number($('dishEvery').value)); if (!(v >= 1 && v <= 1440)){ toast('בין 1 ל-1440 דקות'); return; }
@@ -2813,7 +2813,7 @@ function kRenderPop(){
   }
   box.append(h('h3', null, 'בלי אוכל:'), h('button', { type:'button', class:'btn kcall', disabled: K.called, onclick:() => kCallAll() }, K.called ? '🍽️ קראת ✓' : '🍽️ בואו לאכול! (לכולם)'));
 }
-function kOpenPop(){ $('kPop').hidden = false; kRenderPop(); }
+function kOpenPop(){ const p = $('kPop'); p.hidden = !p.hidden; if (!p.hidden){ kRenderPop(); p.scrollIntoView({ block:'nearest', behavior:'smooth' }); } }
 function kClosePop(){ $('kPop').hidden = true; }
 const kFood = () => ({ ...K.cur, ...(K.withCall ? { call:true } : {}) });
 // the same food to every other member (the ones who already got it this window are skipped)
@@ -2868,6 +2868,7 @@ function renderKitchenMail(){
     h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : d.coming ? `${mName(d.to)} ${d.call ? 'בדרך 🏃' : 'מוכן לאכילה ✅'}` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
 }
 function kPick(f, dish = null){
+  try{ document.querySelector('#kitchenSheet .sheet-body').scrollTo({ top: 0, behavior: 'smooth' }); }catch(e){}
   $('kFoodPop').hidden = true;
   K.cur = f; K.dish = dish;
   const i = String(KITCHEN.indexOf(f));
@@ -2887,7 +2888,7 @@ function buildKitchen(){
   $('kFree').addEventListener('submit', e => { e.preventDefault(); kFree($('kFreeIn').value); });
   $('kEat').addEventListener('click', kEat);
   $('kComing').addEventListener('click', () => kComing(K.dish));
-  $('kFoodOpen').addEventListener('click', () => { $('kFoodPop').hidden = false; });
+  $('kFoodOpen').addEventListener('click', () => { const p = $('kFoodPop'); p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ block:'nearest', behavior:'smooth' }); });
   $('kFoodPopClose').addEventListener('click', () => { $('kFoodPop').hidden = true; });
   $('kFoodPop').addEventListener('click', e => { if (e.target === $('kFoodPop')) $('kFoodPop').hidden = true; });
   $('kCallBtn').addEventListener('click', kCallAll);

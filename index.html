@@ -284,6 +284,14 @@
     <section class="card" id="dishLimitBox">
       <h3 class="group-h">🍽️ המטבח</h3>
       <button type="button" class="btn ghost" id="dishLimitOpen">⏱️ הגבלת זמן בשליחת מנות</button>
+<div class="kpop" id="dishPop" hidden role="dialog" aria-modal="true" aria-labelledby="dishPopTitle">
+  <div class="kpop-card">
+    <div class="kpop-head"><strong id="dishPopTitle">⏱️ הגבלת זמן בשליחת מנות</strong><button type="button" class="btn ghost small" id="dishPopClose">סגירה</button></div>
+    <p class="sub">אפשר לשלוח מנה (או "בואו לאכול") לאותו אדם רק פעם בכמה דקות.</p>
+    <div class="field"><label for="dishEvery">פעם בכמה דקות</label><input type="number" id="dishEvery" min="1" max="1440" inputmode="numeric"></div>
+    <div><button type="button" class="btn" id="dishEverySave">שמירה</button></div>
+  </div>
+</div>
     </section>
 
     <section class="panel" id="joinsPanel" hidden>
@@ -457,14 +465,14 @@
     </div>
     <p class="kmsg" id="kMsg" role="status" aria-live="polite">בחרו מה להכין</p>
     <div class="ksend" id="kSend" hidden><button type="button" class="btn" id="kCallBtn">🍽️ בואו לאכול!</button><button type="button" class="btn ghost" id="kSendOpen">📤 שליחה למישהו</button></div>
-    <div class="keat" id="kEatWrap" hidden><button type="button" class="btn" id="kComing" hidden>🏃 בדרך!</button><button type="button" class="btn ghost" id="kEat">😋 אכלתי</button></div>
-    <div class="ksend"><button type="button" class="btn" id="kFoodOpen">🍴 לחמם או להכין</button></div>
-    <section class="kmail" id="kOutbox" hidden>
-      <h2>📤 מה ששלחתי</h2>
-      <div id="kOutboxList"></div>
-    </section>
+<div class="kpop" id="kPop" hidden role="dialog" aria-modal="true" aria-labelledby="kPopTitle">
+  <div class="kpop-card">
+    <div class="kpop-head"><strong id="kPopTitle">📤 שליחה</strong><button type="button" class="btn ghost small" id="kPopClose">סגירה</button></div>
+    <div id="kPopBody"></div>
   </div>
 </div>
+    <div class="keat" id="kEatWrap" hidden><button type="button" class="btn" id="kComing" hidden>🏃 בדרך!</button><button type="button" class="btn ghost" id="kEat">😋 אכלתי</button></div>
+    <div class="ksend"><button type="button" class="btn" id="kFoodOpen">🍴 לחמם או להכין</button></div>
 <div class="kpop" id="kFoodPop" hidden role="dialog" aria-modal="true" aria-labelledby="kFoodPopTitle">
   <div class="kpop-card tall">
     <div class="kpop-head"><strong id="kFoodPopTitle">🍴 מה להכין?</strong><button type="button" class="btn ghost small" id="kFoodPopClose">סגירה</button></div>
@@ -476,18 +484,10 @@
     <div class="kpick" id="kPick"></div>
   </div>
 </div>
-<div class="kpop" id="kPop" hidden role="dialog" aria-modal="true" aria-labelledby="kPopTitle">
-  <div class="kpop-card">
-    <div class="kpop-head"><strong id="kPopTitle">📤 שליחה</strong><button type="button" class="btn ghost small" id="kPopClose">סגירה</button></div>
-    <div id="kPopBody"></div>
-  </div>
-</div>
-<div class="kpop" id="dishPop" hidden role="dialog" aria-modal="true" aria-labelledby="dishPopTitle">
-  <div class="kpop-card">
-    <div class="kpop-head"><strong id="dishPopTitle">⏱️ הגבלת זמן בשליחת מנות</strong><button type="button" class="btn ghost small" id="dishPopClose">סגירה</button></div>
-    <p class="sub">אפשר לשלוח מנה (או "בואו לאכול") לאותו אדם רק פעם בכמה דקות.</p>
-    <div class="field"><label for="dishEvery">פעם בכמה דקות</label><input type="number" id="dishEvery" min="1" max="1440" inputmode="numeric"></div>
-    <div><button type="button" class="btn" id="dishEverySave">שמירה</button></div>
+    <section class="kmail" id="kOutbox" hidden>
+      <h2>📤 מה ששלחתי</h2>
+      <div id="kOutboxList"></div>
+    </section>
   </div>
 </div>
 <div class="sheet" id="dnSheet" hidden role="dialog" aria-modal="true" aria-labelledby="dnTitle">
