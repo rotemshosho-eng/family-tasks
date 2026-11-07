@@ -54,6 +54,8 @@ async function push(to, title, body, tag, link){
   }
   return sent;
 }
+// how many phones are registered for these members (0 = nobody can get a notification)
+const phonesOf = async ids => (await all('pushTokens')).filter(t => ids.includes(t.memberId)).length;
 const list3 = arr => arr.slice(0, 3).join(', ') + (arr.length > 3 ? ` ועוד ${arr.length - 3}` : '');
 
 /* ---------- chat ---------- */
@@ -180,8 +182,10 @@ export const onBump = onDocumentWritten('nudges/{id}', async ev => {
   const t = P.tasks.find(x => x.id === n.taskId); if (!t) return;
   const w = turnOf(t, F.members, P.logs);
   const to = ((t.boss || w === 'all') ? F.ids.filter(id => P.dueFor(t, id)) : [w]).filter(id => id !== n.by);
-  await push(to, `⚡ ${F.name(n.by)} ${F.members.find(m => m.id === n.by)?.gender === 'f' ? 'מזכירה' : 'מזכיר'}${t.boss ? ': משימת בוס!' : ''}`,
+  const phones = await phonesOf(to);
+  const pushed = await push(to, `⚡ ${F.name(n.by)} ${F.members.find(m => m.id === n.by)?.gender === 'f' ? 'מזכירה' : 'מזכיר'}${t.boss ? ': משימת בוס!' : ''}`,
     `${t.title}${t.boss ? ` · ${(t.points || 0) * 3} נקודות למי שעושה ראשון` : ''}`, `bump-${t.id}`);
+  await ev.data.after.ref.update({ pushed, phones, to });   // the bumper's app shows whether it went out (this write changes no "at", so it does not trigger again)
 });
 
 /* ---------- new family challenge / new monthly goal ---------- */
@@ -206,7 +210,9 @@ const fem = (F, id) => F.members.find(m => m.id === id)?.gender === 'f';
 export const onDish = onDocumentCreated('dishes/{id}', async ev => {
   const d = ev.data?.data(); if (!d || !d.to) return;
   const F = await family();
-  await push([d.to], `${d.e} ${F.name(d.from)} ${fem(F, d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`, 'פתחו את המטבח כדי לראות ולטעום', `dish-${ev.params.id}`, `${APP_URL}?kitchen=1`);
+  const phones = await phonesOf([d.to]);
+  const pushed = await push([d.to], `${d.e} ${F.name(d.from)} ${fem(F, d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`, 'פתחו את המטבח כדי לראות ולטעום', `dish-${ev.params.id}`, `${APP_URL}?kitchen=1`);
+  await ev.data.ref.update({ pushed, phones });   // the sender's app shows whether the notification went out (eaten is unchanged, so onDishEaten ignores this write)
 });
 export const onDishEaten = onDocumentUpdated('dishes/{id}', async ev => {
   const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.eaten === true || d.eaten !== true) return;

@@ -567,7 +567,7 @@ function renderProfileSheet(){
       h('div', { class:'ava-grid' },
         (isAdminMember(m.id) ? ADMIN_AVATARS : []).map(a => h('button', { type:'button', class:'ava-pick special', title:'תמונה של מנהל', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)),
         AVATARS.map(a => h('button', { type:'button', class:'ava-pick', 'aria-pressed':String(S.profiles[m.id]?.avatar === a), onclick:() => setAvatar(m.id, a) }, a)))) : null,
-    own ? notifPanel(m.id) : null,
+    (S.boundId === m.id || (S.isAdmin && !S.boundId && m.id === myMemberId())) ? notifPanel(m.id) : null,
     h('section', { class:'panel' }, h('h2', null, 'מה נעשה לאחרונה'),
       st.recent.length ? h('div', null, st.recent.map(l => { const p = Number(l.points) || 0; const [, mo, da] = (l.day || '--').split('-');
         return h('div', { class:'arow' }, h('div', { class:'t' }, h('strong', null, l.kind === 'bonus' ? `עדכון: ${l.title}${l.by ? ` (ע״י ${mName(l.by)})` : ''}${l.flag ? ' 🚩' : ''}` : l.title), h('small', null, `${+da}.${+mo}${l.minutes ? ` · ${l.minutes} דק׳` : ''}${l.count ? ` · ${l.count} יח׳` : ''}`)),
@@ -588,8 +588,8 @@ function notifPanel(memberId){
     : 'הדפדפן הזה לא תומך בהתראות.';
   else if (Notification.permission === 'denied') note = 'ההתראות חסומות בהגדרות הטלפון. כדי לקבל אותן, מאפשרים התראות לאפליקציה בהגדרות.';
   else if (token && Notification.permission === 'granted'){
-    note = 'התראות פעילות בטלפון הזה: הודעות בצ\'אט, משימות חדשות ותזכורת בערב על מה שנשאר.';
-    btn = h('button', { type:'button', class:'btn ghost', onclick:() => disablePush() }, 'כיבוי התראות');
+    note = 'התראות פעילות בטלפון הזה, בשם ' + (member(memberId)?.name || '') + ': הודעות בצ\'אט, משימות חדשות, מנות מהמטבח, הקפצות ותזכורת בערב. אם התראות לא מגיעות, "רישום מחדש" קושר את הטלפון הזה אליך.';
+    btn = h('div', { class:'row' }, h('button', { type:'button', class:'btn ghost', onclick:() => disablePush() }, 'כיבוי התראות'), h('button', { type:'button', class:'btn ghost', onclick:() => enablePush(memberId) }, 'רישום מחדש בשם ' + (member(memberId)?.name || '')));
   } else {
     note = 'קבלת התראה על הודעות בצ\'אט, משימות חדשות ותזכורת בערב על מה שנשאר.';
     btn = h('button', { type:'button', class:'btn', onclick:() => enablePush(memberId) }, 'הפעלת התראות');
@@ -1570,6 +1570,17 @@ async function nudgePeople(){
   const to = [...S.nudgePick].filter(id => member(id)); if (!to.length){ toast('בחרו למי להקפיץ'); return; }
   try{ await sendNudge({ type:'people', to }); S.nudgePick.clear(); toast(`📣 נשלח. ${to.map(mName).join(', ')} יקבלו התראה בדקות הקרובות`); render(); }catch(e){ fail(e); }
 }
+// a few seconds later: the server's report on that bump (who it went to, or why not)
+async function bumpFeedback(id, t, since){
+  for (let i = 0; i < 5; i++){
+    await new Promise(r => setTimeout(r, 1600));
+    try{ const s = await getDoc(doc(db, 'nudges', 'bump__' + id)); const r = s.exists() ? s.data() : null;
+      if (r && r.at >= since && r.pushed !== undefined){
+        const names = (r.to || []).map(mName).join(', ');
+        toast(!(r.to || []).length ? `אין למי להקפיץ: ${t.title} כבר בוצעה` : !r.phones ? `🔕 ל${names} אין התראות מופעלות בטלפון` : r.pushed ? `📣 נשלחה התראה ל${names}` : `⚠️ ההתראה ל${names} לא הגיעה`); return; } }catch(e){}
+  }
+  toast('⚠️ השרת לא אישר שליחת התראה. ייתכן שההתראות בשרת לא פעילות.');
+}
 async function nudgeTask(t){
   try{
     if (S.isAdmin){ await sendNudge({ type:'task', taskId:t.id }); toast(`📣 ${t.title}: ההתראה בדרך`); return; }
@@ -1578,8 +1589,8 @@ async function nudgeTask(t){
     let last = 0; try{ const s = await getDoc(doc(db, 'nudges', 'bump__' + b.id)); last = s.exists() ? (s.data().at || 0) : 0; }catch(e){}
     const wait = b.limited ? last + b.every * 60000 - Date.now() : 0;
     if (wait > 0){ toast(`כבר הקפצת. אפשר שוב בעוד ${Math.ceil(wait / 60000)} דק׳`); return; }
-    await setDoc(doc(db, 'nudges', 'bump__' + b.id), { by: b.id, taskId: t.id, at: Date.now() });
-    toast(`📣 ${t.title}: ההתראה בדרך`);
+    const at = Date.now(); await setDoc(doc(db, 'nudges', 'bump__' + b.id), { by: b.id, taskId: t.id, at });
+    toast(`📣 ${t.title}: ההתראה בדרך`); bumpFeedback(b.id, t, at);
   }catch(e){ fail(e); }
 }
 // the family challenge: the admin, and whoever the admin allowed (some with a time limit)
@@ -2745,11 +2756,19 @@ const kRecent = d => d.at > Date.now() - 3 * 864e5;
 const kInbox = () => { const me = kMe(); return me ? S.dishes.filter(d => d.to === me && !d.eaten && kRecent(d)).sort((a, b) => b.at - a.at) : []; };
 const kOutbox = () => { const me = kMe(); return me ? S.dishes.filter(d => d.from === me && kRecent(d)).sort((a, b) => b.at - a.at).slice(0, 6) : []; };
 const kFem = id => member(id)?.gender === 'f';
+// what the server reports about the notification of a dish: sent, nobody has notifications on, failed, or no answer at all
+function kPushNote(d){
+  if (d.pushed > 0) return ' · 🔔 נשלחה התראה';
+  if (d.pushed === 0) return d.phones ? ' · ⚠️ ההתראה לא הגיעה' : ` · 🔕 ל${mName(d.to)} אין התראות מופעלות בטלפון`;
+  return Date.now() - d.at > 60000 ? ' · ⚠️ השרת לא אישר שליחת התראה' : '';
+}
 const kWhen = at => { const d = new Date(at); const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`; return dstr(d) === today() ? `היום ${hm}` : `${d.getDate()}.${d.getMonth() + 1} ${hm}`; };
 // a dish for me that arrives while the app is open pops up as a message (only fresh ones, so a cache replay stays quiet)
 function kDishesIn(list){
-  const prev = new Set(S.dishes.map(d => d.id)); const me = kMe();
+  const prevAll = new Map(S.dishes.map(d => [d.id, d])), prev = new Set(prevAll.keys()); const me = kMe();
   if (S.dishesLoaded && me) for (const d of list) if (!prev.has(d.id) && d.to === me && !d.eaten && d.at > Date.now() - 120000) toast(`${d.e} ${mName(d.from)} ${kFem(d.from) ? 'שלחה' : 'שלח'} לך ${d.n}`);
+  if (S.dishesLoaded && me) for (const d of list){ const was = prevAll.get(d.id); if (d.from === me && was && was.pushed === undefined && d.pushed === 0 && Date.now() - d.at < 120000)
+    toast(d.phones ? `⚠️ ההתראה ל${mName(d.to)} לא הגיעה` : `🔕 ל${mName(d.to)} אין התראות מופעלות בטלפון. המנה נשלחה, אבל לא תגיע התראה`); }
   S.dishes = list; S.dishesLoaded = true;
 }
 function kDone(){ kMsg('בתיאבון! 🍽️'); K.ready = true; kRenderSend(); }
@@ -2789,7 +2808,7 @@ function renderKitchenMail(){
     h('button', { type:'button', class:'btn small', onclick:() => kOpenDish(d) }, 'פתחו'))));
   $('kOutbox').hidden = !out.length; const O = $('kOutboxList'); O.replaceChildren();
   out.forEach(d => O.append(h('div', { class:'arow' }, h('span', { class:'ke', 'aria-hidden':'true' }, d.e),
-    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}`)))));
+    h('div', { class:'t' }, h('strong', null, `${d.n} ל${mName(d.to)}`), h('small', null, d.eaten ? `${mName(d.to)} ${kFem(d.to) ? 'אכלה' : 'אכל'} ✓` : `מחכה ל${mName(d.to)} · ${kWhen(d.at)}${kPushNote(d)}`)))));
 }
 function kPick(f, dish = null){
   K.cur = f; K.dish = dish;
