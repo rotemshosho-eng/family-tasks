@@ -1943,7 +1943,7 @@ const KITCHEN = [
   { e:'🍅', n:'עגבנייה', a:'cut' }, { e:'🍊', n:'תפוז', a:'cut' }, { e:'🍓', n:'תות', a:'cut' }, { e:'🥑', n:'אבוקדו', a:'cut' }, { e:'🍍', n:'אננס', a:'cut' }, { e:'🧀', n:'גבינה', a:'cut' },
   { e:'🍞', n:'לחם', a:'toasting' }, { e:'🥯', n:'בייגל', a:'toasting' }, { e:'🥐', n:'קרואסון', a:'toasting' },
   { e:'🥛', n:'חלב', a:'pour', c:'#FFFFFF' }, { e:'🍊', n:'מיץ תפוזים', a:'pour', c:'#FFA726' }, { e:'🍫', n:'שוקו', a:'pour', c:'#6D4C41' }, { e:'☕', n:'קפה', a:'pour', c:'#6B4226' }, { e:'🍵', n:'תה', a:'pour', c:'#C98A4B' }, { e:'💧', n:'מים', a:'pour', c:'#7FD1FF' }, { e:'🍇', n:'מיץ ענבים', a:'pour', c:'#8E3FA8' },
-  { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' },
+  { e:'🥚', n:'ביצה', a:'fry' }, { e:'🥞', n:'פנקייק', a:'fry' }, { e:'🥩', n:'סטייק', a:'fry' }, { e:'🍄', n:'פטריות', a:'fry' }, { e:'🥡', n:'מוקפץ', a:'fry' },
   { e:'🍌', n:'שייק בננה', a:'blend', c:'#F6E27A' }, { e:'🍓', n:'שייק תות', a:'blend', c:'#F27A9A' }, { e:'🥭', n:'שייק מנגו', a:'blend', c:'#FFB300' }, { e:'🫐', n:'שייק אוכמניות', a:'blend', c:'#5B6BC0' },
   { e:'🍫', n:'מילקשייק שוקולד', a:'blend', c:'#6D4C41' }, { e:'🥬', n:'סמוטי ירוק', a:'blend', c:'#9CCB4A' },
   { e:'🍪', n:'עוגיות', a:'bake' }, { e:'🍰', n:'עוגה', a:'bake' }, { e:'🧁', n:'קאפקייק', a:'bake' }, { e:'🥧', n:'פאי', a:'bake' },
@@ -2405,6 +2405,35 @@ async function kPour(f, c){
   }
 }
 
+
+/* ---------- מוקפץ: a hand-drawn stir-fry (noodles, chicken, peppers, broccoli, carrot, sesame), used instead of the 🥡 emoji ---------- */
+// drawn around (0,0), about 120 x 80, so it sits where the emoji text would
+function kMokpatz(id = ''){
+  const nood = (d, w, c) => `<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+  const N = ['M-50 8 C-38 -10 -24 18 -10 0 C4 -18 16 16 30 -2 C40 -14 48 4 54 -4', 'M-46 -4 C-30 -22 -18 8 -2 -12 C12 -30 24 4 40 -14',
+    'M-40 18 C-26 4 -12 26 4 10 C20 -6 32 22 48 8', 'M-34 -16 C-20 -30 -6 -8 10 -24 C22 -34 34 -18 42 -26', 'M-52 -2 C-46 16 -30 22 -18 12'];
+  const noodles = N.map(d => nood(d, 7.5, '#B9822F')).join('') + N.map(d => nood(d, 5.5, '#E6B04F')).join('') + N.slice(0, 3).map(d => nood(d, 1.6, '#FFE29A')).join('');
+  const chicken = ([x, y, r]) => `<g transform="translate(${x} ${y}) rotate(${r})"><rect x="-8" y="-6" width="16" height="12" rx="4" fill="#C9874A"/><rect x="-8" y="-6" width="16" height="5" rx="3" fill="#E3A866"/><path d="M-6 3 L6 3" stroke="#8C5A2C" stroke-width="1.4" stroke-linecap="round"/></g>`;
+  const pepper = ([x, y, r, c]) => `<path transform="translate(${x} ${y}) rotate(${r})" d="M-11 -3 Q0 -7 11 -3 L11 2 Q0 -2 -11 2 Z" fill="${c}" stroke="#00000022" stroke-width=".8"/>`;
+  const broc = ([x, y, s]) => `<g transform="translate(${x} ${y}) scale(${s})"><rect x="-2.5" y="0" width="5" height="10" rx="2" fill="#8FBF4D"/><circle cx="-6" cy="-2" r="6" fill="#2E8B3E"/><circle cx="6" cy="-2" r="6" fill="#2E8B3E"/><circle cx="0" cy="-7" r="7" fill="#3BA34B"/><circle cx="-2" cy="-9" r="2" fill="#6CCB6B"/></g>`;
+  const carrot = ([x, y]) => `<g transform="translate(${x} ${y})"><ellipse rx="6.5" ry="4" fill="#F2842B"/><ellipse rx="3" ry="1.8" fill="#FFB067"/></g>`;
+  const onion = ([x, y]) => `<circle cx="${x}" cy="${y}" r="3.6" fill="none" stroke="#7CCB5A" stroke-width="2"/>`;
+  const sesame = Array.from({ length: 16 }, (_, i) => { const x = -42 + (i * 37) % 86, y = -24 + (i * 23) % 44; return `<ellipse cx="${x}" cy="${y}" rx="1.6" ry="1" fill="#FFF6DD" transform="rotate(${i * 40} ${x} ${y})"/>`; }).join('');
+  return `<g ${id ? `id="${id}"` : ''}>
+    <ellipse cx="0" cy="22" rx="58" ry="12" fill="#000" opacity=".12"/>
+    ${noodles}
+    ${[[-24, -6, 15], [16, 8, -20], [32, -16, 30], [-8, 14, -10]].map(chicken).join('')}
+    ${[[-34, 6, 20, '#E53935'], [6, -20, -15, '#E53935'], [24, 14, 35, '#FBC02D'], [-14, -24, 10, '#43A047']].map(pepper).join('')}
+    ${[[42, 2, .9], [-40, -14, .8], [0, 2, .85]].map(broc).join('')}
+    ${[[-22, 20], [12, -4], [44, -24], [-46, 10]].map(carrot).join('')}
+    ${[[-4, -10], [26, -4], [-30, -2], [10, 20]].map(onion).join('')}
+    ${sesame}
+  </g>`;
+}
+const kIsMokpatz = f => f && f.e === '🥡';
+// a small picture of it for the food buttons
+const kMokpatzIcon = () => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '-62 -42 124 80'); s.setAttribute('width', '30'); s.setAttribute('height', '20'); s.setAttribute('aria-hidden', 'true'); s.innerHTML = kMokpatz(); return s; };
+
 /* ---------- frying: gas flames under a pan, the food drops in and sizzles, flips once; an egg cracks open ---------- */
 KSCENE.fry = f => {
   const egg = f.e === '🥚', fl = i => `<path class="fl" d="M0 0 Q-6 -9 -2 -17 Q1 -10 3 -19 Q8 -9 0 0Z" fill="url(#gFlame)" style="transform:translate(${64 + i * 28}px,262px) scale(1.5);opacity:0"/>`;
@@ -2423,7 +2452,9 @@ KSCENE.fry = f => {
 </g>
 <ellipse id="foodShadow" cx="140" cy="216" rx="27" ry="6" fill="#000" filter="url(#fBlur2)" style="opacity:0"/>
 ${egg ? `<g id="eggG" style="transform:translate(140px,208px) scale(0)"><path d="M-48 2 C-52 -22 -22 -34 2 -30 C28 -36 54 -22 50 0 C56 22 26 32 -2 28 C-28 34 -54 26 -48 2 Z" fill="#fff" stroke="#E9E4D8" stroke-width="1"/><path d="M-40 8 C-38 22 -10 26 8 24" fill="none" stroke="#000" stroke-opacity=".06" stroke-width="5"/><g id="yolk" style="transform-origin:4px -4px"><circle cx="4" cy="-4" r="15" fill="url(#gYolk)"/><circle cx="-1" cy="-9" r="4" fill="#fff" opacity=".6"/></g></g>` : ''}
-<g id="foodG" style="transform:translate(140px,-60px) scale(1,1) rotate(0deg)">${kFoodLayers(f.e, 58, 'kFood')}</g>`;
+<g id="foodG" style="transform:translate(140px,-60px) scale(1,1) rotate(0deg)">${kIsMokpatz(f)
+  ? `<g class="pale" transform="scale(.82)">${kMokpatz()}</g><g class="toasted" opacity="0" filter="url(#fToast)" transform="scale(.82)">${kMokpatz()}</g><text id="kFood" ${kTxt} font-size="1" opacity="0">${f.e}</text>`
+  : kFoodLayers(f.e, 58, 'kFood')}</g>`;
 };
 async function kFry(f, c){
   const { alive, z, a, loop } = c, q = kq, egg = f.e === '🥚';
@@ -2609,6 +2640,7 @@ const KRUN = { heat: kHeat, cut: kCut, toasting: kToast, pour: kPour, fry: kFry,
 const KFREE_HINT = 'אפשר גם להקליד אימוג׳י, כמו ☕';
 // [emoji, action, words (comma separated; punctuation is ignored), liquid colour when it is poured or made into a juice]
 const KDICT = [
+  ['🥡', 'fry', 'מוקפץ,מוקפצים,מוקפצת,נודלס,נודלס מוקפצים,ווק,אטריות מוקפצות,פד תאי,stir fry,wok,noodles'],
   ['☕', 'pour', 'קפה,נסקפה,נס קפה,אספרסו,קפוצינו,לאטה,הפוך,קפה הפוך,coffee,espresso,cappuccino,latte,americano', '#6B4226'],
   ['☕', 'pour', 'קקאו,שוקו חם,הוט שוקולד,cocoa,hot chocolate', '#6D4C41'],
   ['🍵', 'pour', 'תה,תה חם,תה נענע,נענע,tea,matcha,מאצה', '#C98A4B'],
@@ -2881,7 +2913,7 @@ function buildKitchen(){
   const box = $('kPick'); box.replaceChildren();
   for (const [action, title] of KACTIONS)
     box.append(h('p', { class:'sub' }, title), h('div', { class:'chips' }, KITCHEN.filter(f => f.a === action).map(f =>
-      h('button', { type:'button', class:'chip kchip', 'data-i':KITCHEN.indexOf(f), 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, f.e), f.n))));
+      h('button', { type:'button', class:'chip kchip', 'data-i':KITCHEN.indexOf(f), 'aria-pressed':'false', onclick:() => kPick(f) }, h('span', { class:'ke', 'aria-hidden':'true' }, kIsMokpatz(f) ? kMokpatzIcon() : f.e), f.n))));
   kSoundIcon();
   $('kBack').addEventListener('click', () => { S.kitchenOpen = false; render(); });
   window.addEventListener('resize', () => { if (K.shown) kFit(); });
