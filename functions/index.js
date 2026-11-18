@@ -220,10 +220,10 @@ export const onDishComing = onDocumentUpdated('dishes/{id}', async ev => {
   const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.coming === true || d.coming !== true) return;
   const F = await family();
   const call = d.call === true || d.n === 'בואו לאכול!';
-  await push([d.from], call ? `🏃 ${F.name(d.to)} בדרך לאכול` : `✅ ${d.e} ${d.n}: מוכן לאכילה`, call ? (d.n === 'בואו לאכול!' ? 'קראת ו' + F.name(d.to) + (fem(F, d.to) ? ' באה' : ' בא') : `${d.e} ${d.n}`) : `${F.name(d.to)} ${fem(F, d.to) ? 'סימנה' : 'סימן'} שזה מוכן`, `dish-coming-${ev.params.id}`);
+  await push([d.from], call ? `🏃 ${F.name(d.to)} בדרך לאכול` : `✅ ${d.e} ${d.n}: מוכן לאכילה`, call ? (d.n === 'בואו לאכול!' ? 'קראת ו' + F.name(d.to) + (fem(F, d.to) ? ' באה' : ' בא') : `${d.e} ${d.n}`) : `${F.name(d.to)} ${fem(F, d.to) ? 'סימנה' : 'סימן'} שזה מוכן`, `dish-coming-${ev.params.id}`, `${APP_URL}?kitchen=1`);
 });
 export const onDishEaten = onDocumentUpdated('dishes/{id}', async ev => {
   const b = ev.data?.before.data(), d = ev.data?.after.data(); if (!b || !d || b.eaten === true || d.eaten !== true) return;
   const F = await family();
-  await push([d.from], `😋 ${F.name(d.to)} ${fem(F, d.to) ? 'אכלה' : 'אכל'} את ${d.n} שלך`, 'בתיאבון!', `dish-eaten-${ev.params.id}`);
+  await push([d.from], `😋 ${F.name(d.to)} ${fem(F, d.to) ? 'אכלה' : 'אכל'} את ${d.n} שלך`, 'בתיאבון!', `dish-eaten-${ev.params.id}`, `${APP_URL}?kitchen=1`);
 });
