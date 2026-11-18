@@ -249,7 +249,7 @@ function render(){
   { const nRev = S.logs.filter(l => waiting(l) && canApprove(l)).length; const tb = $('tabs').querySelector('[data-tab="tasks"]');
     tb.lastChild.textContent = nRev ? `משימות (${nRev})` : 'משימות'; }
   $('tabs').querySelector('[data-tab="admin"] .nl').textContent = nPend ? `ניהול (${nPend})` : 'ניהול';
-  renderChatSheet(); renderProfileSheet(); updateSplash(); renderKitchen();
+  renderChatSheet(); renderProfileSheet(); updateSplash(); renderKitchen(); partyCheck();
   $('sgSec').hidden = !S.user || (S.isAdmin && !plain) || !bound || needLogin;
   if (needLogin) return;
   renderWho(); renderBoard(); renderToday(); renderProgress(); renderGoal(); renderAllTasks(); renderReview(); renderRewards(); renderExchanges(); renderScope(); renderBoss(); renderChallenge(); checkNewBadges(); renderComplaints(); renderDevNotes(); renderParentPoints(); renderParentPointsAdmin(); renderNudgeAdmin(); if ($('perm-parentPts')) $('perm-parentPts').checked = parentPointsOn(); renderPending(); renderAuth(); syncSelects();
@@ -1677,8 +1677,9 @@ function renderAdminLists(){
     M.append(h('div', { class:'arow' },
       h('div', { class:'ava sm', style:`background:${m.color}` }, avatarOf(m.id)),
       h('div', { class:'t' }, h('strong', null, m.name),
-        h('small', { class: (pin || m.uid) ? '' : 'err' }, [isAdminMember(m.id) ? 'מנהל' : (isParentMember(m.id) ? 'הורה' : 'ילד'), m.uid ? `גוגל: ${m.email || 'מחובר'}` : null, pin ? `קוד כניסה: ${pin}` : (m.uid ? null : 'אין קוד ואין גוגל: לא יכול/ה להיכנס')].filter(Boolean).join(' · '))),
+        h('small', { class: (pin || m.uid) ? '' : 'err' }, [isAdminMember(m.id) ? 'מנהל' : (isParentMember(m.id) ? 'הורה' : 'ילד'), m.birthday ? `🎂 ${bdLabel(m)}` : null, m.uid ? `גוגל: ${m.email || 'מחובר'}` : null, pin ? `קוד כניסה: ${pin}` : (m.uid ? null : 'אין קוד ואין גוגל: לא יכול/ה להיכנס')].filter(Boolean).join(' · '))),
       h('button', { type:'button', class:'btn ghost small', onclick:() => editMember(m) }, 'עריכה'),
+      h('button', { type:'button', class:'btn ghost small', onclick:() => celebrate(m) }, '🎂 חגגו'),
       m.uid && roleOf(m.id) !== 'admin' ? armedBtn('ug'+m.id, 'ניתוק גוגל', () => unlinkGoogle(m)) : null,
       armedBtn('m'+m.id, 'הסרה', async () => { try{
         const b = writeBatch(db); b.delete(doc(db,'members',m.id)); b.delete(doc(db,'pins',m.id)); await b.commit(); toast(`${m.name} הוסר/ה`);
@@ -1763,11 +1764,11 @@ async function saveTask(){
 }
 function editMember(m){
   openAccFor($('mf-name'));
-  S.editMember = m.id; $('mf-watch').checked = m.watch === true; $('mf-markfor').dataset.want = JSON.stringify(Array.isArray(m.canMarkFor) ? m.canMarkFor : null); $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-gender').value = m.gender === 'f' ? 'f' : 'm'; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false; fillMarkFor();
+  S.editMember = m.id; $('mf-watch').checked = m.watch === true; $('mf-markfor').dataset.want = JSON.stringify(Array.isArray(m.canMarkFor) ? m.canMarkFor : null); $('mf-name').value = m.name; $('mf-pin').value = S.pins[m.id] || ''; $('mf-role').value = roleOf(m.id); $('mf-gender').value = m.gender === 'f' ? 'f' : 'm'; $('mf-bday').value = m.birthday || ''; $('mf-save').textContent = 'שמירה'; $('mf-cancel').hidden = false; fillMarkFor();
   const i = COLORS.indexOf(m.color); if (i >= 0) $('mf-color-'+i).checked = true; $('mf-name').focus();
 }
 function resetMemberForm(){
-  S.editMember = null; $('mf-watch').checked = false; $('mf-markfor').dataset.want = 'null'; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-gender').value = 'm'; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
+  S.editMember = null; $('mf-watch').checked = false; $('mf-markfor').dataset.want = 'null'; $('mf-name').value = ''; $('mf-pin').value = ''; $('mf-role').value = 'child'; $('mf-gender').value = 'm'; $('mf-bday').value = ''; $('mf-save').textContent = 'הוספה'; $('mf-cancel').hidden = true;
   const used = new Set(S.members.map(m => m.color)); const i = Math.max(0, COLORS.findIndex(c => !used.has(c))); $('mf-color-'+i).checked = true;
   fillMarkFor();
 }
@@ -1789,7 +1790,8 @@ async function saveMember(){
     const ref = S.editMember ? doc(db,'members',S.editMember) : doc(collection(db,'members'));
     const role = $('mf-role').value || 'child'; const admin = role === 'admin'; const gender = $('mf-gender').value === 'f' ? 'f' : 'm';
     const extra = { watch: $('mf-watch').checked, ...(role === 'parent' ? { canMarkFor: [...$('mf-markfor').querySelectorAll('input:checked')].map(i => i.value) } : {}) };
-    if (S.editMember) b.update(ref, { name, color, role, admin, gender, ...extra }); else b.set(ref, { name, color, role, admin, gender, ...extra, order: Date.now() });
+    const bd = /^\d{4}-\d{2}-\d{2}$/.test($('mf-bday').value) ? $('mf-bday').value : '';
+    if (S.editMember) b.update(ref, { name, color, role, admin, gender, birthday: bd || deleteField(), ...extra }); else b.set(ref, { name, color, role, admin, gender, ...(bd ? { birthday: bd } : {}), ...extra, order: Date.now() });
     if (pin) b.set(doc(db,'pins',ref.id), { pin });
     await b.commit();
     toast(S.editMember ? 'נשמר' : `${name} נוסף/ה` + (pin ? '' : '. בלי קוד אי אפשר להיכנס בשמו/ה.'));
@@ -1957,6 +1959,111 @@ const kRnd = (a, b) => a + Math.random() * (b - a);
 const kTx = (x, y, s = 1, sy) => `translate(${x}px,${y}px) scale(${s}${sy != null ? ',' + sy : ''})`;
 const kq = s => $('kScene').querySelector(s);
 const kHold = stop => { K.stops.push(stop); return stop; };
+
+/* ---------- birthday party: confetti, balloons, a cake with candles, a happy-birthday tune, wishes ---------- */
+// member.birthday = 'YYYY-MM-DD' (set by the admin). The party opens by itself once a day on the birthday, and whenever the admin presses 🎂 (settings/party).
+const PARTY = { open: false };
+const bdParts = m => { const x = /^(\d{4})-(\d{2})-(\d{2})$/.exec((m && m.birthday) || ''); return x ? { y: +x[1], m: +x[2], d: +x[3] } : null; };
+const bdToday = m => { const b = bdParts(m); if (!b) return false; const n = new Date(); return b.m === n.getMonth() + 1 && b.d === n.getDate(); };
+const bdLabel = m => { const b = bdParts(m); return b ? `${b.d}.${b.m}` : ''; };
+const bdAge = m => { const b = bdParts(m); if (!b) return 0; const a = new Date().getFullYear() - b.y; return a >= 1 && a <= 120 ? a : 0; };
+async function celebrate(m){
+  try{ await setDoc(doc(db, 'settings', 'party'), { memberId: m.id, at: Date.now(), by: myMemberId() || '' }); toast(`🎂 חוגגים ל${m.name}!`); }
+  catch(e){ fail(e); }
+}
+// render() calls this on every update: it only opens the party when it is due and never while one is open
+function partyCheck(){
+  if (PARTY.open || !S.user || !(S.boundId || S.isAdmin) || !S.members.length) return;
+  const p = S.party;
+  if (p && p.at > Number(store.get('ft-party-at') || 0)){
+    store.set('ft-party-at', String(p.at));
+    const m = S.members.find(x => x.id === p.memberId);
+    if (m && Date.now() - p.at < 15 * 60000){ showParty(m); return; }
+  }
+  for (const m of S.members) if (bdToday(m) && store.get(`ft-party-${m.id}-${today()}`) !== '1'){ store.set(`ft-party-${m.id}-${today()}`, '1'); showParty(m); return; }
+}
+// confetti on a canvas: a steady fall, plus bursts when the candles go out
+function partyConfetti(cv, wrap){
+  const ctx = cv.getContext('2d'), dpr = Math.min(2, window.devicePixelRatio || 1), cols = ['#FF4D8D', '#FFC93C', '#3DDC97', '#4DA3FF', '#B26BFF', '#FF8A3D', '#FFFFFF'];
+  let W = 0, H = 0; const ps = [];
+  const fit = () => { W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  const spawn = (n, x, y, burst) => { for (let i = 0; i < n; i++) ps.push({ x: x ?? Math.random() * W, y: y ?? -12, vx: burst ? (Math.random() - .5) * 15 : (Math.random() - .5) * 2, vy: burst ? -Math.random() * 13 - 4 : Math.random() * 2 + 1.5,
+    w: 6 + Math.random() * 7, h: 3 + Math.random() * 5, r: Math.random() * 6.28, vr: (Math.random() - .5) * .3, c: cols[Math.floor(Math.random() * cols.length)], round: Math.random() < .2, life: Math.random() * 50 }); };
+  fit(); spawn(130);
+  let last = performance.now(), emit = 0;
+  const tick = t => {
+    if (!wrap.isConnected) return;
+    const dt = Math.min(2.5, (t - last) / 16.7); last = t; ctx.clearRect(0, 0, W, H);
+    emit += dt; if (emit > 3 && ps.length < 280){ spawn(3); emit = 0; }
+    for (let i = ps.length - 1; i >= 0; i--){
+      const p = ps[i]; p.vy += .12 * dt; p.vx *= .995; p.x += p.vx * dt + Math.sin(p.life * .08) * .6; p.y += p.vy * dt; p.r += p.vr * dt; p.life += dt;
+      if (p.y > H + 20){ ps.splice(i, 1); continue; }
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c;
+      if (p.round){ ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, 6.28); ctx.fill(); } else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return { burst(){ spawn(170, W / 2, H * .55, true); }, fit };
+}
+// "Happy birthday to you", synthesized (frequency, beats); returns the functions that stop it
+const PARTY_TUNE = [[392, .75], [392, .25], [440, 1], [392, 1], [523, 1], [494, 2], [392, .75], [392, .25], [440, 1], [392, 1], [587, 1], [523, 2],
+  [392, .75], [392, .25], [784, 1], [659, 1], [523, 1], [494, 1], [440, 2], [698, .75], [698, .25], [659, 1], [523, 1], [587, 1], [523, 2]];
+function partySong(){
+  const stops = []; let t = 0; const beat = .42;
+  for (const [f, b] of PARTY_TUNE){ stops.push(kTone(f, b * beat * .95, { type: 'triangle', vol: .09, delay: t, attack: .01 }), kTone(f * 2, b * beat * .9, { vol: .03, delay: t })); t += b * beat; }
+  return stops;
+}
+function partyFanfare(){ [523, 659, 784, 1047, 1319].forEach((f, i) => kTone(f, .35, { type: 'triangle', vol: .1, delay: i * .09 })); kNoise(.9, { freq: 5000, to: 9000, vol: .04, delay: .1 }); }
+const PARTY_CAKE = (() => {
+  const xs = [112, 131, 150, 169, 188], cc = ['#4DA3FF', '#FF4D8D', '#3DDC97', '#B26BFF', '#FF8A3D'];
+  return `<svg viewBox="0 0 300 270" aria-hidden="true">
+<ellipse cx="150" cy="250" rx="140" ry="14" fill="#fff" opacity=".9"/><ellipse cx="150" cy="246" rx="120" ry="10" fill="#e9e4f5"/>
+<rect x="30" y="170" width="240" height="72" rx="16" fill="#8B4A2B"/>
+<path d="M30 186 Q45 214 62 188 Q78 220 98 190 Q115 222 135 188 Q152 218 170 190 Q188 222 206 188 Q224 216 240 190 Q256 210 270 186 L270 172 Q270 160 258 160 H42 Q30 160 30 172Z" fill="#FF8FB8"/>
+<rect x="62" y="110" width="176" height="62" rx="14" fill="#A85D36"/>
+<path d="M62 126 Q76 150 92 128 Q108 154 126 128 Q142 152 158 128 Q176 154 192 128 Q208 150 222 128 Q232 142 238 126 L238 114 Q238 102 228 102 H72 Q62 102 62 114Z" fill="#FFD1E3"/>
+<rect x="96" y="58" width="108" height="54" rx="12" fill="#C97B4B"/>
+<path d="M96 72 Q108 94 122 74 Q136 98 150 74 Q164 98 178 74 Q192 94 204 72 L204 64 Q204 52 194 52 H106 Q96 52 96 64Z" fill="#FFF3C4"/>
+<g fill="#FF4D8D"><circle cx="60" cy="204" r="4"/><circle cx="110" cy="222" r="4"/><circle cx="180" cy="206" r="4"/><circle cx="238" cy="224" r="4"/></g>
+<g fill="#4DA3FF"><circle cx="84" cy="228" r="4"/><circle cx="148" cy="210" r="4"/><circle cx="214" cy="212" r="4"/></g>
+${xs.map((x, i) => `<rect x="${x - 3}" y="32" width="6" height="22" rx="2" fill="${cc[i]}"/><path class="flame" d="M${x} 10 Q${x + 8} 22 ${x} 32 Q${x - 8} 22 ${x} 10Z" fill="#FFB020"/><circle class="smoke" cx="${x}" cy="14" r="5" fill="#fff"/>`).join('')}
+</svg>`;
+})();
+async function partyWish(m, text, btn){
+  const me = myMemberId(); if (!me){ toast('בחרו למעלה מי משתמש'); return; }
+  btn.disabled = true;
+  try{ await addDoc(collection(db, 'messages'), { taskId: 'general', memberId: me, text: `${text}, ${m.name}!`, at: serverTimestamp() }); toast('הברכה נשלחה 💌'); }
+  catch(e){ btn.disabled = false; fail(e); }
+}
+function showParty(m){
+  if (PARTY.open) return; PARTY.open = true;
+  const me = myMemberId(), mine = me === m.id, age = bdAge(m), fem = m.gender === 'f';
+  const colors = ['#FF4D8D', '#FFC93C', '#3DDC97', '#4DA3FF', '#B26BFF', '#FF8A3D'];
+  const wrap = h('div', { class: 'party', role: 'dialog', 'aria-modal': 'true', 'aria-label': `יום הולדת ל${m.name}` });
+  const cv = h('canvas', { class: 'party-fx' });
+  const balloons = Array.from({ length: 12 }, (_, i) => h('span', { class: 'pb', style: `left:${4 + i * 8}%;--c:${colors[i % colors.length]};animation-duration:${7 + (i % 5) * 1.3}s;animation-delay:-${(i * 1.7) % 9}s` }));
+  const hint = h('p', { class: 'party-hint' }, '👆 לחצו על העוגה כדי לכבות את הנרות ולבקש משאלה');
+  const cake = h('div', { class: 'party-cake', role: 'button', tabindex: '0', 'aria-label': 'כיבוי הנרות' }); cake.innerHTML = PARTY_CAKE;
+  const stops = partySong(); let fx = null;
+  const close = () => { stops.forEach(f => { try{ f(); }catch(e){} }); wrap.remove(); PARTY.open = false; document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const blow = () => {
+    if (wrap.classList.contains('out')) return; wrap.classList.add('out');
+    stops.forEach(f => { try{ f(); }catch(e){} }); partyFanfare(); if (fx){ fx.burst(); setTimeout(() => fx.burst(), 350); }
+    hint.textContent = `✨ ${fem ? 'המשאלה שלה' : 'המשאלה שלו'} יצאה לדרך!`; try{ navigator.vibrate && navigator.vibrate(80); }catch(e){}
+  };
+  cake.addEventListener('click', blow); cake.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); blow(); } });
+  const wishes = !mine && me ? h('div', { class: 'party-wishes' }, ['🥳 מזל טוב', '🎈 שנה מדהימה', '💝 אוהבים אותך', '🎁 מגיע לך הכול'].map(t => h('button', { type: 'button', class: 'chip', onclick: e => partyWish(m, t, e.currentTarget) }, t))) : null;
+  wrap.append(cv, ...balloons,
+    h('h1', null, `🎉 יום הולדת שמח, ${m.name}! 🎉`),
+    h('p', { class: 'party-sub' }, age ? `היום ${fem ? 'את בת' : 'אתה בן'} ${age} 🥳` : (mine ? 'היום הכול בשבילך 🥳' : `היום חוגגים ל${m.name} 🥳`)),
+    cake, hint, ...(wishes ? [wishes] : []),
+    h('button', { type: 'button', class: 'btn party-close', onclick: close }, 'סגירה'));
+  document.body.append(wrap); document.addEventListener('keydown', onKey);
+  fx = partyConfetti(cv, wrap); window.addEventListener('resize', () => fx && fx.fit());
+}
 
 /* --- sound: everything is synthesized, no files --- */
 function kCtx(){ const A = K.audio || (K.audio = new (window.AudioContext || window.webkitAudioContext)()); if (A.state === 'suspended') A.resume(); return A; }
@@ -3186,6 +3293,7 @@ if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith('PASTE')){
       S.challenge = s.exists() ? s.data() : null; const c = S.challenge;
       render();
     }, e => console.error(e)));
+    unsubs.push(onSnapshot(doc(db,'settings','party'), s => { S.party = s.exists() ? s.data() : null; partyCheck(); }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','perms'), s => { S.perms = s.exists() ? s.data() : {}; render(); }, e => console.error(e)));
     unsubs.push(onSnapshot(doc(db,'settings','money'), s => {
       const m = s.exists() ? s.data() : { points:100, shekels:0 };

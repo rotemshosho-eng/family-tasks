@@ -644,3 +644,32 @@ section.acc.open .acc-body{padding-bottom:16px;display:flex;flex-direction:colum
 .kpop{position:static;inset:auto;z-index:auto;background:none;display:block;animation:none;padding:0}
 .kpop[hidden]{display:none}
 .kpop-card,.kpop-card.tall{width:100%;max-height:none;min-height:0;overflow:visible;border-radius:16px;border:2px solid var(--line);padding:14px}
+
+/* birthday party */
+.party{position:fixed;inset:0;z-index:90;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px 16px;text-align:center;color:#fff;
+  background:linear-gradient(160deg,#ff5fa2,#ffb84d 45%,#7b5cff);animation:partyIn .35s ease-out}
+@keyframes partyIn{from{opacity:0;transform:scale(1.04)}}
+.party-fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+.party>*:not(canvas):not(.pb){position:relative;z-index:3}
+.party h1{font-size:clamp(1.6rem,7vw,2.4rem);margin:0;text-shadow:0 3px 0 rgba(0,0,0,.18);animation:partyBounce 1.2s ease-in-out infinite}
+@keyframes partyBounce{50%{transform:translateY(-6px) scale(1.03)}}
+.party-sub{font-size:1.15rem;font-weight:700;margin:0;text-shadow:0 2px 0 rgba(0,0,0,.15)}
+.party-hint{margin:0;font-weight:600;opacity:.95}
+.party-cake{width:min(300px,78vw);cursor:pointer;filter:drop-shadow(0 12px 18px rgba(0,0,0,.28));animation:cakeFloat 2.4s ease-in-out infinite;-webkit-tap-highlight-color:transparent}
+.party-cake svg{width:100%;height:auto;display:block}
+@keyframes cakeFloat{50%{transform:translateY(-8px) rotate(-1deg)}}
+.flame{transform-box:fill-box;transform-origin:50% 100%;animation:flicker .35s ease-in-out infinite alternate}
+.flame:nth-of-type(2n){animation-duration:.27s}
+@keyframes flicker{from{transform:scale(1,1) rotate(-4deg)}to{transform:scale(.86,1.14) rotate(4deg)}}
+.smoke{opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.party.out .flame{animation:none;opacity:0;transition:opacity .2s}
+.party.out .smoke{animation:smoke 1.6s ease-out forwards}
+@keyframes smoke{0%{opacity:.85;transform:translateY(0) scale(.6)}100%{opacity:0;transform:translateY(-46px) scale(1.9)}}
+.pb{position:fixed;bottom:-140px;width:54px;height:68px;border-radius:50% 50% 48% 48%;z-index:1;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.8),var(--c) 48%);animation:balloonUp linear infinite;pointer-events:none}
+.pb::after{content:'';position:absolute;left:50%;top:100%;width:2px;height:58px;background:rgba(255,255,255,.7)}
+@keyframes balloonUp{0%{transform:translate(0,0) rotate(-4deg)}50%{transform:translate(18px,-70vh) rotate(4deg)}100%{transform:translate(-10px,-135vh) rotate(-4deg)}}
+.party-wishes{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:420px}
+.party-wishes .chip{background:rgba(255,255,255,.94);color:#5a2a82;border-color:transparent}
+.party-wishes .chip:disabled{opacity:.6}
+.party-close{margin-top:4px;background:rgba(255,255,255,.95);color:#5a2a82}
+@media (prefers-reduced-motion:reduce){.pb,.party h1,.party-cake{animation:none}}

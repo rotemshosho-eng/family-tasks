@@ -199,6 +199,10 @@ export const onSettings = onDocumentWritten('settings/{id}', async ev => {
     const until = String(a.until || '').split('-').reverse().slice(0, 2).join('.');
     return push(F.ids, `⚡ אתגר משפחתי חדש: ${a.title}`, `${items.length} משימות${until ? ` עד ${until}` : ''}${a.prize ? ` · פרס: ${a.prize}` : ''}`, 'new-challenge');
   }
+  if (ev.params.id === 'party'){   // the admin pressed 🎂 on a member: everyone is invited to the party screen
+    if (!a.memberId || (b && b.at === a.at)) return;
+    return push(F.ids, `🎂 חוגגים ל${F.name(a.memberId)}!`, 'בואו לברך ולחגוג 🎉', `party-${a.at}`);
+  }
   if (ev.params.id === 'goal'){
     if (!(a.target > 0) || (b && b.target === a.target && (b.prize || '') === (a.prize || ''))) return;
     return push(F.ids, `🎯 יעד חודשי חדש${a.prize ? `: ${a.prize}` : ''}`, `${a.target} נקודות ביחד החודש`, 'new-goal');

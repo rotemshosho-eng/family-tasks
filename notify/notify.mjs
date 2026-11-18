@@ -276,6 +276,16 @@ if (dow === 6 && hour >= 20 && state.ceremonyDay !== today) {
   state.ceremonyDay = today;
 }
 
+// 5b. birthdays: one morning push (from 07:00) to the family, and one to the birthday person; the app opens the party by itself
+if (hour >= 7 && state.birthdayDay !== today) {
+  for (const m of members) {
+    if (!m.birthday || String(m.birthday).slice(5) !== today.slice(5)) continue;
+    outbox.push({ to: everyone.filter(id => id !== m.id), title: `🎂 היום יום הולדת ל${m.name}!`, body: 'כנסו לאפליקציה לחגוג ולשלוח ברכה 🎉', tag: `bday-${m.id}` });
+    outbox.push({ to: [m.id], title: `🎉 יום הולדת שמח, ${m.name}!`, body: 'מחכה לך הפתעה באפליקציה 🎈', tag: `bday-me-${m.id}` });
+  }
+  state.birthdayDay = today;
+}
+
 // 6. housekeeping: a dish sent from the kitchen is only for a day or two
 {
   const old = await db.collection('dishes').where('at', '<', now.getTime() - 3 * 864e5).get();
