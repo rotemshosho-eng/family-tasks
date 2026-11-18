@@ -4,7 +4,7 @@
 // What it sends:
 //   • a new chat message on a task      → everyone except whoever wrote it
 //   • a new task                        → the person it's assigned to (or everyone, minus whoever added it)
-//   • once a day after 19:00 (Israel)   → each person who still has tasks left today
+//   • (switched off: EVENING_REMINDER) once a day after 19:00 (Israel) → each person who still has tasks left today
 //   • a task waiting for approval       → whoever is marked as admin
 //   • 3, 7, 14, 21... days in a row      → an automatic streak bonus (added here, server-side) + a notification
 //   • Saturday after 20:00               → everyone: who won the week
@@ -15,6 +15,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 const APP_URL = 'https://rotemshosho-eng.github.io/family-tasks/';
 const TZ = 'Asia/Jerusalem';
 const REMIND_HOUR = 19;
+const EVENING_REMINDER = false; // the daily "you still have N tasks" push is switched off (Rotem asked); set to true to bring it back
 const MAX_LOOKBACK_MS = 60 * 60 * 1000; // never send about anything older than an hour
 
 const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -195,7 +196,7 @@ const admins = members.filter(m => m.admin === true).map(m => m.id);
 } // end of real-time sections
 
 // 3. evening reminder, once a day
-if (hour >= REMIND_HOUR && state.remindedDay !== today) {
+if (EVENING_REMINDER && hour >= REMIND_HOUR && state.remindedDay !== today) {
   const logs = allLogs.filter(l => l.day === today);
   const hm = `${String(hour).padStart(2, '0')}:00`;
   const isDue = (t, m) => {
