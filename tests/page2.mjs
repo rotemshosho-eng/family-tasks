@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 const ROOT = fileURLToPath(new URL('../', import.meta.url)), HERE = fileURLToPath(new URL('./', import.meta.url));
-const b = await chromium.launch(); const p = await b.newPage({ viewport:{ width:390, height:900 } }); const errs = [];
+const b = await chromium.launch(process.env.PW_CHROME ? { executablePath: process.env.PW_CHROME } : {}); const p = await b.newPage({ viewport:{ width:390, height:900 } }); const errs = [];
 p.on('pageerror', e => errs.push(String(e.stack || e)));
 await p.route('**/*', r => r.request().url().startsWith('http://t/') ? r.continue() : r.abort());
 await p.route('http://t/**', r => {

@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>קופצי</title>
+<script>
+// ?demo=1: same app, but Firebase is swapped for an in-memory demo family (demo/). Must run before app.js loads.
+if (/[?&]demo\b/.test(location.search)){
+  var fb = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  var map = { imports: { './firebase-config.js': './demo/config.js' } };
+  map.imports[fb + 'firebase-app.js'] = './demo/app.js';
+  map.imports[fb + 'firebase-firestore.js'] = './demo/firestore.js';
+  map.imports[fb + 'firebase-auth.js'] = './demo/auth.js';
+  map.imports[fb + 'firebase-messaging.js'] = './demo/messaging.js';
+  document.write('<script type="importmap">' + JSON.stringify(map) + '<\/script>');
+  document.title = 'קופצי · הדגמה';
+}
+</script>
 <meta name="theme-color" content="#172B4D">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
